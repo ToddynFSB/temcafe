@@ -535,7 +535,7 @@ let consumptionCustomEndDate = null;
 // API — Google Sheets via Apps Script
 // ============================================================
 async function apiCall(action, data = {}) {
-  if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === 'https://script.google.com/macros/s/AKfycbzIJ2DhGpAZnAJ0tQ6UnafG1soWd5FH8NdvbZ2T6hNS1zekVIQV9JVi5JM64awknbiy/exec') {
+  if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === 'COLE_SUA_URL_AQUI') {
     throw new Error('URL do Apps Script não configurada');
   }
   const params = new URLSearchParams({ action });
@@ -610,7 +610,7 @@ async function syncData() {
 // INICIALIZAÇÃO
 // ============================================================
 async function initApp() {
-  if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === 'https://script.google.com/macros/s/AKfycbzIJ2DhGpAZnAJ0tQ6UnafG1soWd5FH8NdvbZ2T6hNS1zekVIQV9JVi5JM64awknbiy/exec') {
+  if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === 'COLE_SUA_URL_AQUI') {
     document.getElementById('config-banner').classList.remove('hidden');
     document.getElementById('loading-overlay').classList.add('hidden');
     lucide.createIcons();
