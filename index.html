@@ -1802,25 +1802,27 @@ function renderConsumption() {
 // CONFIRMAÇÃO DE EXCLUSÃO
 // ============================================================
 async function confirmDelete() {
-  closeDeleteConfirm();
-  if (pendingDeleteType === 'product') {
+  const deleteType = pendingDeleteType;
+  const deleteId = pendingDeleteId;
+  document.getElementById('delete-confirm-modal').classList.add('hidden');
+  if (deleteType === 'product') {
     closeEditLevels();
-    const p = allData.find(r => r.id === pendingDeleteId);
+    const p = allData.find(r => r.id === deleteId);
     if (p) {
       const result = await apiCall('delete', { id: p.id });
       if (result.ok) { allData = allData.filter(r => r.id !== p.id); renderAll(); showToast('Insumo excluído!'); }
       else showToast('Erro ao excluir', true);
     }
-  } else if (pendingDeleteType === 'recipe') {
-    const rec = allData.find(r => r.id === pendingDeleteId);
+  } else if (deleteType === 'recipe') {
+    const rec = allData.find(r => r.id === deleteId);
     if (rec) {
       const result = await apiCall('delete', { id: rec.id });
       if (result.ok) { allData = allData.filter(r => r.id !== rec.id); renderAll(); showToast('Receita excluída!'); }
       else showToast('Erro ao excluir', true);
     }
-  } else if (pendingDeleteType === 'finished_product') {
+  } else if (deleteType === 'finished_product') {
     closeEditFinished();
-    const f = allData.find(r => r.id === pendingDeleteId);
+    const f = allData.find(r => r.id === deleteId);
     if (f) {
       const result = await apiCall('delete', { id: f.id });
       if (result.ok) { allData = allData.filter(r => r.id !== f.id); renderAll(); showToast('Produto excluído!'); }
