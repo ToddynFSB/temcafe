@@ -18,9 +18,14 @@
       --red-alert: #dc2626; --red-critical: #b91c1c; --red-out: #7f1d1d;
       --yellow-low: #d97706;
     }
-    .tab-active { background: var(--coffee-800); color: #fff !important; border-radius: 8px; }
-    .tab-btn { transition: all .2s; border-radius: 8px; color: #6b4423; }
-    .tab-btn:hover { background: #f5ebe0; }
+    .tab-active { background: var(--coffee-800); color: #fff !important; border-radius: 12px; box-shadow: 0 2px 8px rgba(59,31,14,.2); }
+    .tab-btn { transition: all .2s; border-radius: 12px; color: #6b4423; background: #fff; border: 1.5px solid #e8ddd2; }
+    .tab-btn:hover { background: #f5ebe0; border-color: #d4a574; }
+    .tab-active.tab-btn { border-color: transparent; }
+    .nav-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+    @media (min-width: 640px) { .nav-grid { grid-template-columns: repeat(6, 1fr); } }
+    @media (min-width: 1024px) { .nav-grid { grid-template-columns: repeat(12, 1fr); } }
+    .cat-header { position: sticky; top: 0; z-index: 5; }
     .badge-out { background: var(--red-out); color: #fca5a5; }
     .badge-critical { background: var(--red-critical); color: #fff; }
     .badge-low { background: var(--yellow-low); color: #fff; }
@@ -83,19 +88,19 @@
 </header>
 
 <nav class="max-w-7xl mx-auto px-4 pt-3 pb-1">
-  <div class="flex gap-1 overflow-x-auto nav-scroll pb-2" id="tab-nav">
-    <button class="tab-btn px-3 py-2 text-xs whitespace-nowrap font-medium flex items-center gap-1.5" data-tab="dashboard"><i data-lucide="layout-dashboard" class="w-3.5 h-3.5"></i>Central</button>
-    <button class="tab-btn px-3 py-2 text-xs whitespace-nowrap font-medium flex items-center gap-1.5" data-tab="compras"><i data-lucide="shopping-bag" class="w-3.5 h-3.5"></i>Compras</button>
-    <button class="tab-btn px-3 py-2 text-xs whitespace-nowrap font-medium flex items-center gap-1.5" data-tab="entradas"><i data-lucide="arrow-down-circle" class="w-3.5 h-3.5"></i>Entradas</button>
-    <button class="tab-btn px-3 py-2 text-xs whitespace-nowrap font-medium flex items-center gap-1.5" data-tab="saidas">📤 Saídas</button>
-    <button class="tab-btn px-3 py-2 text-xs whitespace-nowrap font-medium flex items-center gap-1.5" data-tab="estoque"><i data-lucide="package" class="w-3.5 h-3.5"></i>Insumos</button>
-    <button class="tab-btn px-3 py-2 text-xs whitespace-nowrap font-medium flex items-center gap-1.5" data-tab="receitas"><i data-lucide="book-open" class="w-3.5 h-3.5"></i>Receitas</button>
-    <button class="tab-btn px-3 py-2 text-xs whitespace-nowrap font-medium flex items-center gap-1.5" data-tab="producao"><i data-lucide="chef-hat" class="w-3.5 h-3.5"></i>A Produzir</button>
-    <button class="tab-btn px-3 py-2 text-xs whitespace-nowrap font-medium flex items-center gap-1.5" data-tab="prontos"><i data-lucide="cake" class="w-3.5 h-3.5"></i>Prontos</button>
-    <button class="tab-btn px-3 py-2 text-xs whitespace-nowrap font-medium flex items-center gap-1.5" data-tab="perdas"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i>Perdas</button>
-    <button class="tab-btn px-3 py-2 text-xs whitespace-nowrap font-medium flex items-center gap-1.5" data-tab="vendas"><i data-lucide="credit-card" class="w-3.5 h-3.5"></i>Vendas</button>
-    <button class="tab-btn px-3 py-2 text-xs whitespace-nowrap font-medium flex items-center gap-1.5" data-tab="consumo">📊 Consumo</button>
-    <button class="tab-btn px-3 py-2 text-xs whitespace-nowrap font-medium flex items-center gap-1.5" data-tab="historico"><i data-lucide="history" class="w-3.5 h-3.5"></i>Histórico</button>
+  <div class="nav-grid" id="tab-nav">
+    <button class="tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-tab="dashboard"><i data-lucide="layout-dashboard" class="w-5 h-5"></i>Central</button>
+    <button class="tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-tab="compras"><i data-lucide="shopping-bag" class="w-5 h-5"></i>Compras</button>
+    <button class="tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-tab="entradas"><i data-lucide="arrow-down-circle" class="w-5 h-5"></i>Entradas</button>
+    <button class="tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-tab="saidas"><span class="text-lg leading-none">📤</span>Saídas</button>
+    <button class="tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-tab="estoque"><i data-lucide="package" class="w-5 h-5"></i>Insumos</button>
+    <button class="tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-tab="receitas"><i data-lucide="book-open" class="w-5 h-5"></i>Receitas</button>
+    <button class="tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-tab="producao"><i data-lucide="chef-hat" class="w-5 h-5"></i>Produzir</button>
+    <button class="tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-tab="prontos"><i data-lucide="cake" class="w-5 h-5"></i>Prontos</button>
+    <button class="tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-tab="perdas"><i data-lucide="trash-2" class="w-5 h-5"></i>Perdas</button>
+    <button class="tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-tab="vendas"><i data-lucide="credit-card" class="w-5 h-5"></i>Vendas</button>
+    <button class="tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-tab="consumo"><span class="text-lg leading-none">📊</span>Consumo</button>
+    <button class="tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-tab="historico"><i data-lucide="history" class="w-5 h-5"></i>Histórico</button>
   </div>
 </nav>
 
@@ -1023,11 +1028,46 @@ function renderStock() {
   if (catFilter) products = products.filter(p => p.category === catFilter);
   const el = document.getElementById('stock-list');
   if (products.length === 0) { el.innerHTML = '<p class="text-center text-stone-400 py-8 text-sm">Nenhum insumo encontrado</p>'; return; }
-  el.innerHTML = products.map(p => {
+
+  const catIcons = { 'Caf\u00e9': '\u2615', 'Cozinha': '\ud83c\udf73', 'Drinks': '\ud83c\udf79', 'Limpeza': '\ud83e\uddf9', 'Utens\u00edlios': '\ud83c\udf7d\ufe0f' };
+  const catColors = { 'Caf\u00e9': 'bg-amber-700', 'Cozinha': 'bg-orange-600', 'Drinks': 'bg-blue-600', 'Limpeza': 'bg-teal-600', 'Utens\u00edlios': 'bg-stone-600' };
+
+  function renderProductCard(p) {
     const comfortable = p.comfortable_stock || 0;
     const sc = getStockClass(p.quantity, p.critical_stock, p.min_stock, comfortable);
-    return `<div class="flex items-center justify-between p-3.5 bg-white rounded-xl shadow-sm border border-stone-100 ${sc} card-hover"><div class="flex-1 min-w-0"><span class="font-semibold text-stone-800 truncate block text-sm">${p.product_name}</span><span class="text-xs text-stone-400">${p.unit} • ${p.category||'Sem categoria'}</span>${getStockBadge(p.quantity,p.critical_stock,p.min_stock,comfortable)}</div><div class="flex items-center gap-2 flex-shrink-0 ml-3"><span class="w-20 text-right font-bold text-sm text-stone-800">${fmtQty(p.quantity,p.unit)} ${p.unit}</span><button onclick="openEditLevels('${p.id}')" class="w-8 h-8 rounded-lg bg-blue-50 hover:bg-blue-100 flex items-center justify-center text-blue-600" title="Editar"><i data-lucide="settings" class="w-3.5 h-3.5"></i></button></div></div>`;
-  }).join('');
+    return `<div class="flex items-center justify-between p-3.5 bg-white rounded-xl shadow-sm border border-stone-100 ${sc} card-hover"><div class="flex-1 min-w-0"><span class="font-semibold text-stone-800 truncate block text-sm">${p.product_name}</span><span class="text-xs text-stone-400">${p.unit}</span>${getStockBadge(p.quantity,p.critical_stock,p.min_stock,comfortable)}</div><div class="flex items-center gap-2 flex-shrink-0 ml-3"><span class="w-20 text-right font-bold text-sm text-stone-800">${fmtQty(p.quantity,p.unit)} ${p.unit}</span><button onclick="openEditLevels('${p.id}')" class="w-8 h-8 rounded-lg bg-blue-50 hover:bg-blue-100 flex items-center justify-center text-blue-600" title="Editar"><i data-lucide="settings" class="w-3.5 h-3.5"></i></button></div></div>`;
+  }
+
+  // Se tem filtro de categoria ativo ou busca, lista simples
+  if (catFilter || search) {
+    el.innerHTML = products.sort((a,b) => a.product_name.localeCompare(b.product_name)).map(p => renderProductCard(p)).join('');
+  } else {
+    // Agrupar por categoria
+    const categoryOrder = ['Caf\u00e9', 'Cozinha', 'Drinks', 'Limpeza', 'Utens\u00edlios'];
+    const grouped = {};
+    products.forEach(p => { const cat = p.category || 'Sem categoria'; if (!grouped[cat]) grouped[cat] = []; grouped[cat].push(p); });
+    const orderedCats = categoryOrder.filter(c => grouped[c]);
+    // Adicionar categorias extras que não estão na lista
+    Object.keys(grouped).filter(c => !categoryOrder.includes(c)).forEach(c => orderedCats.push(c));
+
+    el.innerHTML = orderedCats.map(cat => {
+      const items = grouped[cat].sort((a,b) => a.product_name.localeCompare(b.product_name));
+      const lowCount = items.filter(p => p.quantity <= p.min_stock).length;
+      const icon = catIcons[cat] || '\ud83d\udce6';
+      const color = catColors[cat] || 'bg-stone-600';
+      return `<div class="mb-5">
+        <div class="cat-header flex items-center justify-between ${color} rounded-xl px-4 py-2.5 mb-2">
+          <div class="flex items-center gap-2">
+            <span class="text-lg">${icon}</span>
+            <span class="font-bold text-white text-sm">${cat}</span>
+            <span class="text-white/70 text-xs">(${items.length} iten${items.length===1?'':'s'})</span>
+          </div>
+          ${lowCount > 0 ? `<span class="text-xs font-semibold bg-white/20 text-white px-2 py-0.5 rounded-full">\u26a0\ufe0f ${lowCount} baixo${lowCount>1?'s':''}</span>` : `<span class="text-xs font-medium text-white/60">\u2713 OK</span>`}
+        </div>
+        <div class="space-y-1.5 pl-1">${items.map(p => renderProductCard(p)).join('')}</div>
+      </div>`;
+    }).join('');
+  }
   lucide.createIcons();
 }
 
