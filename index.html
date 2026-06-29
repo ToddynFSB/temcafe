@@ -6,6 +6,7 @@
   <title>Central Tem Café — Gestão de Estoque</title>
   <script src="https://cdn.tailwindcss.com/3.4.17"></script>
   <script src="https://cdn.jsdelivr.net/npm/lucide@0.263.0/dist/umd/lucide.min.js"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     * { font-family: 'DM Sans', sans-serif; box-sizing: border-box; }
@@ -372,8 +373,18 @@
     </div>
     <div class="bg-white rounded-xl p-5 shadow-sm border border-stone-100 mb-5 hidden" id="sales-bulk-section">
       <h3 class="font-semibold mb-4 text-stone-800 text-sm">Registrar Vendas em Lote</h3>
-      <p class="text-xs text-stone-500 mb-3">Cole aqui os dados de vendas (um produto por linha, formato: "Nome do Produto   Quantidade")</p>
-      <textarea id="bulk-sales-textarea" class="w-full input-field text-sm mb-4 min-h-[180px]" placeholder="Exemplo:&#10;Cappuccino    12&#10;Brownie    7&#10;Aperol Spritz    3"></textarea>
+      
+      <!-- Upload de arquivo -->
+      <div class="mb-4 p-4 border-2 border-dashed border-stone-300 rounded-xl text-center hover:border-amber-500 transition-colors cursor-pointer" onclick="document.getElementById('bulk-file-input').click()" id="bulk-drop-zone">
+        <i data-lucide="upload" class="w-8 h-8 text-stone-400 mx-auto mb-2"></i>
+        <p class="text-sm font-medium text-stone-600">Clique para importar planilha do sistema</p>
+        <p class="text-xs text-stone-400 mt-1">Aceita arquivos .xlsx</p>
+        <input type="file" id="bulk-file-input" accept=".xlsx,.xls,.csv" class="hidden" onchange="handleBulkFileUpload(event)">
+      </div>
+      <p id="bulk-file-name" class="hidden text-xs text-emerald-700 font-medium mb-3 flex items-center gap-1">📄 <span></span></p>
+
+      <p class="text-xs text-stone-500 mb-2">Ou cole manualmente (Nome do Produto → TAB → Quantidade):</p>
+      <textarea id="bulk-sales-textarea" class="w-full input-field text-sm mb-4 min-h-[140px]" placeholder="Exemplo:&#10;Cappuccino    12&#10;Brownie    7&#10;Aperol Spritz    3"></textarea>
       <div class="flex gap-2 mb-4"><button onclick="processBulkSales()" class="btn-success px-4 py-2.5 rounded-lg text-sm font-medium flex items-center gap-1.5 flex-1"><i data-lucide="check" class="w-4 h-4"></i>Processar Vendas</button><button onclick="clearBulkSalesForm()" class="btn-ghost px-4 py-2.5 rounded-lg text-sm font-medium flex-1">Limpar</button></div>
       <div id="bulk-sales-feedback" class="hidden p-4 rounded-lg border"><p class="text-xs font-semibold mb-2" id="bulk-feedback-title"></p><div id="bulk-feedback-content" class="space-y-1 text-xs"></div></div>
     </div>
@@ -1554,7 +1565,192 @@ function parseBulkSalesLine(line) {
   if (isNaN(qty)||qty<1) return null;
   return { name: parts.slice(0,-1).join(' ').trim(), qty };
 }
-function clearBulkSalesForm() { document.getElementById('bulk-sales-textarea').value=''; document.getElementById('bulk-sales-feedback').classList.add('hidden'); }
+function handleBulkFileUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  
+  const nameEl = document.getElementById('bulk-file-name');
+  nameEl.querySelector('span').textContent = file.name;
+  nameEl.classList.remove('hidden');
+  
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, { type: 'array' });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+      
+      const items = [];
+      for (const row of rows) {
+        if (!row[0] || typeof row[0] !== 'string') continue;
+        const name = String(row[0]).trim();
+        if (name.startsWith('- ')) {
+          const cleanName = name.substring(2).trim();
+          const qty = parseInt(row[1]);
+          if (cleanName && qty > 0) {
+            items.push({ original: cleanName, qty });
+          }
+        }
+      }
+      
+      if (items.length === 0) {
+        showToast('Nenhum item encontrado na planilha', true);
+        return;
+      }
+      
+      showBulkMatchPreview(items);
+    } catch(err) {
+      showToast('Erro ao ler arquivo: ' + err.message, true);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function normalizeForMatch(name) {
+  return name.toLowerCase()
+    .replace(/\s*\([^)]*\)\s*/g, '') // remove (200ml), (150ml) etc
+    .replace(/\s*-\s*v60\s*/gi, '')
+    .replace(/\s*-\s*prensa\s*/gi, '')
+    .replace(/\s*\d+\s*ml\s*/gi, '')
+    .replace(/\s*\d+\s*g\s*/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function findBestMatch(importedName, systemNames) {
+  const normalized = normalizeForMatch(importedName);
+  const normalizedWords = normalized.split(' ').filter(w => w.length > 1);
+  
+  let bestMatch = null;
+  let bestScore = 0;
+  
+  for (const sysName of systemNames) {
+    const sysNormalized = normalizeForMatch(sysName);
+    
+    // Match exato
+    if (normalized === sysNormalized) return { name: sysName, score: 100 };
+    
+    // Um contém o outro
+    if (normalized.includes(sysNormalized) || sysNormalized.includes(normalized)) {
+      const score = 90;
+      if (score > bestScore) { bestScore = score; bestMatch = sysName; }
+      continue;
+    }
+    
+    // Overlap de palavras
+    const sysWords = sysNormalized.split(' ').filter(w => w.length > 1);
+    let matchCount = 0;
+    for (const w of normalizedWords) {
+      if (sysWords.some(sw => sw.includes(w) || w.includes(sw))) matchCount++;
+    }
+    const totalWords = Math.max(normalizedWords.length, sysWords.length);
+    const score = totalWords > 0 ? (matchCount / totalWords) * 80 : 0;
+    if (score > bestScore) { bestScore = score; bestMatch = sysName; }
+  }
+  
+  return bestMatch && bestScore >= 30 ? { name: bestMatch, score: bestScore } : null;
+}
+
+function showBulkMatchPreview(items) {
+  const finished = getFinishedProducts();
+  const vendaDireta = getRecipes().filter(r => r.recipe_type === 'Venda Direta');
+  const allSystemNames = [
+    ...finished.map(f => f.product_name),
+    ...vendaDireta.map(r => r.recipe_name)
+  ];
+  
+  const matched = items.map(item => {
+    const match = findBestMatch(item.original, allSystemNames);
+    return { ...item, match: match ? match.name : '', score: match ? match.score : 0 };
+  });
+  
+  const foundCount = matched.filter(m => m.match).length;
+  const notFoundCount = matched.filter(m => !m.match).length;
+  
+  let html = `<div class="mb-3 flex gap-2 text-xs">
+    <span class="px-2 py-1 rounded-full bg-emerald-100 text-emerald-800 font-medium">${foundCount} encontrados</span>
+    ${notFoundCount > 0 ? `<span class="px-2 py-1 rounded-full bg-red-100 text-red-800 font-medium">${notFoundCount} não encontrados</span>` : ''}
+  </div>
+  <div class="space-y-2 max-h-[400px] overflow-y-auto mb-4">`;
+  
+  for (let i = 0; i < matched.length; i++) {
+    const m = matched[i];
+    const statusClass = m.match ? 'border-emerald-200 bg-emerald-50' : 'border-red-200 bg-red-50';
+    const statusIcon = m.match ? '✓' : '✗';
+    
+    html += `<div class="p-3 rounded-lg border ${statusClass} flex flex-col sm:flex-row sm:items-center gap-2">
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2 mb-1">
+          <span class="text-xs font-bold ${m.match ? 'text-emerald-700' : 'text-red-700'}">${statusIcon}</span>
+          <span class="text-xs text-stone-500">Planilha:</span>
+          <span class="text-sm font-medium text-stone-800 truncate">${m.original}</span>
+          <span class="text-xs font-bold text-stone-600">×${m.qty}</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs text-stone-400 ml-5">→ Sistema:</span>
+          <select class="bulk-match-select input-field text-xs py-1 px-2 flex-1" data-idx="${i}" data-qty="${m.qty}">
+            <option value="">— Ignorar —</option>
+            ${allSystemNames.sort().map(n => `<option value="${n}" ${n === m.match ? 'selected' : ''}>${n}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+    </div>`;
+  }
+  
+  html += `</div>
+  <div class="flex gap-2">
+    <button onclick="confirmBulkMatch()" class="btn-success px-4 py-2.5 rounded-lg text-sm font-medium flex items-center gap-1.5 flex-1"><i data-lucide="check" class="w-4 h-4"></i>Confirmar Vendas</button>
+    <button onclick="cancelBulkMatch()" class="btn-ghost px-4 py-2.5 rounded-lg text-sm font-medium flex-1">Cancelar</button>
+  </div>`;
+  
+  document.getElementById('bulk-sales-textarea').classList.add('hidden');
+  document.getElementById('bulk-drop-zone').classList.add('hidden');
+  document.querySelector('#sales-bulk-section > p:nth-of-type(2)').classList.add('hidden');
+  
+  let preview = document.getElementById('bulk-match-preview');
+  if (!preview) {
+    preview = document.createElement('div');
+    preview.id = 'bulk-match-preview';
+    document.getElementById('bulk-sales-textarea').insertAdjacentElement('beforebegin', preview);
+  }
+  preview.innerHTML = html;
+  preview.classList.remove('hidden');
+  lucide.createIcons();
+}
+
+function cancelBulkMatch() {
+  const preview = document.getElementById('bulk-match-preview');
+  if (preview) preview.classList.add('hidden');
+  document.getElementById('bulk-sales-textarea').classList.remove('hidden');
+  document.getElementById('bulk-drop-zone').classList.remove('hidden');
+  document.querySelector('#sales-bulk-section > p:nth-of-type(2)').classList.remove('hidden');
+  clearBulkSalesForm();
+}
+
+async function confirmBulkMatch() {
+  const selects = document.querySelectorAll('.bulk-match-select');
+  const salesText = [];
+  for (const sel of selects) {
+    if (sel.value) {
+      salesText.push(sel.value + '\t' + sel.dataset.qty);
+    }
+  }
+  if (salesText.length === 0) { showToast('Nenhum item selecionado', true); return; }
+  
+  document.getElementById('bulk-sales-textarea').value = salesText.join('\n');
+  document.getElementById('bulk-sales-textarea').classList.remove('hidden');
+  
+  const preview = document.getElementById('bulk-match-preview');
+  if (preview) preview.classList.add('hidden');
+  
+  await processBulkSales();
+  
+  document.getElementById('bulk-drop-zone').classList.remove('hidden');
+  document.querySelector('#sales-bulk-section > p:nth-of-type(2)').classList.remove('hidden');
+}
+
+function clearBulkSalesForm() { document.getElementById('bulk-sales-textarea').value=''; document.getElementById('bulk-sales-feedback').classList.add('hidden'); document.getElementById('bulk-file-input').value=''; document.getElementById('bulk-file-name').classList.add('hidden'); }
 async function processBulkSales() {
   const text = document.getElementById('bulk-sales-textarea').value.trim();
   if (!text) { showToast('Cole os dados das vendas', true); return; }
