@@ -268,6 +268,7 @@
     <div class="flex flex-col sm:flex-row gap-2 mb-4"><button onclick="showAddRecipe()" class="btn-primary px-4 py-2.5 rounded-lg text-sm font-medium flex items-center gap-1.5"><i data-lucide="plus" class="w-4 h-4"></i>Nova Receita</button></div>
     <div class="flex flex-wrap gap-2 mb-4" id="recipe-filters">
       <button class="filter-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-800 text-white" data-filter="all">Todas</button>
+      <button class="filter-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-filter="favorites">⭐ Favoritas</button>
       <button class="filter-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-filter="sector-Cozinha">Cozinha</button>
       <button class="filter-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-filter="sector-Café e Drinks">Café e Drinks</button>
       <button class="filter-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-filter="type-Produção">Produção</button>
@@ -291,8 +292,14 @@
         <p class="text-xs text-stone-500 mb-2 font-medium">Ingredientes:</p>
         <div id="recipe-ingredients-fields" class="space-y-2 mb-3"></div>
         <button type="button" onclick="addIngredientField()" class="text-sm font-medium mb-4 flex items-center gap-1 btn-ghost px-3 py-1.5 rounded-lg"><i data-lucide="plus" class="w-3.5 h-3.5"></i>Adicionar Ingrediente</button>
-        <button type="submit" class="btn-primary px-5 py-2.5 rounded-lg text-sm font-medium">Salvar Receita</button>
-        <button type="button" onclick="hideAddRecipe()" class="btn-ghost px-5 py-2.5 rounded-lg text-sm font-medium">Cancelar</button>
+        <div class="mb-4">
+          <label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">📝 Observações / Macetes <span class="text-stone-400 font-normal normal-case">(opcional)</span></label>
+          <textarea id="new-recipe-notes" rows="3" placeholder="Ex: Colocar só 50 min no forno, não deixar dourar demais, deixar descansar 10 min antes de cortar..." class="w-full input-field text-sm resize-none"></textarea>
+        </div>
+        <div class="flex gap-2 flex-wrap">
+          <button type="submit" class="btn-primary px-5 py-2.5 rounded-lg text-sm font-medium">Salvar Receita</button>
+          <button type="button" onclick="hideAddRecipe()" class="btn-ghost px-5 py-2.5 rounded-lg text-sm font-medium">Cancelar</button>
+        </div>
       </form>
     </div>
   </section>
@@ -842,14 +849,130 @@ function renderProductionSuggestions() {
     ...lowFinished.map(f => ({ data: f, recipe: recipes.find(r => (r.recipe_product_name||r.recipe_name) === f.product_name) })),
     ...lowInsumos.map(i => ({ data: i, recipe: getRecipes().find(r => r.id === i.linked_recipe_id) }))
   ];
-  [document.getElementById('dash-suggestions'), document.getElementById('producao-suggestions')].forEach(el => {
-    if (!el) return;
-    if (allSuggestions.length === 0) { el.innerHTML = '<p class="text-stone-400 text-sm py-2">Todos os produtos OK ✓</p>'; return; }
-    el.innerHTML = allSuggestions.map(s => {
-      const suggestedQty = Math.max(0, (s.data.comfortable_stock||0) - s.data.quantity);
-      return `<div class="flex justify-between items-center p-2.5 bg-amber-50 rounded-lg text-sm"><div class="flex-1 min-w-0"><span class="font-medium truncate text-stone-700">${s.data.product_name}</span><span class="text-xs text-stone-600 ml-1">— ${fmtQty(s.data.quantity,s.data.unit)} ${s.data.unit}</span></div>${s.recipe?`<button onclick="sendToProduction('${s.recipe.id}')" class="btn-primary px-2.5 py-1 rounded-lg text-xs flex-shrink-0 ml-2">Produzir</button>`:''}</div>`;
-    }).join('');
-  });
+
+  // Dashboard: versão compacta (comportamento original)
+  const dashEl = document.getElementById('dash-suggestions');
+  if (dashEl) {
+    if (allSuggestions.length === 0) { dashEl.innerHTML = '<p class="text-stone-400 text-sm py-2">Todos os produtos OK ✓</p>'; }
+    else {
+      dashEl.innerHTML = allSuggestions.map(s => {
+        const comfortable = s.data.comfortable_stock || 0;
+        const missing = Math.max(0, comfortable - s.data.quantity);
+        const recipesNeeded = (s.recipe && s.recipe.recipe_yield > 0) ? Math.ceil(missing / s.recipe.recipe_yield) : null;
+        const hint = recipesNeeded ? ` · ${recipesNeeded}× receita` : '';
+        return `<div class="flex justify-between items-center p-2.5 bg-amber-50 rounded-lg text-sm"><div class="flex-1 min-w-0"><span class="font-medium truncate text-stone-700">${s.data.product_name}</span><span class="text-xs text-stone-500 ml-1">${fmtQty(s.data.quantity,s.data.unit)} / ${fmtQty(comfortable,s.data.unit)} ${s.data.unit}${hint}</span></div>${s.recipe?`<button onclick="sendToProduction('${s.recipe.id}')" class="btn-primary px-2.5 py-1 rounded-lg text-xs flex-shrink-0 ml-2">Produzir</button>`:''}</div>`;
+      }).join('');
+    }
+  }
+
+  // Aba "A Produzir": versão detalhada
+  const prodEl = document.getElementById('producao-suggestions');
+  if (!prodEl) return;
+  if (allSuggestions.length === 0) { prodEl.innerHTML = '<p class="text-stone-400 text-sm py-2">Todos os produtos OK ✓</p>'; return; }
+  prodEl.innerHTML = allSuggestions.map(s => {
+    const comfortable = s.data.comfortable_stock || 0;
+    const current = s.data.quantity;
+    const missing = Math.max(0, comfortable - current);
+    const unit = s.data.unit;
+    const recipe = s.recipe;
+    const yieldPerBatch = recipe ? (parseFloat(recipe.recipe_yield) || 0) : 0;
+    const recipesNeeded = (recipe && yieldPerBatch > 0) ? Math.ceil(missing / yieldPerBatch) : null;
+    const totalOutput = recipesNeeded ? recipesNeeded * yieldPerBatch : 0;
+
+    // Status badge
+    const urgency = current === 0 ? ['🔴','bg-red-50 border-red-200','text-red-700','Acabou'] :
+                    current <= (s.data.critical_stock||0) ? ['🔴','bg-red-50 border-red-200','text-red-700','Crítico'] :
+                    ['🟡','bg-amber-50 border-amber-200','text-amber-700','Baixo'];
+
+    // Progresso visual (%)
+    const pct = comfortable > 0 ? Math.min(100, Math.round((current / comfortable) * 100)) : 0;
+    const barColor = current === 0 ? 'bg-red-500' : current <= (s.data.critical_stock||0) ? 'bg-red-400' : 'bg-amber-400';
+
+    // Verificar disponibilidade de insumos para a receita
+    let ingredientWarning = '';
+    if (recipe && recipesNeeded) {
+      let ingredients = []; try { ingredients = JSON.parse(recipe.recipe_ingredients); } catch(e) {}
+      const allProds = getProducts();
+      const shortages = [];
+      for (const ing of ingredients) {
+        const p = allProds.find(x => x.product_name === ing.name);
+        if (!p) { shortages.push(`${ing.name} (não cadastrado)`); continue; }
+        const needed = convertQuantity(ing.qty * recipesNeeded, ing.unit, p.storage_unit || p.unit);
+        if (p.quantity < needed) {
+          const short = needed - p.quantity;
+          shortages.push(`${ing.name}: falta ${fmtQty(short, p.storage_unit||p.unit)} ${p.storage_unit||p.unit}`);
+        }
+      }
+      if (shortages.length > 0) {
+        ingredientWarning = `<div class="mt-2 p-2 bg-orange-50 border border-orange-200 rounded-lg"><p class="text-xs font-semibold text-orange-700 mb-0.5">⚠️ Insumos insuficientes para ${recipesNeeded} receita${recipesNeeded>1?'s':''}:</p><p class="text-xs text-orange-600">${shortages.join(' · ')}</p></div>`;
+      }
+    }
+
+    return `<div class="bg-white rounded-xl p-4 shadow-sm border ${urgency[1]} card-hover">
+      <div class="flex items-start justify-between gap-3 mb-3">
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="font-semibold text-stone-800 text-sm">${s.data.product_name}</span>
+            <span class="text-[10px] px-2 py-0.5 rounded-full font-semibold ${urgency[1].replace('border-','').replace(' border','').replace('bg-','').replace('50','100')} ${urgency[2]}">${urgency[0]} ${urgency[3]}</span>
+          </div>
+          ${recipe ? `<p class="text-xs text-stone-400 mt-0.5">Receita: ${recipe.recipe_name}</p>` : ''}
+        </div>
+        ${recipe ? `<button onclick="sendToProduction('${recipe.id}')" class="btn-primary px-3 py-1.5 rounded-lg text-xs flex-shrink-0 font-medium">▶ Produzir 1×</button>` : ''}
+      </div>
+
+      <!-- Barra de progresso -->
+      <div class="mb-3">
+        <div class="flex justify-between text-xs text-stone-500 mb-1">
+          <span>Estoque atual</span>
+          <span>Meta confortável</span>
+        </div>
+        <div class="h-2 bg-stone-100 rounded-full overflow-hidden">
+          <div class="h-2 rounded-full ${barColor} transition-all" style="width:${pct}%"></div>
+        </div>
+        <div class="flex justify-between text-xs mt-1">
+          <span class="font-bold ${urgency[2]}">${fmtQty(current, unit)} ${unit}</span>
+          <span class="text-stone-500">${fmtQty(comfortable, unit)} ${unit}</span>
+        </div>
+      </div>
+
+      <!-- Recomendação -->
+      ${recipe && recipesNeeded ? `
+      <div class="bg-stone-50 rounded-lg p-3 border border-stone-100">
+        <p class="text-xs font-semibold text-stone-700 mb-1">💡 Recomendação para atingir a meta:</p>
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="text-sm font-bold text-purple-700">${recipesNeeded}× receita${recipesNeeded>1?'s':''}</span>
+          <span class="text-xs text-stone-400">→</span>
+          <span class="text-sm font-bold text-emerald-700">+${fmtQty(totalOutput, unit)} ${unit}</span>
+          <span class="text-xs text-stone-400">(total: ${fmtQty(current + totalOutput, unit)} ${unit})</span>
+        </div>
+        <div class="flex gap-1 mt-2 flex-wrap">
+          ${Array.from({length: Math.min(recipesNeeded, 5)}, (_,i) => i+1).map(n =>
+            `<button onclick="sendNToProduction('${recipe.id}', ${n})" class="px-2 py-1 rounded-lg text-xs font-medium bg-purple-100 text-purple-700 hover:bg-purple-200">${n}×</button>`
+          ).join('')}
+          ${recipesNeeded > 5 ? `<span class="text-xs text-stone-400 self-center">...</span>` : ''}
+        </div>
+      </div>` : (!recipe ? `<p class="text-xs text-stone-400 italic">Sem receita vinculada — vincule em "Prontos" para ver recomendações.</p>` : '')}
+
+      ${ingredientWarning}
+    </div>`;
+  }).join('');
+}
+
+async function sendNToProduction(recipeId, times) {
+  const recipe = allData.find(r => r.id === recipeId); if (!recipe) return;
+  if (recipe.recipe_type !== 'Produção') { showToast('Apenas receitas tipo Produção', true); return; }
+  let ingredients=[]; try{ingredients=JSON.parse(recipe.recipe_ingredients);}catch(e){}
+  const products = getProducts();
+  // Verifica estoque para todas as N execuções
+  for (const ing of ingredients) {
+    const p = products.find(x => x.product_name === ing.name);
+    if (!p) { showToast(`Insumo ${ing.name} não encontrado`, true); return; }
+    const storageUnit = p.storage_unit || p.unit;
+    const consumptionQty = convertQuantity(ing.qty * times, ing.unit, storageUnit);
+    if (p.quantity < consumptionQty) { showToast(`Estoque insuficiente de ${ing.name} para ${times}× receita`, true); return; }
+  }
+  for (let i = 0; i < times; i++) await createProduction(recipe);
+  showToast(`${times}× ${recipe.recipe_name} enviado${times>1?'s':''} para produção!`);
 }
 
 // ============================================================
@@ -1189,20 +1312,36 @@ function renderRecipes() {
   if (!activeRecipeFilters.has('all')) {
     recipes = recipes.filter(r => {
       for (const f of activeRecipeFilters) {
-        if (f.startsWith('sector-') && r.recipe_sector !== f.replace('sector-','')) return false;
-        if (f.startsWith('type-') && r.recipe_type !== f.replace('type-','')) return false;
+        if (f === 'favorites') { if (!r.recipe_favorite || r.recipe_favorite === 'false') return false; }
+        else if (f.startsWith('sector-') && r.recipe_sector !== f.replace('sector-','')) return false;
+        else if (f.startsWith('type-') && r.recipe_type !== f.replace('type-','')) return false;
       }
       return true;
     });
   }
+  // Favoritas primeiro
+  recipes = [...recipes].sort((a,b) => {
+    const af = a.recipe_favorite === 'true' || a.recipe_favorite === true ? 1 : 0;
+    const bf = b.recipe_favorite === 'true' || b.recipe_favorite === true ? 1 : 0;
+    return bf - af;
+  });
   const el = document.getElementById('recipe-list');
   if (recipes.length===0) { el.innerHTML = '<p class="text-stone-400 text-center py-8 col-span-2 text-sm">Nenhuma receita encontrada</p>'; return; }
   el.innerHTML = recipes.map(r => {
     let ingredients=[]; try{ingredients=JSON.parse(r.recipe_ingredients);}catch(e){}
     const sectorBg = r.recipe_sector === 'Cozinha' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800';
     const typeBg = r.recipe_type === 'Produção' ? 'bg-purple-100 text-purple-800' : 'bg-emerald-100 text-emerald-800';
-    return `<div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 card-hover"><div class="flex flex-wrap gap-1.5 mb-2"><span class="text-[10px] px-2 py-0.5 rounded-full font-semibold ${sectorBg}">${r.recipe_sector}</span><span class="text-[10px] px-2 py-0.5 rounded-full font-semibold ${typeBg}">${r.recipe_type}</span></div><div class="flex justify-between items-start mb-2"><h4 class="font-semibold text-stone-800 text-sm">${r.recipe_name}</h4><div class="flex gap-1 flex-shrink-0 ml-2"><button onclick="editRecipe('${r.id}')" class="px-2 py-1 bg-blue-50 text-blue-700 rounded-lg text-xs font-medium hover:bg-blue-100">Editar</button><button onclick="requestDeleteRecipe('${r.id}')" class="px-2 py-1 btn-danger rounded-lg text-xs font-medium">Excluir</button>${r.recipe_type==='Produção'?`<button onclick="sendToProduction('${r.id}')" class="btn-primary px-2 py-1 rounded-lg text-xs font-medium">Produzir</button>`:''}</div></div><ul class="text-xs text-stone-500 space-y-0.5 mb-2">${ingredients.map(i=>`<li>• ${fmtQty(i.qty,i.unit)} ${i.unit} de ${i.name}</li>`).join('')}</ul><p class="text-xs text-amber-700 font-semibold">Rendimento: ${r.recipe_yield} ${r.recipe_yield_unit}</p></div>`;
+    const isFav = r.recipe_favorite === 'true' || r.recipe_favorite === true;
+    const favBtn = `<button onclick="toggleFavorite('${r.id}')" title="${isFav?'Remover dos favoritos':'Adicionar aos favoritos'}" class="w-7 h-7 flex items-center justify-center rounded-lg text-base ${isFav?'text-amber-400 bg-amber-50 hover:bg-amber-100':'text-stone-300 hover:text-amber-400 bg-stone-50 hover:bg-amber-50'}">${isFav?'⭐':'☆'}</button>`;
+    const notes = r.recipe_notes ? `<div class="mt-2 p-2 bg-amber-50 border border-amber-100 rounded-lg"><p class="text-xs text-amber-800 font-semibold mb-0.5">📝 Macetes:</p><p class="text-xs text-amber-700 whitespace-pre-wrap">${r.recipe_notes}</p></div>` : '';
+    return `<div class="bg-white rounded-xl p-4 shadow-sm border ${isFav?'border-amber-200':'border-stone-100'} card-hover"><div class="flex items-start justify-between mb-2"><div class="flex flex-wrap gap-1.5">${isFav?'<span class="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-amber-100 text-amber-700">⭐ Favorita</span>':''}<span class="text-[10px] px-2 py-0.5 rounded-full font-semibold ${sectorBg}">${r.recipe_sector}</span><span class="text-[10px] px-2 py-0.5 rounded-full font-semibold ${typeBg}">${r.recipe_type}</span></div>${favBtn}</div><div class="flex justify-between items-start mb-2"><h4 class="font-semibold text-stone-800 text-sm">${r.recipe_name}</h4><div class="flex gap-1 flex-shrink-0 ml-2"><button onclick="editRecipe('${r.id}')" class="px-2 py-1 bg-blue-50 text-blue-700 rounded-lg text-xs font-medium hover:bg-blue-100">Editar</button><button onclick="requestDeleteRecipe('${r.id}')" class="px-2 py-1 btn-danger rounded-lg text-xs font-medium">Excluir</button>${r.recipe_type==='Produção'?`<button onclick="sendToProduction('${r.id}')" class="btn-primary px-2 py-1 rounded-lg text-xs font-medium">Produzir</button>`:''}</div></div><ul class="text-xs text-stone-500 space-y-0.5 mb-2">${ingredients.map(i=>`<li>• ${fmtQty(i.qty,i.unit)} ${i.unit} de ${i.name}</li>`).join('')}</ul><p class="text-xs text-amber-700 font-semibold">Rendimento: ${r.recipe_yield} ${r.recipe_yield_unit}</p>${notes}</div>`;
   }).join('');
+}
+async function toggleFavorite(id) {
+  const recipe = allData.find(r => r.id === id); if (!recipe) return;
+  const isFav = recipe.recipe_favorite === 'true' || recipe.recipe_favorite === true;
+  const r = await dbUpdate({...recipe, recipe_favorite: isFav ? 'false' : 'true'});
+  if (!r.isOk) showToast('Erro ao salvar favorito', true);
 }
 function requestDeleteRecipe(id) {
   const rec = allData.find(r => r.id === id); if (!rec) return;
@@ -1221,7 +1360,7 @@ document.addEventListener('change', (e) => {
 function showAddRecipe() {
   editingRecipeId = null;
   document.getElementById('recipe-form-title').textContent = 'Cadastrar Receita';
-  ['new-recipe-name','new-recipe-type','new-recipe-sector','new-recipe-yield-unit-text'].forEach(id => { const el = document.getElementById(id); if(el) el.value=''; });
+  ['new-recipe-name','new-recipe-type','new-recipe-sector','new-recipe-yield-unit-text','new-recipe-notes'].forEach(id => { const el = document.getElementById(id); if(el) el.value=''; });
   document.getElementById('new-recipe-yield').value = 1;
   document.getElementById('new-recipe-yield-unit').style.display = 'none';
   document.getElementById('new-recipe-yield-unit-text').style.display = 'none';
@@ -1255,6 +1394,7 @@ function editRecipe(id) {
     div.innerHTML = `<select class="ing-product flex-1 input-field text-sm" onchange="updateIngredientUnits(this)" required><option value="">Insumo</option>${products.map(p=>`<option value="${p.product_name}" data-storage-unit="${p.storage_unit||p.unit}" ${ing.name===p.product_name?'selected':''}>${p.product_name}</option>`).join('')}</select><select class="ing-unit w-24 input-field text-sm" required><option value="">Unidade</option>${compatibleUnits.map(u=>`<option value="${u}" ${ing.unit===u?'selected':''}>${u}</option>`).join('')}</select><input type="number" class="ing-qty w-20 input-field text-sm" placeholder="Qtd" min="0.001" step="0.001" value="${ing.qty}" required><button type="button" onclick="this.closest('.flex').remove()" class="w-8 h-8 rounded-lg btn-danger flex items-center justify-center text-lg flex-shrink-0">×</button>`;
     document.getElementById('recipe-ingredients-fields').appendChild(div);
   });
+  document.getElementById('new-recipe-notes').value = recipe.recipe_notes || '';
   document.getElementById('add-recipe-form').classList.remove('hidden');
   setTimeout(() => document.getElementById('add-recipe-form').scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
 }
@@ -1300,13 +1440,14 @@ async function handleAddRecipe(e) {
     if (sel.value && unitSel.value && qty > 0) ingredients.push({name:sel.value, qty, unit:unitSel.value});
   }
   if (ingredients.length === 0) { showToast('Adicione pelo menos um ingrediente', true); return; }
+  const notes = document.getElementById('new-recipe-notes').value.trim();
   if (editingRecipeId) {
     const existing = allData.find(r => r.id === editingRecipeId); if (!existing) return;
-    const r = await dbUpdate({...existing, recipe_name:name, recipe_type:type, recipe_sector:sector, recipe_ingredients:JSON.stringify(ingredients), recipe_yield:yieldQty, recipe_yield_unit:yieldUnit, recipe_product_name:name});
+    const r = await dbUpdate({...existing, recipe_name:name, recipe_type:type, recipe_sector:sector, recipe_ingredients:JSON.stringify(ingredients), recipe_yield:yieldQty, recipe_yield_unit:yieldUnit, recipe_product_name:name, recipe_notes:notes});
     if (r.isOk) { showToast('Receita atualizada!'); hideAddRecipe(); } else showToast('Erro', true);
   } else {
     if (getRecipes().some(r=>r.recipe_name.toLowerCase()===name.toLowerCase())) { showToast('Receita já existe', true); return; }
-    const r = await dbCreate({ ...blankRecord(), type:'recipe', recipe_name:name, recipe_ingredients:JSON.stringify(ingredients), recipe_yield:yieldQty, recipe_yield_unit:yieldUnit, recipe_product_name:name, recipe_type:type, recipe_sector:sector });
+    const r = await dbCreate({ ...blankRecord(), type:'recipe', recipe_name:name, recipe_ingredients:JSON.stringify(ingredients), recipe_yield:yieldQty, recipe_yield_unit:yieldUnit, recipe_product_name:name, recipe_type:type, recipe_sector:sector, recipe_notes:notes });
     if (r.isOk) { showToast('Receita cadastrada!'); hideAddRecipe(); } else showToast('Erro', true);
   }
 }
