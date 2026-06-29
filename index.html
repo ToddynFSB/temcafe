@@ -900,7 +900,7 @@ function renderStock() {
 document.getElementById('search-stock').addEventListener('input', renderStock);
 document.getElementById('filter-category').addEventListener('change', renderStock);
 
-function showAddProduct() { document.getElementById('add-product-form').classList.remove('hidden'); }
+function showAddProduct() { const el = document.getElementById('add-product-form'); el.classList.remove('hidden'); setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100); }
 function hideAddProduct() { document.getElementById('add-product-form').classList.add('hidden'); }
 
 async function handleAddProduct(e) {
@@ -1217,6 +1217,7 @@ function showAddRecipe() {
   document.getElementById('recipe-ingredients-fields').innerHTML = '';
   document.getElementById('add-recipe-form').classList.remove('hidden');
   addIngredientField();
+  setTimeout(() => document.getElementById('add-recipe-form').scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
 }
 function hideAddRecipe() { document.getElementById('add-recipe-form').classList.add('hidden'); editingRecipeId = null; }
 function editRecipe(id) {
@@ -1244,6 +1245,7 @@ function editRecipe(id) {
     document.getElementById('recipe-ingredients-fields').appendChild(div);
   });
   document.getElementById('add-recipe-form').classList.remove('hidden');
+  setTimeout(() => document.getElementById('add-recipe-form').scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
 }
 function getCompatibleUnits(storageUnit) {
   if (!storageUnit) return [];
@@ -1435,7 +1437,7 @@ async function saveFinishedLevels() {
     showToast('Produto atualizado!'); closeEditFinished();
   } else showToast('Erro ao salvar', true);
 }
-function showAddFinishedProduct() { document.getElementById('add-finished-form').classList.remove('hidden'); }
+function showAddFinishedProduct() { const el = document.getElementById('add-finished-form'); el.classList.remove('hidden'); setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100); }
 function hideAddFinishedProduct() { document.getElementById('add-finished-form').classList.add('hidden'); }
 async function handleAddFinishedProduct(e) {
   e.preventDefault();
