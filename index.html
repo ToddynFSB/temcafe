@@ -493,7 +493,7 @@
   <div id="edit-levels-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
     <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl max-h-[90vh] overflow-y-auto">
       <h3 class="font-bold mb-1 text-stone-800 text-lg">Editar Insumo</h3>
-      <p id="edit-levels-product-name" class="text-sm text-stone-500 mb-5"></p>
+      <div class="mb-5"><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-2">Nome do Insumo *</label><input id="edit-levels-product-name-input" type="text" class="w-full input-field text-sm" required></div>
       <div class="mb-5"><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-2">Categoria:</label><select id="edit-levels-category" class="w-full input-field text-sm"><option value="Café">Café</option><option value="Cozinha">Cozinha</option><option value="Drinks">Drinks</option><option value="Limpeza">Limpeza</option><option value="Utensílios">Utensílios</option></select></div>
       <div class="mb-5 pb-5 border-b border-stone-200">
         <p class="text-xs font-bold text-stone-600 uppercase tracking-wide mb-4">Ajuste Manual de Estoque</p>
@@ -1115,7 +1115,7 @@ async function handleAddProduct(e) {
 function openEditLevels(id) {
   const p = allData.find(r => r.id === id); if (!p) return;
   editingProductId = id;
-  document.getElementById('edit-levels-product-name').textContent = p.product_name;
+  document.getElementById('edit-levels-product-name-input').value = p.product_name;
   document.getElementById('edit-levels-category').value = p.category || 'Café';
   document.getElementById('edit-levels-critical').value = p.critical_stock;
   document.getElementById('edit-levels-min').value = p.min_stock;
@@ -1141,21 +1141,47 @@ function updateAdjustmentPreview() {
 }
 document.addEventListener('input', (e) => { if (e.target.id === 'edit-levels-new-qty') updateAdjustmentPreview(); });
 
+async function renameProductInRecipes(oldName, newName) {
+  const recipes = getRecipes().filter(r => {
+    let ings = []; try { ings = JSON.parse(r.recipe_ingredients || '[]'); } catch(e) {}
+    return ings.some(ing => ing.name === oldName);
+  });
+  for (const r of recipes) {
+    let ings = []; try { ings = JSON.parse(r.recipe_ingredients || '[]'); } catch(e) {}
+    const updatedIngs = ings.map(ing => ing.name === oldName ? { ...ing, name: newName } : ing);
+    await dbUpdate({ ...r, recipe_ingredients: JSON.stringify(updatedIngs) });
+  }
+  return recipes.length;
+}
+
 async function saveEditedLevels() {
   const p = allData.find(r => r.id === editingProductId); if (!p) return;
+  const newName = document.getElementById('edit-levels-product-name-input').value.trim();
   const newQty = parseFloat(document.getElementById('edit-levels-new-qty').value);
   const cat = document.getElementById('edit-levels-category').value;
   const c = parseFloat(document.getElementById('edit-levels-critical').value)||0;
   const m = parseFloat(document.getElementById('edit-levels-min').value)||0;
   const co = parseFloat(document.getElementById('edit-levels-comfortable').value)||0;
   const linkedRecipeId = document.getElementById('edit-levels-linked-recipe').value || '';
+  if (!newName) { showToast('Nome do insumo não pode ficar vazio', true); return; }
   if (isNaN(newQty) || newQty < 0) { showToast('Quantidade inválida', true); return; }
+  const oldName = p.product_name;
+  const nameChanged = newName.toLowerCase() !== oldName.toLowerCase();
+  if (nameChanged && getProducts().some(x => x.id !== p.id && x.product_name.toLowerCase() === newName.toLowerCase())) {
+    showToast('Já existe um insumo com esse nome', true); return;
+  }
   const oldQty = p.quantity;
   const diff = newQty - oldQty;
-  const r = await dbUpdate({...p, quantity:newQty, category:cat, critical_stock:c, min_stock:m, comfortable_stock:co, linked_recipe_id:linkedRecipeId});
+  const r = await dbUpdate({...p, product_name:newName, quantity:newQty, category:cat, critical_stock:c, min_stock:m, comfortable_stock:co, linked_recipe_id:linkedRecipeId});
   if (r.isOk) {
-    if (diff !== 0) await dbCreate({ ...blankRecord(), type:'movement', movement_type:'ajuste_manual', movement_product:p.product_name, movement_quantity:diff, movement_date:new Date().toISOString(), movement_note:`Ajuste: ${p.product_name} → ${fmtQty(newQty,p.unit)} ${p.unit}` });
-    showToast('Insumo atualizado!'); closeEditLevels();
+    if (diff !== 0) await dbCreate({ ...blankRecord(), type:'movement', movement_type:'ajuste_manual', movement_product:newName, movement_quantity:diff, movement_date:new Date().toISOString(), movement_note:`Ajuste: ${newName} → ${fmtQty(newQty,p.unit)} ${p.unit}` });
+    if (nameChanged) {
+      const count = await renameProductInRecipes(oldName, newName);
+      showToast(count > 0 ? `Insumo renomeado! ${count} receita(s) atualizada(s).` : 'Insumo renomeado!');
+    } else {
+      showToast('Insumo atualizado!');
+    }
+    closeEditLevels();
   } else showToast('Erro ao salvar', true);
 }
 
