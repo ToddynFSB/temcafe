@@ -1448,8 +1448,8 @@ function editRecipe(id) {
     const storageUnit = products.find(p => p.product_name===ing.name)?.storage_unit || ing.unit;
     const compatibleUnits = getCompatibleUnits(storageUnit);
     const div = document.createElement('div');
-    div.className = 'flex gap-2 items-start mb-2';
-    div.innerHTML = `<select class="ing-product flex-1 input-field text-sm" onchange="updateIngredientUnits(this)" required><option value="">Insumo</option>${products.map(p=>`<option value="${p.product_name}" data-storage-unit="${p.storage_unit||p.unit}" ${ing.name===p.product_name?'selected':''}>${p.product_name}</option>`).join('')}</select><select class="ing-unit w-24 input-field text-sm" required><option value="">Unidade</option>${compatibleUnits.map(u=>`<option value="${u}" ${ing.unit===u?'selected':''}>${u}</option>`).join('')}</select><input type="number" class="ing-qty w-20 input-field text-sm" placeholder="Qtd" min="0.001" step="0.001" value="${ing.qty}" required><button type="button" onclick="this.closest('.flex').remove()" class="w-8 h-8 rounded-lg btn-danger flex items-center justify-center text-lg flex-shrink-0">×</button>`;
+    div.className = 'ingredient-row flex gap-2 items-start mb-2';
+    div.innerHTML = `<select class="ing-product flex-1 input-field text-sm" onchange="updateIngredientUnits(this)" required><option value="">Insumo</option>${products.map(p=>`<option value="${p.product_name}" data-storage-unit="${p.storage_unit||p.unit}" ${ing.name===p.product_name?'selected':''}>${p.product_name}</option>`).join('')}</select><select class="ing-unit w-24 input-field text-sm" required><option value="">Unidade</option>${compatibleUnits.map(u=>`<option value="${u}" ${ing.unit===u?'selected':''}>${u}</option>`).join('')}</select><input type="number" class="ing-qty w-20 input-field text-sm" placeholder="Qtd" min="0.001" step="0.001" value="${ing.qty}" required><button type="button" onclick="this.closest('.ingredient-row').remove()" class="w-8 h-8 rounded-lg btn-danger flex items-center justify-center text-lg flex-shrink-0">×</button>`;
     document.getElementById('recipe-ingredients-fields').appendChild(div);
   });
   document.getElementById('new-recipe-notes').value = recipe.recipe_notes || '';
@@ -1467,8 +1467,8 @@ function addIngredientField() {
   const products = getProducts().sort((a,b) => a.product_name.localeCompare(b.product_name));
   const container = document.getElementById('recipe-ingredients-fields');
   const div = document.createElement('div');
-  div.className = 'flex gap-2 items-start mb-2';
-  div.innerHTML = `<select class="ing-product flex-1 input-field text-sm" onchange="updateIngredientUnits(this)" required><option value="">Insumo</option>${products.map(p=>`<option value="${p.product_name}" data-storage-unit="${p.storage_unit||p.unit}">${p.product_name}</option>`).join('')}</select><select class="ing-unit w-24 input-field text-sm" required><option value="">Unidade</option></select><input type="number" class="ing-qty w-20 input-field text-sm" placeholder="Qtd" min="0.001" step="0.001" required><button type="button" onclick="this.closest('.flex').remove()" class="w-8 h-8 rounded-lg btn-danger flex items-center justify-center text-lg flex-shrink-0">×</button>`;
+  div.className = 'ingredient-row flex gap-2 items-start mb-2';
+  div.innerHTML = `<select class="ing-product flex-1 input-field text-sm" onchange="updateIngredientUnits(this)" required><option value="">Insumo</option>${products.map(p=>`<option value="${p.product_name}" data-storage-unit="${p.storage_unit||p.unit}">${p.product_name}</option>`).join('')}</select><select class="ing-unit w-24 input-field text-sm" required><option value="">Unidade</option></select><input type="number" class="ing-qty w-20 input-field text-sm" placeholder="Qtd" min="0.001" step="0.001" required><button type="button" onclick="this.closest('.ingredient-row').remove()" class="w-8 h-8 rounded-lg btn-danger flex items-center justify-center text-lg flex-shrink-0">×</button>`;
   container.appendChild(div);
 }
 function updateIngredientUnits(selectEl) {
