@@ -99,7 +99,7 @@
     <button class="tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-tab="estoque"><i data-lucide="package" class="w-5 h-5"></i>Insumos</button>
     <button class="tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-tab="receitas"><i data-lucide="book-open" class="w-5 h-5"></i>Receitas</button>
     <button class="tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-tab="producao"><i data-lucide="chef-hat" class="w-5 h-5"></i>Produzir</button>
-    <button class="tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-tab="prontos"><i data-lucide="cake" class="w-5 h-5"></i>Prontos</button>
+    <button class="tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-tab="prontos"><i data-lucide="cake" class="w-5 h-5"></i>Produzidos</button>
     <button class="tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-tab="perdas"><i data-lucide="trash-2" class="w-5 h-5"></i>Perdas</button>
     <button class="tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-tab="vendas"><i data-lucide="credit-card" class="w-5 h-5"></i>Vendas</button>
     <button class="tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-tab="consumo"><span class="text-lg leading-none">📊</span>Consumo</button>
@@ -325,29 +325,10 @@
   <!-- PRONTOS -->
   <section id="panel-prontos" class="hidden fade-in">
     <div class="flex items-center justify-between mb-4">
-      <h2 class="text-lg font-bold text-stone-800 flex items-center gap-2"><i data-lucide="cake" class="w-5 h-5 text-pink-600"></i>Estoque de Produtos Prontos</h2>
-      <button onclick="showAddFinishedProduct()" class="btn-primary px-4 py-2.5 rounded-lg text-sm font-medium flex items-center gap-1.5"><i data-lucide="plus" class="w-4 h-4"></i>Novo Produto Pronto</button>
+      <h2 class="text-lg font-bold text-stone-800 flex items-center gap-2"><i data-lucide="cake" class="w-5 h-5 text-pink-600"></i>Pré-Produção</h2>
     </div>
+    <p class="text-xs text-stone-500 mb-4">Insumos que você produz internamente (bolos base, molhos, caldas, geleias...), com uma receita vinculada. Eles ficam de fora da Lista de Compras e aparecem em Sugestões de Produção quando o estoque estiver baixo. Para adicionar um item aqui, edite o insumo em <strong>Insumos</strong> e escolha a "Receita vinculada".</p>
     <div id="finished-list" class="space-y-2"></div>
-    <div id="add-finished-form" class="hidden mt-4 bg-white rounded-xl p-5 shadow-sm border border-stone-100">
-      <h3 class="font-semibold mb-4 text-stone-800">Cadastrar Produto Pronto</h3>
-      <form onsubmit="handleAddFinishedProduct(event)">
-        <div class="grid sm:grid-cols-2 gap-3 mb-4">
-          <input id="new-finished-name" type="text" placeholder="Nome do produto *" required class="input-field text-sm">
-          <select id="new-finished-unit" required class="input-field text-sm"><option value="">Unidade *</option><option value="unidade">unidade</option><option value="fatia">fatia</option><option value="pacote">pacote</option><option value="caixa">caixa</option><option value="kg">kg</option><option value="g">g</option><option value="L">L</option><option value="ml">ml</option></select>
-          <input id="new-finished-qty" type="number" placeholder="Estoque inicial" min="0" step="1" value="0" class="input-field text-sm">
-        </div>
-        <div class="bg-stone-50 rounded-lg p-4 mb-4 border border-stone-200">
-          <p class="text-xs font-bold text-stone-600 uppercase tracking-wide mb-4">Níveis de Estoque</p>
-          <div class="space-y-3">
-            <div class="border-l-4 border-red-600 pl-3"><label class="text-xs font-bold text-stone-700 block mb-1">🔴 Crítico</label><input id="new-finished-critical" type="number" min="0" step="1" value="2" class="w-full input-field text-sm"></div>
-            <div class="border-l-4 border-amber-500 pl-3"><label class="text-xs font-bold text-stone-700 block mb-1">🟡 Baixo</label><input id="new-finished-min" type="number" min="0" step="1" value="5" class="w-full input-field text-sm"></div>
-            <div class="border-l-4 border-green-600 pl-3"><label class="text-xs font-bold text-stone-700 block mb-1">🟢 Confortável</label><input id="new-finished-comfortable" type="number" min="0" step="1" value="10" class="w-full input-field text-sm"></div>
-          </div>
-        </div>
-        <div class="flex gap-2"><button type="submit" class="btn-primary px-5 py-2.5 rounded-lg text-sm font-medium">Salvar</button><button type="button" onclick="hideAddFinishedProduct()" class="btn-ghost px-5 py-2.5 rounded-lg text-sm font-medium">Cancelar</button></div>
-      </form>
-    </div>
   </section>
 
   <!-- PERDAS -->
@@ -833,7 +814,7 @@ function renderAll() {
   renderRecipes();
   renderProductionSuggestions();
   renderPendingProductions();
-  renderFinishedProducts();
+  renderProducedInsumos();
   renderHistory();
   renderSalesToday();
   renderQuickEntrySelect();
@@ -1624,6 +1605,18 @@ async function processFinalization(prod, realYield, ingredients) {
 // ============================================================
 // PRONTOS
 // ============================================================
+function renderProducedInsumos() {
+  const produced = getProducts().filter(p => p.linked_recipe_id).sort((a,b) => a.product_name.localeCompare(b.product_name));
+  const el = document.getElementById('finished-list');
+  if (produced.length===0) { el.innerHTML = '<p class="text-stone-400 text-center py-8 text-sm">Nenhum insumo com receita vinculada ainda</p>'; return; }
+  el.innerHTML = produced.map(p => {
+    const comfortable = p.comfortable_stock || (p.min_stock*2);
+    const sc = getStockClass(p.quantity, p.critical_stock, p.min_stock, comfortable);
+    const recipe = getRecipes().find(r => r.id === p.linked_recipe_id);
+    return `<div class="flex items-center justify-between p-3.5 bg-white rounded-xl shadow-sm border border-stone-100 ${sc} card-hover"><div class="flex-1 min-w-0"><span class="font-semibold text-stone-800 truncate block text-sm">${p.product_name}</span><span class="text-xs text-stone-400">${p.unit}${recipe?` · ${recipe.recipe_name}`:''}</span>${getStockBadge(p.quantity,p.critical_stock,p.min_stock,comfortable)}</div><div class="flex items-center gap-2 flex-shrink-0 ml-3"><span class="w-20 text-right font-bold text-sm text-stone-800">${fmtQty(p.quantity,p.unit)} ${p.unit}</span><button onclick="openEditLevels('${p.id}')" class="w-8 h-8 rounded-lg bg-blue-50 hover:bg-blue-100 flex items-center justify-center text-blue-600" title="Editar"><i data-lucide="settings" class="w-3.5 h-3.5"></i></button></div></div>`;
+  }).join('');
+  lucide.createIcons();
+}
 function renderFinishedProducts() {
   const finished = getFinishedProducts();
   const el = document.getElementById('finished-list');
