@@ -483,7 +483,7 @@
       <div class="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-3"><i data-lucide="trash-2" class="w-5 h-5 text-red-600"></i></div>
       <h3 class="font-bold text-stone-800 mb-1">Apagar Histórico</h3>
       <p id="clear-history-message" class="text-sm text-stone-500 mb-5"></p>
-      <div class="flex gap-2"><button id="clear-history-confirm-btn" onclick="clearHistory()" class="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700">Apagar</button><button onclick="document.getElementById('clear-history-modal').classList.add('hidden')" class="flex-1 btn-ghost px-4 py-2.5 rounded-lg text-sm font-medium">Cancelar</button></div>
+      <div class="flex gap-2"><button id="clear-history-confirm-btn" onclick="clearHistory()" class="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-60">Apagar</button><button id="clear-history-cancel-btn" onclick="document.getElementById('clear-history-modal').classList.add('hidden')" class="flex-1 btn-ghost px-4 py-2.5 rounded-lg text-sm font-medium disabled:opacity-60">Cancelar</button></div>
     </div>
   </div>
 
@@ -2100,12 +2100,15 @@ function confirmClearHistory() {
   const periodLabels = {all:'todo o período',today:'hoje','7days':'últimos 7 dias','30days':'últimos 30 dias',custom:'período personalizado selecionado'};
   const typeText = filter==='all' ? 'todos os tipos' : (labels[filter]||filter);
   const msgEl = document.getElementById('clear-history-message');
+  const confirmBtn = document.getElementById('clear-history-confirm-btn');
+  confirmBtn.disabled = false;
+  confirmBtn.textContent = 'Apagar';
   if (movements.length===0) {
     msgEl.innerHTML = 'Nenhuma movimentação encontrada com os filtros atuais. Ajuste o tipo ou o período na tela de Histórico antes de apagar.';
-    document.getElementById('clear-history-confirm-btn').classList.add('hidden');
+    confirmBtn.classList.add('hidden');
   } else {
     msgEl.innerHTML = `Isso vai apagar permanentemente <strong>${movements.length} movimentaç${movements.length===1?'ão':'ões'}</strong> (${typeText}, ${periodLabels[period]||period}). Insumos, receitas e as quantidades em estoque <strong>não serão alterados</strong>.`;
-    document.getElementById('clear-history-confirm-btn').classList.remove('hidden');
+    confirmBtn.classList.remove('hidden');
   }
   document.getElementById('clear-history-modal').classList.remove('hidden');
   lucide.createIcons();
@@ -2113,13 +2116,31 @@ function confirmClearHistory() {
 
 async function clearHistory() {
   const { movements } = getFilteredHistoryMovements();
-  for (const m of movements) {
-    await apiCall('delete', { id: m.id });
-    allData = allData.filter(r => r.id !== m.id);
+  const btn = document.getElementById('clear-history-confirm-btn');
+  const cancelBtn = document.getElementById('clear-history-cancel-btn');
+  const originalLabel = btn.textContent;
+  btn.disabled = true;
+  if (cancelBtn) cancelBtn.disabled = true;
+  let deleted = 0;
+  try {
+    for (const m of movements) {
+      btn.textContent = `Apagando ${deleted+1}/${movements.length}...`;
+      await apiCall('delete', { id: m.id });
+      allData = allData.filter(r => r.id !== m.id);
+      deleted++;
+    }
+    document.getElementById('clear-history-modal').classList.add('hidden');
+    renderAll();
+    showToast(`${deleted} movimentaç${deleted===1?'ão apagada':'ões apagadas'}!`);
+  } catch (err) {
+    console.error('Erro ao apagar histórico:', err);
+    renderAll();
+    showToast(`Erro ao apagar histórico (${deleted}/${movements.length} apagadas): ${err.message}`, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalLabel;
+    if (cancelBtn) cancelBtn.disabled = false;
   }
-  document.getElementById('clear-history-modal').classList.add('hidden');
-  renderAll();
-  showToast(`${movements.length} movimentaç${movements.length===1?'ão apagada':'ões apagadas'}!`);
 }
 
 // ============================================================
