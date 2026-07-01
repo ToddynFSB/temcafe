@@ -50,6 +50,8 @@
     .btn-ghost:hover { background: #ede0d0; }
     .input-field { border: 1.5px solid #e8ddd2; border-radius: 10px; padding: 10px 14px; font-size: 14px; transition: all .2s; }
     .input-field:focus { outline: none; border-color: var(--coffee-500); box-shadow: 0 0 0 3px rgba(107,68,35,.1); }
+    select.input-field:invalid { color: #a8a29e; }
+    select.input-field option { color: #292524; }
     .nav-scroll::-webkit-scrollbar { height: 0; }
     .toast-anim { animation: toastIn .3s ease; }
     @keyframes toastIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
@@ -1449,7 +1451,7 @@ function editRecipe(id) {
     const compatibleUnits = getCompatibleUnits(storageUnit);
     const div = document.createElement('div');
     div.className = 'ingredient-row flex gap-2 items-start mb-2';
-    div.innerHTML = `<select class="ing-product flex-1 input-field text-sm" onchange="updateIngredientUnits(this)" required><option value="">Insumo</option>${products.map(p=>`<option value="${p.product_name}" data-storage-unit="${p.storage_unit||p.unit}" ${ing.name===p.product_name?'selected':''}>${p.product_name}</option>`).join('')}</select><select class="ing-unit w-24 input-field text-sm" required><option value="">Unidade</option>${compatibleUnits.map(u=>`<option value="${u}" ${ing.unit===u?'selected':''}>${u}</option>`).join('')}</select><input type="number" class="ing-qty w-20 input-field text-sm" placeholder="Qtd" min="0.001" step="0.001" value="${ing.qty}" required><button type="button" onclick="this.closest('.ingredient-row').remove()" class="w-8 h-8 rounded-lg btn-danger flex items-center justify-center text-lg flex-shrink-0">×</button>`;
+    div.innerHTML = `<select class="ing-product flex-1 input-field text-sm" onchange="updateIngredientUnits(this)" required><option value="">Insumo</option>${products.map(p=>`<option value="${p.product_name}" data-storage-unit="${p.storage_unit||p.unit}" ${ing.name===p.product_name?'selected':''}>${p.product_name}</option>`).join('')}</select><select class="ing-unit w-24 input-field text-sm" required><option value="" disabled hidden ${!ing.unit?'selected':''}>Unidade</option>${compatibleUnits.map(u=>`<option value="${u}" ${ing.unit===u?'selected':''}>${u}</option>`).join('')}</select><input type="number" class="ing-qty w-20 input-field text-sm" placeholder="Qtd" min="0.001" step="0.001" value="${ing.qty}" required><button type="button" onclick="this.closest('.ingredient-row').remove()" class="w-8 h-8 rounded-lg btn-danger flex items-center justify-center text-lg flex-shrink-0">×</button>`;
     document.getElementById('recipe-ingredients-fields').appendChild(div);
   });
   document.getElementById('new-recipe-notes').value = recipe.recipe_notes || '';
@@ -1468,15 +1470,15 @@ function addIngredientField() {
   const container = document.getElementById('recipe-ingredients-fields');
   const div = document.createElement('div');
   div.className = 'ingredient-row flex gap-2 items-start mb-2';
-  div.innerHTML = `<select class="ing-product flex-1 input-field text-sm" onchange="updateIngredientUnits(this)" required><option value="">Insumo</option>${products.map(p=>`<option value="${p.product_name}" data-storage-unit="${p.storage_unit||p.unit}">${p.product_name}</option>`).join('')}</select><select class="ing-unit w-24 input-field text-sm" required><option value="">Unidade</option></select><input type="number" class="ing-qty w-20 input-field text-sm" placeholder="Qtd" min="0.001" step="0.001" required><button type="button" onclick="this.closest('.ingredient-row').remove()" class="w-8 h-8 rounded-lg btn-danger flex items-center justify-center text-lg flex-shrink-0">×</button>`;
+  div.innerHTML = `<select class="ing-product flex-1 input-field text-sm" onchange="updateIngredientUnits(this)" required><option value="">Insumo</option>${products.map(p=>`<option value="${p.product_name}" data-storage-unit="${p.storage_unit||p.unit}">${p.product_name}</option>`).join('')}</select><select class="ing-unit w-24 input-field text-sm" required><option value="" disabled hidden selected>Unidade</option></select><input type="number" class="ing-qty w-20 input-field text-sm" placeholder="Qtd" min="0.001" step="0.001" required><button type="button" onclick="this.closest('.ingredient-row').remove()" class="w-8 h-8 rounded-lg btn-danger flex items-center justify-center text-lg flex-shrink-0">×</button>`;
   container.appendChild(div);
 }
 function updateIngredientUnits(selectEl) {
-  const row = selectEl.closest('.flex');
+  const row = selectEl.closest('.ingredient-row');
   const unitSelect = row.querySelector('.ing-unit');
   const storageUnit = selectEl.selectedOptions[0]?.dataset.storageUnit || '';
   const compatibleUnits = getCompatibleUnits(storageUnit);
-  unitSelect.innerHTML = `<option value="">Unidade</option>${compatibleUnits.map(u=>`<option value="${u}">${u}</option>`).join('')}`;
+  unitSelect.innerHTML = `<option value="" disabled hidden selected>Unidade</option>${compatibleUnits.map(u=>`<option value="${u}">${u}</option>`).join('')}`;
   unitSelect.value = '';
 }
 async function handleAddRecipe(e) {
