@@ -424,6 +424,21 @@
       <button class="consumption-view-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-800 text-white" data-view="all">Todos os Insumos</button>
       <button class="consumption-view-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-view="grouped">Agrupar por Categoria</button>
     </div>
+    <div class="flex flex-wrap gap-2 mb-2">
+      <button class="consumption-mode-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-800 text-white" data-mode="total">Total do Período</button>
+      <button class="consumption-mode-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-mode="average">📈 Média Diária</button>
+    </div>
+    <div id="consumption-weekday-filters" class="hidden flex flex-wrap gap-2 mb-4">
+      <button class="consumption-weekday-btn px-3 py-1 rounded-lg text-xs font-medium bg-stone-800 text-white" data-weekday="all">Todos os dias</button>
+      <button class="consumption-weekday-btn px-3 py-1 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-weekday="0">Domingo</button>
+      <button class="consumption-weekday-btn px-3 py-1 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-weekday="1">Segunda</button>
+      <button class="consumption-weekday-btn px-3 py-1 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-weekday="2">Terça</button>
+      <button class="consumption-weekday-btn px-3 py-1 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-weekday="3">Quarta</button>
+      <button class="consumption-weekday-btn px-3 py-1 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-weekday="4">Quinta</button>
+      <button class="consumption-weekday-btn px-3 py-1 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-weekday="5">Sexta</button>
+      <button class="consumption-weekday-btn px-3 py-1 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-weekday="6">Sábado</button>
+    </div>
+    <div id="consumption-avg-info" class="hidden text-xs text-stone-500 mb-3"></div>
     <div id="consumption-list" class="space-y-3"></div>
     <div id="consumption-empty" class="hidden text-stone-400 text-center py-8 text-sm">Nenhum consumo registrado neste período</div>
   </section>
@@ -589,6 +604,8 @@ let pendingDeleteId = null;
 let pendingDeleteType = null;
 let activeConsumptionFilter = 'today';
 let activeConsumptionView = 'all';
+let activeConsumptionMode = 'total';
+let activeConsumptionWeekday = 'all';
 let consumptionCustomStartDate = null;
 let consumptionCustomEndDate = null;
 
@@ -2106,6 +2123,19 @@ document.addEventListener('click', (e) => {
   document.querySelectorAll('.consumption-view-btn').forEach(b => { b.className = `consumption-view-btn px-3 py-1.5 rounded-lg text-xs font-medium ${b.dataset.view===activeConsumptionView?'bg-stone-800 text-white':'bg-stone-100 text-stone-600 hover:bg-stone-200'}`; });
   renderConsumption();
 });
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.consumption-mode-btn'); if (!btn) return;
+  activeConsumptionMode = btn.dataset.mode;
+  document.querySelectorAll('.consumption-mode-btn').forEach(b => { b.className = `consumption-mode-btn px-3 py-1.5 rounded-lg text-xs font-medium ${b.dataset.mode===activeConsumptionMode?'bg-stone-800 text-white':'bg-stone-100 text-stone-600 hover:bg-stone-200'}`; });
+  document.getElementById('consumption-weekday-filters').classList.toggle('hidden', activeConsumptionMode !== 'average');
+  renderConsumption();
+});
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.consumption-weekday-btn'); if (!btn) return;
+  activeConsumptionWeekday = btn.dataset.weekday;
+  document.querySelectorAll('.consumption-weekday-btn').forEach(b => { b.className = `consumption-weekday-btn px-3 py-1 rounded-lg text-xs font-medium ${b.dataset.weekday===activeConsumptionWeekday?'bg-stone-800 text-white':'bg-stone-100 text-stone-600 hover:bg-stone-200'}`; });
+  renderConsumption();
+});
 function applyCustomSingleDate() {
   const date = document.getElementById('custom-single-date').value; if (!date) { showToast('Selecione uma data', true); return; }
   const d = new Date(date);
@@ -2131,7 +2161,12 @@ function renderConsumption() {
   else if (activeConsumptionFilter==='30days') { startDate.setDate(startDate.getDate()-30); startDate.setHours(0,0,0,0); }
   else if (activeConsumptionFilter==='custom') { startDate=consumptionCustomStartDate; endDate=consumptionCustomEndDate; }
   if (!startDate||!endDate) return;
-  const relevantMovements = getMovements().filter(m=>{const moveDate=new Date(m.movement_date);return(m.movement_type==='venda'||m.movement_type==='producao')&&moveDate>=startDate&&moveDate<=endDate;});
+  const isAverage = activeConsumptionMode==='average';
+  const weekdayFilter = activeConsumptionWeekday;
+  let relevantMovements = getMovements().filter(m=>{const moveDate=new Date(m.movement_date);return(m.movement_type==='venda'||m.movement_type==='producao')&&moveDate>=startDate&&moveDate<=endDate;});
+  if (isAverage && weekdayFilter!=='all') {
+    relevantMovements = relevantMovements.filter(m=>new Date(m.movement_date).getDay()===Number(weekdayFilter));
+  }
   const consumptionMap = {};
   for (const m of relevantMovements) {
     let batchItems=[]; try{batchItems=JSON.parse(m.batch_items||'[]');}catch(e){}
@@ -2165,17 +2200,41 @@ function renderConsumption() {
       }
     }
   }
+  const avgInfoEl = document.getElementById('consumption-avg-info');
+  let dayDivisor = 1;
+  if (isAverage) {
+    dayDivisor = countMatchingDays(startDate, endDate, weekdayFilter);
+    if (dayDivisor < 1) dayDivisor = 1;
+    const weekdayNames = {'all':'todos os dias','0':'domingos','1':'segundas-feiras','2':'terças-feiras','3':'quartas-feiras','4':'quintas-feiras','5':'sextas-feiras','6':'sábados'};
+    avgInfoEl.textContent = `Média calculada sobre ${dayDivisor} ${weekdayFilter==='all'?'dia(s)':weekdayNames[weekdayFilter]} no período selecionado.`;
+    avgInfoEl.classList.remove('hidden');
+    Object.values(consumptionMap).forEach(item=>{ item.qty = item.qty / dayDivisor; });
+  } else {
+    avgInfoEl.classList.add('hidden');
+  }
   const el = document.getElementById('consumption-list');
   const emptyEl = document.getElementById('consumption-empty');
   if (Object.keys(consumptionMap).length===0) { el.innerHTML=''; emptyEl.classList.remove('hidden'); return; }
   emptyEl.classList.add('hidden');
+  const suffix = isAverage ? '/dia' : '';
   if (activeConsumptionView==='all') {
-    el.innerHTML = Object.values(consumptionMap).sort((a,b)=>a.name.localeCompare(b.name)).map(item=>`<div class="flex items-center justify-between p-3 bg-stone-50 rounded-lg border border-stone-200"><span class="font-medium text-stone-700">${item.name}</span><span class="font-bold text-stone-800">${fmtQty(item.qty,item.unit)} ${item.unit}</span></div>`).join('');
+    el.innerHTML = Object.values(consumptionMap).sort((a,b)=>a.name.localeCompare(b.name)).map(item=>`<div class="flex items-center justify-between p-3 bg-stone-50 rounded-lg border border-stone-200"><span class="font-medium text-stone-700">${item.name}</span><span class="font-bold text-stone-800">${fmtQty(item.qty,item.unit)} ${item.unit}${suffix}</span></div>`).join('');
   } else {
     const grouped = {};
     Object.values(consumptionMap).forEach(item=>{const cat=item.category||'Sem categoria';if(!grouped[cat])grouped[cat]=[];grouped[cat].push(item);});
-    el.innerHTML = ['Café','Cozinha','Drinks','Limpeza','Utensílios'].filter(c=>grouped[c]).map(cat=>`<div class="mb-4"><h4 class="font-bold text-sm text-stone-800 mb-2 pb-2 border-b border-stone-300">${cat}</h4><div class="space-y-2">${grouped[cat].map(item=>`<div class="flex items-center justify-between p-2.5 bg-stone-50 rounded-lg border border-stone-200"><span class="text-sm text-stone-700">${item.name}</span><span class="font-semibold text-stone-800">${fmtQty(item.qty,item.unit)} ${item.unit}</span></div>`).join('')}</div></div>`).join('');
+    el.innerHTML = ['Café','Cozinha','Drinks','Limpeza','Utensílios'].filter(c=>grouped[c]).map(cat=>`<div class="mb-4"><h4 class="font-bold text-sm text-stone-800 mb-2 pb-2 border-b border-stone-300">${cat}</h4><div class="space-y-2">${grouped[cat].map(item=>`<div class="flex items-center justify-between p-2.5 bg-stone-50 rounded-lg border border-stone-200"><span class="text-sm text-stone-700">${item.name}</span><span class="font-semibold text-stone-800">${fmtQty(item.qty,item.unit)} ${item.unit}${suffix}</span></div>`).join('')}</div></div>`).join('');
   }
+}
+function countMatchingDays(startDate, endDate, weekdayFilter) {
+  const start = new Date(startDate.getFullYear(),startDate.getMonth(),startDate.getDate());
+  const end = new Date(endDate.getFullYear(),endDate.getMonth(),endDate.getDate());
+  let count = 0;
+  const d = new Date(start);
+  while (d <= end) {
+    if (weekdayFilter==='all' || d.getDay()===Number(weekdayFilter)) count++;
+    d.setDate(d.getDate()+1);
+  }
+  return count;
 }
 
 // ============================================================
