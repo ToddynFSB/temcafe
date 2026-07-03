@@ -621,35 +621,50 @@ async function loadAllData() {
 }
 
 async function dbCreate(data) {
-  const result = await apiCall('create', { data });
-  if (result.ok) {
-    data.id = result.id;
-    allData.push(data);
-    renderAll();
-    return { isOk: true };
+  try {
+    const result = await apiCall('create', { data });
+    if (result.ok) {
+      data.id = result.id;
+      allData.push(data);
+      renderAll();
+      return { isOk: true };
+    }
+    return { isOk: false };
+  } catch (e) {
+    console.error('dbCreate falhou:', e);
+    return { isOk: false, error: e.message };
   }
-  return { isOk: false };
 }
 
 async function dbUpdate(data) {
-  const result = await apiCall('update', { data });
-  if (result.ok) {
-    const idx = allData.findIndex(r => r.id === data.id);
-    if (idx >= 0) allData[idx] = data;
-    renderAll();
-    return { isOk: true };
+  try {
+    const result = await apiCall('update', { data });
+    if (result.ok) {
+      const idx = allData.findIndex(r => r.id === data.id);
+      if (idx >= 0) allData[idx] = data;
+      renderAll();
+      return { isOk: true };
+    }
+    return { isOk: false };
+  } catch (e) {
+    console.error('dbUpdate falhou:', e);
+    return { isOk: false, error: e.message };
   }
-  return { isOk: false };
 }
 
 async function dbDelete(data) {
-  const result = await apiCall('delete', { id: data.id });
-  if (result.ok) {
-    allData = allData.filter(r => r.id !== data.id);
-    renderAll();
-    return { isOk: true };
+  try {
+    const result = await apiCall('delete', { id: data.id });
+    if (result.ok) {
+      allData = allData.filter(r => r.id !== data.id);
+      renderAll();
+      return { isOk: true };
+    }
+    return { isOk: false };
+  } catch (e) {
+    console.error('dbDelete falhou:', e);
+    return { isOk: false, error: e.message };
   }
-  return { isOk: false };
 }
 
 async function syncData() {
