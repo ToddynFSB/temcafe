@@ -294,8 +294,8 @@
         </div>
         <div class="grid sm:grid-cols-2 gap-3 mb-3">
           <input id="new-recipe-yield" type="number" placeholder="Rendimento padrão" min="1" step="any" value="1" class="input-field text-sm">
-          <select id="new-recipe-yield-unit" required class="input-field text-sm" style="display:none"><option value="">Unidade *</option><option value="kg">kg</option><option value="g">g</option><option value="L">L</option><option value="ml">ml</option><option value="unidade">unidade</option></select>
-          <input id="new-recipe-yield-unit-text" type="text" placeholder="Unidade (fatias, unidades...) *" required class="input-field text-sm" style="display:none">
+          <select id="new-recipe-yield-unit" class="input-field text-sm" style="display:none"><option value="">Unidade *</option><option value="kg">kg</option><option value="g">g</option><option value="L">L</option><option value="ml">ml</option><option value="unidade">unidade</option></select>
+          <input id="new-recipe-yield-unit-text" type="text" placeholder="Unidade (fatias, unidades...) *" class="input-field text-sm" style="display:none">
         </div>
         <p class="text-xs text-stone-500 mb-2 font-medium">Ingredientes:</p>
         <div id="recipe-ingredients-fields" class="space-y-2 mb-3"></div>
@@ -1473,7 +1473,7 @@ function editRecipe(id) {
     const compatibleUnits = getCompatibleUnits(storageUnit);
     const div = document.createElement('div');
     div.className = 'ingredient-row flex gap-2 items-start mb-2';
-    div.innerHTML = `<select class="ing-product flex-1 input-field text-sm" onchange="updateIngredientUnits(this)" required><option value="">Insumo</option>${products.map(p=>`<option value="${p.product_name}" data-storage-unit="${p.storage_unit||p.unit}" ${ing.name===p.product_name?'selected':''}>${p.product_name}</option>`).join('')}</select><select class="ing-unit w-24 input-field text-sm" required><option value="" disabled hidden ${!ing.unit?'selected':''}>Unidade</option>${compatibleUnits.map(u=>`<option value="${u}" ${ing.unit===u?'selected':''}>${u}</option>`).join('')}</select><input type="number" class="ing-qty w-20 input-field text-sm" placeholder="Qtd" min="0.001" step="any" value="${ing.qty}" required><button type="button" onclick="this.closest('.ingredient-row').remove()" class="w-8 h-8 rounded-lg btn-danger flex items-center justify-center text-lg flex-shrink-0">×</button>`;
+    div.innerHTML = `<select class="ing-product flex-1 input-field text-sm" onchange="updateIngredientUnits(this)"><option value="">Insumo</option>${products.map(p=>`<option value="${p.product_name}" data-storage-unit="${p.storage_unit||p.unit}" ${ing.name===p.product_name?'selected':''}>${p.product_name}</option>`).join('')}${!products.some(p=>p.product_name===ing.name)?`<option value="${ing.name}" selected>${ing.name} (insumo não encontrado)</option>`:''}</select><select class="ing-unit w-24 input-field text-sm"><option value="" disabled hidden ${!ing.unit?'selected':''}>Unidade</option>${compatibleUnits.map(u=>`<option value="${u}" ${ing.unit===u?'selected':''}>${u}</option>`).join('')}</select><input type="number" class="ing-qty w-20 input-field text-sm" placeholder="Qtd" min="0.001" step="any" value="${ing.qty}"><button type="button" onclick="this.closest('.ingredient-row').remove()" class="w-8 h-8 rounded-lg btn-danger flex items-center justify-center text-lg flex-shrink-0">×</button>`;
     document.getElementById('recipe-ingredients-fields').appendChild(div);
   });
   document.getElementById('new-recipe-notes').value = recipe.recipe_notes || '';
@@ -1492,7 +1492,7 @@ function addIngredientField() {
   const container = document.getElementById('recipe-ingredients-fields');
   const div = document.createElement('div');
   div.className = 'ingredient-row flex gap-2 items-start mb-2';
-  div.innerHTML = `<select class="ing-product flex-1 input-field text-sm" onchange="updateIngredientUnits(this)" required><option value="">Insumo</option>${products.map(p=>`<option value="${p.product_name}" data-storage-unit="${p.storage_unit||p.unit}">${p.product_name}</option>`).join('')}</select><select class="ing-unit w-24 input-field text-sm" required><option value="" disabled hidden selected>Unidade</option></select><input type="number" class="ing-qty w-20 input-field text-sm" placeholder="Qtd" min="0.001" step="any" required><button type="button" onclick="this.closest('.ingredient-row').remove()" class="w-8 h-8 rounded-lg btn-danger flex items-center justify-center text-lg flex-shrink-0">×</button>`;
+  div.innerHTML = `<select class="ing-product flex-1 input-field text-sm" onchange="updateIngredientUnits(this)"><option value="">Insumo</option>${products.map(p=>`<option value="${p.product_name}" data-storage-unit="${p.storage_unit||p.unit}">${p.product_name}</option>`).join('')}</select><select class="ing-unit w-24 input-field text-sm"><option value="" disabled hidden selected>Unidade</option></select><input type="number" class="ing-qty w-20 input-field text-sm" placeholder="Qtd" min="0.001" step="any"><button type="button" onclick="this.closest('.ingredient-row').remove()" class="w-8 h-8 rounded-lg btn-danger flex items-center justify-center text-lg flex-shrink-0">×</button>`;
   container.appendChild(div);
 }
 function updateIngredientUnits(selectEl) {
