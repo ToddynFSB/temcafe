@@ -314,19 +314,27 @@
 
   <!-- A PRODUZIR -->
   <section id="panel-producao" class="hidden fade-in">
-    <h2 class="text-lg font-bold text-stone-800 mb-1 flex items-center gap-2"><i data-lucide="chef-hat" class="w-5 h-5 text-purple-600"></i>Produção do Dia</h2>
-    <p class="text-xs text-stone-500 mb-4">Marque o que foi produzido hoje. O rendimento já vem com o padrão da receita — só ajuste se saiu diferente.</p>
-    <div id="daily-production-list" class="space-y-4 mb-4"></div>
-    <button onclick="confirmDailyProduction(event)" class="w-full btn-success px-4 py-3 rounded-lg text-sm font-semibold">✓ Confirmar Produções do Dia</button>
-    <div class="mt-8 pt-6 border-t border-stone-200">
-      <h3 class="font-semibold text-sm mb-3 text-stone-800 flex items-center gap-2"><i data-lucide="archive" class="w-4 h-4 text-stone-400"></i>Produções Pendentes <span class="text-[10px] font-normal text-stone-400">(receitas tipo Produção)</span></h3>
-      <div id="pending-production-list" class="space-y-3"></div>
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-lg font-bold text-stone-800 flex items-center gap-2"><i data-lucide="chef-hat" class="w-5 h-5 text-purple-600"></i>Produções Pendentes</h2>
+      <button onclick="showAnnotateProduction()" class="btn-primary px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-1.5"><i data-lucide="clipboard-list" class="w-4 h-4"></i>Anotar Produções</button>
     </div>
+    <div id="pending-production-list" class="space-y-3"></div>
     <div class="mt-6 pt-6 border-t border-stone-200">
-      <h3 class="font-semibold text-sm mb-3 text-stone-800 flex items-center gap-2"><i data-lucide="lightbulb" class="w-4 h-4 text-amber-500"></i>Sugestões de Produção <span class="text-[10px] font-normal text-stone-400">(receitas tipo Produção)</span></h3>
+      <h3 class="font-semibold text-sm mb-3 text-stone-800 flex items-center gap-2"><i data-lucide="lightbulb" class="w-4 h-4 text-amber-500"></i>Sugestões de Produção</h3>
       <div id="producao-suggestions" class="space-y-2"></div>
     </div>
   </section>
+
+  <!-- MODAL: Anotar Produções -->
+  <div id="annotate-production-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl p-6 w-full max-w-lg shadow-2xl max-h-[85vh] overflow-y-auto">
+      <h3 class="font-bold mb-1 text-stone-800 text-lg">Anotar Produções</h3>
+      <p class="text-xs text-stone-500 mb-4">Adicione o que foi produzido hoje. Diga quantas vezes fez a receita e o total sai sozinho.</p>
+      <div id="annotate-production-container" class="space-y-3 mb-3"></div>
+      <button type="button" onclick="addAnnotateProductionRow()" class="w-full btn-ghost px-4 py-2 rounded-lg text-sm font-medium mb-4 flex items-center justify-center gap-1.5"><i data-lucide="plus" class="w-4 h-4"></i>Adicionar Produção</button>
+      <div class="flex gap-2"><button id="annotate-production-confirm-btn" onclick="confirmAnnotateProduction()" class="flex-1 btn-success px-4 py-2.5 rounded-lg text-sm font-medium">✓ Confirmar Produções</button><button onclick="closeAnnotateProduction()" class="flex-1 btn-ghost px-4 py-2.5 rounded-lg text-sm font-medium">Cancelar</button></div>
+    </div>
+  </div>
 
   <!-- PRONTOS -->
   <section id="panel-prontos" class="hidden fade-in">
@@ -837,7 +845,6 @@ function renderAll() {
   renderManualExitsList();
   renderRecipes();
   renderProductionSuggestions();
-  renderDailyProductionList();
   renderPendingProductions();
   renderProducedInsumos();
   renderHistory();
@@ -874,7 +881,12 @@ function renderProductionSuggestions() {
   const finished = getFinishedProducts();
   const recipes = getRecipes().filter(r => r.recipe_type === 'Produção');
   const lowFinished = finished.filter(f => f.quantity === 0 || f.quantity <= f.critical_stock || f.quantity <= f.min_stock);
-  const allSuggestions = lowFinished.map(f => ({ data: f, recipe: recipes.find(r => (r.recipe_product_name||r.recipe_name) === f.product_name) }));
+  const products = getProducts();
+  const lowInsumos = products.filter(p => p.linked_recipe_id && (p.quantity === 0 || p.quantity <= p.critical_stock || p.quantity <= p.min_stock));
+  const allSuggestions = [
+    ...lowFinished.map(f => ({ data: f, recipe: recipes.find(r => (r.recipe_product_name||r.recipe_name) === f.product_name) })),
+    ...lowInsumos.map(i => ({ data: i, recipe: getRecipes().find(r => r.id === i.linked_recipe_id) }))
+  ];
 
   // Dashboard: versão compacta (comportamento original)
   const dashEl = document.getElementById('dash-suggestions');
@@ -886,7 +898,7 @@ function renderProductionSuggestions() {
         const missing = Math.max(0, comfortable - s.data.quantity);
         const recipesNeeded = (s.recipe && s.recipe.recipe_yield > 0) ? Math.ceil(missing / s.recipe.recipe_yield) : null;
         const hint = recipesNeeded ? ` · ${recipesNeeded}× receita` : '';
-        return `<div class="flex justify-between items-center p-2.5 bg-amber-50 rounded-lg text-sm"><div class="flex-1 min-w-0"><span class="font-medium truncate text-stone-700">${s.data.product_name}</span><span class="text-xs text-stone-500 ml-1">${fmtQty(s.data.quantity,s.data.unit)} / ${fmtQty(comfortable,s.data.unit)} ${s.data.unit}${hint}</span></div>${s.recipe?`<button onclick="sendToProduction('${s.recipe.id}')" class="btn-primary px-2.5 py-1 rounded-lg text-xs flex-shrink-0 ml-2">Produzir</button>`:''}</div>`;
+        return `<div class="flex justify-between items-center p-2.5 bg-amber-50 rounded-lg text-sm"><div class="flex-1 min-w-0"><span class="font-medium truncate text-stone-700">${s.data.product_name}</span><span class="text-xs text-stone-500 ml-1">${fmtQty(s.data.quantity,s.data.unit)} / ${fmtQty(comfortable,s.data.unit)} ${s.data.unit}${hint}</span></div>${s.recipe?`<button onclick="produceFromSuggestion('${s.recipe.id}')" class="btn-primary px-2.5 py-1 rounded-lg text-xs flex-shrink-0 ml-2">Produzir</button>`:''}</div>`;
       }).join('');
     }
   }
@@ -943,7 +955,7 @@ function renderProductionSuggestions() {
           </div>
           ${recipe ? `<p class="text-xs text-stone-400 mt-0.5">Receita: ${recipe.recipe_name}</p>` : ''}
         </div>
-        ${recipe ? `<button onclick="sendToProduction('${recipe.id}')" class="btn-primary px-3 py-1.5 rounded-lg text-xs flex-shrink-0 font-medium">▶ Produzir 1×</button>` : ''}
+        ${recipe ? `<button onclick="produceFromSuggestion('${recipe.id}')" class="btn-primary px-3 py-1.5 rounded-lg text-xs flex-shrink-0 font-medium">▶ Produzir 1×</button>` : ''}
       </div>
 
       <!-- Barra de progresso -->
@@ -973,7 +985,7 @@ function renderProductionSuggestions() {
         </div>
         <div class="flex gap-1 mt-2 flex-wrap">
           ${Array.from({length: Math.min(recipesNeeded, 5)}, (_,i) => i+1).map(n =>
-            `<button onclick="sendNToProduction('${recipe.id}', ${n})" class="px-2 py-1 rounded-lg text-xs font-medium bg-purple-100 text-purple-700 hover:bg-purple-200">${n}×</button>`
+            `<button onclick="produceNFromSuggestion('${recipe.id}', ${n})" class="px-2 py-1 rounded-lg text-xs font-medium bg-purple-100 text-purple-700 hover:bg-purple-200">${n}×</button>`
           ).join('')}
           ${recipesNeeded > 5 ? `<span class="text-xs text-stone-400 self-center">...</span>` : ''}
         </div>
@@ -984,86 +996,101 @@ function renderProductionSuggestions() {
   }).join('');
 }
 
-function renderDailyProductionList() {
-  const el = document.getElementById('daily-production-list');
-  if (!el) return;
-  const recipes = getRecipes().filter(r => r.recipe_type === 'Insumo').sort((a,b) => a.recipe_name.localeCompare(b.recipe_name));
-  if (recipes.length === 0) { el.innerHTML = '<p class="text-stone-400 text-center py-6 text-sm">Nenhuma receita tipo Insumo cadastrada ainda</p>'; return; }
-  const products = getProducts();
-  const sectors = ['Cozinha','Café e Drinks'].filter(s => recipes.some(r => r.recipe_sector === s));
-  el.innerHTML = sectors.map(sector => {
-    const rows = recipes.filter(r => r.recipe_sector === sector).map(r => {
-      const target = products.find(p => p.linked_recipe_id === r.id);
-      let stockBadge = '';
-      if (target) {
-        if (target.quantity <= target.critical_stock) stockBadge = '<span class="text-[10px] px-1.5 py-0.5 rounded-full font-semibold badge-critical ml-1.5">Crítico</span>';
-        else if (target.quantity <= target.min_stock) stockBadge = '<span class="text-[10px] px-1.5 py-0.5 rounded-full font-semibold badge-low ml-1.5">Baixo</span>';
-      }
-      let ingredients = []; try { ingredients = JSON.parse(r.recipe_ingredients); } catch(e) {}
-      const missing = ingredients.filter(ing => {
-        const p = products.find(x => x.product_name === ing.name);
-        if (!p) return true;
-        return p.quantity < convertQuantity(ing.qty, ing.unit, p.storage_unit || p.unit);
-      });
-      const warn = missing.length > 0
-        ? `<p class="text-[11px] text-red-600 mt-0.5">⚠️ Falta: ${missing.map(i=>i.name).join(', ')}</p>`
-        : (!target ? `<p class="text-[11px] text-amber-600 mt-0.5">⚠️ Sem insumo vinculado — edite o insumo em Insumos e vincule esta receita</p>` : '');
-      return `<label class="flex items-start gap-3 p-3 bg-white rounded-xl border border-stone-100 shadow-sm">
-        <input type="checkbox" class="daily-prod-check w-5 h-5 flex-shrink-0 mt-0.5" data-recipe-id="${r.id}">
-        <div class="flex-1 min-w-0"><span class="font-medium text-sm text-stone-800">${r.recipe_name}${stockBadge}</span>${warn}</div>
-        <div class="flex items-center gap-1.5 flex-shrink-0">
-          <input type="number" class="daily-prod-qty w-16 input-field text-sm text-right py-1.5" min="0" step="any" value="${r.recipe_yield}" data-recipe-id="${r.id}">
-          <span class="text-xs text-stone-400 w-14">${r.recipe_yield_unit}</span>
-        </div>
-      </label>`;
-    }).join('');
-    return `<div><h4 class="text-xs font-bold text-stone-500 uppercase tracking-wide mb-2">${sector}</h4><div class="space-y-2">${rows}</div></div>`;
-  }).join('');
+function produceFromSuggestion(recipeId) {
+  const recipe = allData.find(r => r.id === recipeId); if (!recipe) return;
+  if (recipe.recipe_type === 'Insumo') { confirmInsumoProduction(recipe, 1).then(r => { if (r.ok) showToast(`${recipe.recipe_name} produzido!`); else showToast(`Erro: ${r.error}`, true); }); return; }
+  sendToProduction(recipeId);
+}
+function produceNFromSuggestion(recipeId, times) {
+  const recipe = allData.find(r => r.id === recipeId); if (!recipe) return;
+  if (recipe.recipe_type === 'Insumo') { confirmInsumoProduction(recipe, times).then(r => { if (r.ok) showToast(`${times}× ${recipe.recipe_name} produzido!`); else showToast(`Erro: ${r.error}`, true); }); return; }
+  sendNToProduction(recipeId, times);
 }
 
-async function confirmInsumoProduction(recipe, yieldQty) {
+// Produz `times` vezes a receita (tipo Insumo): desconta ingredientes × times, credita rendimento × times no insumo vinculado
+async function confirmInsumoProduction(recipe, times) {
+  times = Math.max(0, parseFloat(times) || 0);
+  if (times <= 0) return { ok:false, error:'quantidade inválida' };
   let ingredients = []; try { ingredients = JSON.parse(recipe.recipe_ingredients); } catch(e) {}
   const target = getProducts().find(p => p.linked_recipe_id === recipe.id);
-  if (!target) return { ok:false, error:'sem insumo vinculado' };
+  if (!target) return { ok:false, error:'sem insumo vinculado — edite o insumo e vincule esta receita' };
   for (const ing of ingredients) {
     const p = getProducts().find(x => x.product_name === ing.name);
     if (!p) return { ok:false, error:`${ing.name} não encontrado` };
     const su = p.storage_unit || p.unit;
-    if (p.quantity < convertQuantity(ing.qty, ing.unit, su)) return { ok:false, error:`falta ${ing.name}` };
+    if (p.quantity < convertQuantity(ing.qty * times, ing.unit, su)) return { ok:false, error:`falta ${ing.name}` };
   }
   for (const ing of ingredients) {
     const p = getProducts().find(x => x.product_name === ing.name);
     const su = p.storage_unit || p.unit;
-    const consumptionQty = convertQuantity(ing.qty, ing.unit, su);
+    const consumptionQty = convertQuantity(ing.qty * times, ing.unit, su);
     const res = await dbUpdate({...p, quantity: Math.max(0, p.quantity - consumptionQty)});
     if (!res.isOk) return { ok:false, error:`erro ao descontar ${ing.name}` };
   }
+  const yieldQty = (parseFloat(recipe.recipe_yield)||0) * times;
   const targetNow = getProducts().find(p => p.id === target.id);
   const resTarget = await dbUpdate({...targetNow, quantity: targetNow.quantity + yieldQty});
   if (!resTarget.isOk) return { ok:false, error:'erro ao creditar estoque' };
-  const ingNote = ingredients.map(i=>`${fmtQty(i.qty,i.unit)} ${i.unit} ${i.name}`).join(', ');
-  await dbCreate({ ...blankRecord(), type:'movement', movement_type:'producao', movement_product:target.product_name, movement_quantity:yieldQty, movement_date:new Date().toISOString(), movement_note:`Produção: ${fmtQty(yieldQty,target.unit)} ${target.unit} de ${target.product_name}. Insumos: ${ingNote}`, batch_items:recipe.recipe_ingredients, production_recipe_id:recipe.id, production_real_yield:yieldQty });
+  const ingNote = ingredients.map(i=>`${fmtQty(i.qty*times,i.unit)} ${i.unit} ${i.name}`).join(', ');
+  await dbCreate({ ...blankRecord(), type:'movement', movement_type:'producao', movement_product:target.product_name, movement_quantity:yieldQty, movement_date:new Date().toISOString(), movement_note:`Produção: ${fmtQty(yieldQty,target.unit)} ${target.unit} de ${target.product_name} (${fmtQty(times,'')}× receita). Insumos: ${ingNote}`, batch_items:recipe.recipe_ingredients, production_recipe_id:recipe.id, production_real_yield:yieldQty });
   return { ok:true };
 }
 
-async function confirmDailyProduction(e) {
-  const checks = [...document.querySelectorAll('.daily-prod-check:checked')];
-  if (checks.length === 0) { showToast('Marque pelo menos uma produção', true); return; }
-  const btn = e?.currentTarget;
-  if (btn) { btn.disabled = true; btn.textContent = 'Processando...'; }
+// ============================================================
+// ANOTAR PRODUÇÕES (registro em lote de várias receitas de uma vez)
+// ============================================================
+function showAnnotateProduction() {
+  document.getElementById('annotate-production-container').innerHTML = '';
+  addAnnotateProductionRow();
+  document.getElementById('annotate-production-modal').classList.remove('hidden');
+}
+function closeAnnotateProduction() { document.getElementById('annotate-production-modal').classList.add('hidden'); }
+function addAnnotateProductionRow() {
+  const recipes = getRecipes().filter(r => r.recipe_type === 'Insumo').sort((a,b) => a.recipe_name.localeCompare(b.recipe_name));
+  const container = document.getElementById('annotate-production-container');
+  const div = document.createElement('div');
+  div.className = 'annotate-prod-row bg-stone-50 border border-stone-200 rounded-lg p-3';
+  div.innerHTML = `
+    <div class="flex gap-2 items-start mb-2">
+      <select class="annotate-recipe input-field text-sm flex-1" onchange="updateAnnotateRowTotal(this)" required><option value="">Selecione a receita</option>${recipes.map(r=>`<option value="${r.id}" data-yield="${r.recipe_yield}" data-unit="${r.recipe_yield_unit}">${r.recipe_name}</option>`).join('')}</select>
+      <button type="button" onclick="this.closest('.annotate-prod-row').remove()" class="w-8 h-8 rounded-lg btn-danger flex items-center justify-center text-lg flex-shrink-0">×</button>
+    </div>
+    <div class="flex items-center gap-2">
+      <label class="text-xs text-stone-500 flex-shrink-0">Quantas receitas fez:</label>
+      <input type="number" class="annotate-times input-field text-sm w-20" min="0.1" step="any" value="1" oninput="updateAnnotateRowTotal(this)">
+      <span class="annotate-row-total text-xs text-stone-500 ml-auto"></span>
+    </div>`;
+  container.appendChild(div);
+}
+function updateAnnotateRowTotal(el) {
+  const row = el.closest('.annotate-prod-row');
+  const recipeSel = row.querySelector('.annotate-recipe');
+  const timesInput = row.querySelector('.annotate-times');
+  const totalEl = row.querySelector('.annotate-row-total');
+  const opt = recipeSel.selectedOptions[0];
+  const yieldPer = parseFloat(opt?.dataset.yield) || 0;
+  const unit = opt?.dataset.unit || '';
+  const times = parseFloat(timesInput.value) || 0;
+  totalEl.textContent = opt && opt.value ? `= ${fmtQty(yieldPer*times, unit)} ${unit}` : '';
+}
+async function confirmAnnotateProduction() {
+  const rows = [...document.querySelectorAll('#annotate-production-container .annotate-prod-row')];
+  const entries = rows.map(row => ({
+    recipeId: row.querySelector('.annotate-recipe').value,
+    times: parseFloat(row.querySelector('.annotate-times').value) || 0
+  })).filter(e => e.recipeId && e.times > 0);
+  if (entries.length === 0) { showToast('Adicione pelo menos uma produção válida', true); return; }
+  const btn = document.getElementById('annotate-production-confirm-btn');
+  btn.disabled = true; btn.textContent = 'Processando...';
   let successCount = 0; const errors = [];
-  for (const chk of checks) {
-    const recipeId = chk.dataset.recipeId;
-    const recipe = getRecipes().find(r => r.id === recipeId);
+  for (const entry of entries) {
+    const recipe = getRecipes().find(r => r.id === entry.recipeId);
     if (!recipe) continue;
-    const qtyInput = document.querySelector(`.daily-prod-qty[data-recipe-id="${recipeId}"]`);
-    const yieldQty = Math.max(0, parseFloat(qtyInput?.value) || 0);
-    if (yieldQty <= 0) { errors.push(`${recipe.recipe_name}: rendimento inválido`); continue; }
-    const result = await confirmInsumoProduction(recipe, yieldQty);
+    const result = await confirmInsumoProduction(recipe, entry.times);
     if (result.ok) successCount++; else errors.push(`${recipe.recipe_name}: ${result.error}`);
   }
-  if (btn) { btn.disabled = false; btn.textContent = '✓ Confirmar Produções do Dia'; }
-  if (successCount > 0) showToast(`${successCount} produção${successCount>1?'ões':''} registrada${successCount>1?'s':''}!`);
+  btn.disabled = false; btn.textContent = '✓ Confirmar Produções';
+  if (successCount > 0) { showToast(`${successCount} produção${successCount>1?'ões':''} registrada${successCount>1?'s':''}!`); closeAnnotateProduction(); }
   if (errors.length > 0) showToast(`Não deu pra registrar: ${errors.join(' · ')}`, true);
 }
 
