@@ -314,10 +314,16 @@
 
   <!-- A PRODUZIR -->
   <section id="panel-producao" class="hidden fade-in">
-    <h2 class="text-lg font-bold text-stone-800 mb-4 flex items-center gap-2"><i data-lucide="chef-hat" class="w-5 h-5 text-purple-600"></i>Produções Pendentes</h2>
-    <div id="pending-production-list" class="space-y-3"></div>
+    <h2 class="text-lg font-bold text-stone-800 mb-1 flex items-center gap-2"><i data-lucide="chef-hat" class="w-5 h-5 text-purple-600"></i>Produção do Dia</h2>
+    <p class="text-xs text-stone-500 mb-4">Marque o que foi produzido hoje. O rendimento já vem com o padrão da receita — só ajuste se saiu diferente.</p>
+    <div id="daily-production-list" class="space-y-4 mb-4"></div>
+    <button onclick="confirmDailyProduction(event)" class="w-full btn-success px-4 py-3 rounded-lg text-sm font-semibold">✓ Confirmar Produções do Dia</button>
+    <div class="mt-8 pt-6 border-t border-stone-200">
+      <h3 class="font-semibold text-sm mb-3 text-stone-800 flex items-center gap-2"><i data-lucide="archive" class="w-4 h-4 text-stone-400"></i>Produções Pendentes <span class="text-[10px] font-normal text-stone-400">(receitas tipo Produção)</span></h3>
+      <div id="pending-production-list" class="space-y-3"></div>
+    </div>
     <div class="mt-6 pt-6 border-t border-stone-200">
-      <h3 class="font-semibold text-sm mb-3 text-stone-800 flex items-center gap-2"><i data-lucide="lightbulb" class="w-4 h-4 text-amber-500"></i>Sugestões de Produção</h3>
+      <h3 class="font-semibold text-sm mb-3 text-stone-800 flex items-center gap-2"><i data-lucide="lightbulb" class="w-4 h-4 text-amber-500"></i>Sugestões de Produção <span class="text-[10px] font-normal text-stone-400">(receitas tipo Produção)</span></h3>
       <div id="producao-suggestions" class="space-y-2"></div>
     </div>
   </section>
@@ -621,50 +627,53 @@ async function loadAllData() {
 }
 
 async function dbCreate(data) {
+  let result;
   try {
-    const result = await apiCall('create', { data });
-    if (result.ok) {
-      data.id = result.id;
-      allData.push(data);
-      renderAll();
-      return { isOk: true };
-    }
-    return { isOk: false };
+    result = await apiCall('create', { data });
   } catch (e) {
     console.error('dbCreate falhou:', e);
     return { isOk: false, error: e.message };
   }
+  if (result.ok) {
+    data.id = result.id;
+    allData.push(data);
+    try { renderAll(); } catch (e) { console.error('Erro ao renderizar após salvar:', e); }
+    return { isOk: true };
+  }
+  return { isOk: false };
 }
 
 async function dbUpdate(data) {
+  let result;
   try {
-    const result = await apiCall('update', { data });
-    if (result.ok) {
-      const idx = allData.findIndex(r => r.id === data.id);
-      if (idx >= 0) allData[idx] = data;
-      renderAll();
-      return { isOk: true };
-    }
-    return { isOk: false };
+    result = await apiCall('update', { data });
   } catch (e) {
     console.error('dbUpdate falhou:', e);
     return { isOk: false, error: e.message };
   }
+  if (result.ok) {
+    const idx = allData.findIndex(r => r.id === data.id);
+    if (idx >= 0) allData[idx] = data;
+    try { renderAll(); } catch (e) { console.error('Erro ao renderizar após salvar:', e); }
+    return { isOk: true };
+  }
+  return { isOk: false };
 }
 
 async function dbDelete(data) {
+  let result;
   try {
-    const result = await apiCall('delete', { id: data.id });
-    if (result.ok) {
-      allData = allData.filter(r => r.id !== data.id);
-      renderAll();
-      return { isOk: true };
-    }
-    return { isOk: false };
+    result = await apiCall('delete', { id: data.id });
   } catch (e) {
     console.error('dbDelete falhou:', e);
     return { isOk: false, error: e.message };
   }
+  if (result.ok) {
+    allData = allData.filter(r => r.id !== data.id);
+    try { renderAll(); } catch (e) { console.error('Erro ao renderizar após salvar:', e); }
+    return { isOk: true };
+  }
+  return { isOk: false };
 }
 
 async function syncData() {
@@ -828,6 +837,7 @@ function renderAll() {
   renderManualExitsList();
   renderRecipes();
   renderProductionSuggestions();
+  renderDailyProductionList();
   renderPendingProductions();
   renderProducedInsumos();
   renderHistory();
@@ -864,12 +874,7 @@ function renderProductionSuggestions() {
   const finished = getFinishedProducts();
   const recipes = getRecipes().filter(r => r.recipe_type === 'Produção');
   const lowFinished = finished.filter(f => f.quantity === 0 || f.quantity <= f.critical_stock || f.quantity <= f.min_stock);
-  const products = getProducts();
-  const lowInsumos = products.filter(p => p.linked_recipe_id && (p.quantity === 0 || p.quantity <= p.critical_stock || p.quantity <= p.min_stock));
-  const allSuggestions = [
-    ...lowFinished.map(f => ({ data: f, recipe: recipes.find(r => (r.recipe_product_name||r.recipe_name) === f.product_name) })),
-    ...lowInsumos.map(i => ({ data: i, recipe: getRecipes().find(r => r.id === i.linked_recipe_id) }))
-  ];
+  const allSuggestions = lowFinished.map(f => ({ data: f, recipe: recipes.find(r => (r.recipe_product_name||r.recipe_name) === f.product_name) }));
 
   // Dashboard: versão compacta (comportamento original)
   const dashEl = document.getElementById('dash-suggestions');
@@ -977,6 +982,89 @@ function renderProductionSuggestions() {
       ${ingredientWarning}
     </div>`;
   }).join('');
+}
+
+function renderDailyProductionList() {
+  const el = document.getElementById('daily-production-list');
+  if (!el) return;
+  const recipes = getRecipes().filter(r => r.recipe_type === 'Insumo').sort((a,b) => a.recipe_name.localeCompare(b.recipe_name));
+  if (recipes.length === 0) { el.innerHTML = '<p class="text-stone-400 text-center py-6 text-sm">Nenhuma receita tipo Insumo cadastrada ainda</p>'; return; }
+  const products = getProducts();
+  const sectors = ['Cozinha','Café e Drinks'].filter(s => recipes.some(r => r.recipe_sector === s));
+  el.innerHTML = sectors.map(sector => {
+    const rows = recipes.filter(r => r.recipe_sector === sector).map(r => {
+      const target = products.find(p => p.linked_recipe_id === r.id);
+      let stockBadge = '';
+      if (target) {
+        if (target.quantity <= target.critical_stock) stockBadge = '<span class="text-[10px] px-1.5 py-0.5 rounded-full font-semibold badge-critical ml-1.5">Crítico</span>';
+        else if (target.quantity <= target.min_stock) stockBadge = '<span class="text-[10px] px-1.5 py-0.5 rounded-full font-semibold badge-low ml-1.5">Baixo</span>';
+      }
+      let ingredients = []; try { ingredients = JSON.parse(r.recipe_ingredients); } catch(e) {}
+      const missing = ingredients.filter(ing => {
+        const p = products.find(x => x.product_name === ing.name);
+        if (!p) return true;
+        return p.quantity < convertQuantity(ing.qty, ing.unit, p.storage_unit || p.unit);
+      });
+      const warn = missing.length > 0
+        ? `<p class="text-[11px] text-red-600 mt-0.5">⚠️ Falta: ${missing.map(i=>i.name).join(', ')}</p>`
+        : (!target ? `<p class="text-[11px] text-amber-600 mt-0.5">⚠️ Sem insumo vinculado — edite o insumo em Insumos e vincule esta receita</p>` : '');
+      return `<label class="flex items-start gap-3 p-3 bg-white rounded-xl border border-stone-100 shadow-sm">
+        <input type="checkbox" class="daily-prod-check w-5 h-5 flex-shrink-0 mt-0.5" data-recipe-id="${r.id}">
+        <div class="flex-1 min-w-0"><span class="font-medium text-sm text-stone-800">${r.recipe_name}${stockBadge}</span>${warn}</div>
+        <div class="flex items-center gap-1.5 flex-shrink-0">
+          <input type="number" class="daily-prod-qty w-16 input-field text-sm text-right py-1.5" min="0" step="any" value="${r.recipe_yield}" data-recipe-id="${r.id}">
+          <span class="text-xs text-stone-400 w-14">${r.recipe_yield_unit}</span>
+        </div>
+      </label>`;
+    }).join('');
+    return `<div><h4 class="text-xs font-bold text-stone-500 uppercase tracking-wide mb-2">${sector}</h4><div class="space-y-2">${rows}</div></div>`;
+  }).join('');
+}
+
+async function confirmInsumoProduction(recipe, yieldQty) {
+  let ingredients = []; try { ingredients = JSON.parse(recipe.recipe_ingredients); } catch(e) {}
+  const target = getProducts().find(p => p.linked_recipe_id === recipe.id);
+  if (!target) return { ok:false, error:'sem insumo vinculado' };
+  for (const ing of ingredients) {
+    const p = getProducts().find(x => x.product_name === ing.name);
+    if (!p) return { ok:false, error:`${ing.name} não encontrado` };
+    const su = p.storage_unit || p.unit;
+    if (p.quantity < convertQuantity(ing.qty, ing.unit, su)) return { ok:false, error:`falta ${ing.name}` };
+  }
+  for (const ing of ingredients) {
+    const p = getProducts().find(x => x.product_name === ing.name);
+    const su = p.storage_unit || p.unit;
+    const consumptionQty = convertQuantity(ing.qty, ing.unit, su);
+    const res = await dbUpdate({...p, quantity: Math.max(0, p.quantity - consumptionQty)});
+    if (!res.isOk) return { ok:false, error:`erro ao descontar ${ing.name}` };
+  }
+  const targetNow = getProducts().find(p => p.id === target.id);
+  const resTarget = await dbUpdate({...targetNow, quantity: targetNow.quantity + yieldQty});
+  if (!resTarget.isOk) return { ok:false, error:'erro ao creditar estoque' };
+  const ingNote = ingredients.map(i=>`${fmtQty(i.qty,i.unit)} ${i.unit} ${i.name}`).join(', ');
+  await dbCreate({ ...blankRecord(), type:'movement', movement_type:'producao', movement_product:target.product_name, movement_quantity:yieldQty, movement_date:new Date().toISOString(), movement_note:`Produção: ${fmtQty(yieldQty,target.unit)} ${target.unit} de ${target.product_name}. Insumos: ${ingNote}`, batch_items:recipe.recipe_ingredients, production_recipe_id:recipe.id, production_real_yield:yieldQty });
+  return { ok:true };
+}
+
+async function confirmDailyProduction(e) {
+  const checks = [...document.querySelectorAll('.daily-prod-check:checked')];
+  if (checks.length === 0) { showToast('Marque pelo menos uma produção', true); return; }
+  const btn = e?.currentTarget;
+  if (btn) { btn.disabled = true; btn.textContent = 'Processando...'; }
+  let successCount = 0; const errors = [];
+  for (const chk of checks) {
+    const recipeId = chk.dataset.recipeId;
+    const recipe = getRecipes().find(r => r.id === recipeId);
+    if (!recipe) continue;
+    const qtyInput = document.querySelector(`.daily-prod-qty[data-recipe-id="${recipeId}"]`);
+    const yieldQty = Math.max(0, parseFloat(qtyInput?.value) || 0);
+    if (yieldQty <= 0) { errors.push(`${recipe.recipe_name}: rendimento inválido`); continue; }
+    const result = await confirmInsumoProduction(recipe, yieldQty);
+    if (result.ok) successCount++; else errors.push(`${recipe.recipe_name}: ${result.error}`);
+  }
+  if (btn) { btn.disabled = false; btn.textContent = '✓ Confirmar Produções do Dia'; }
+  if (successCount > 0) showToast(`${successCount} produção${successCount>1?'ões':''} registrada${successCount>1?'s':''}!`);
+  if (errors.length > 0) showToast(`Não deu pra registrar: ${errors.join(' · ')}`, true);
 }
 
 async function sendNToProduction(recipeId, times) {
