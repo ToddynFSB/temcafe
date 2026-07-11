@@ -498,6 +498,14 @@
             <label class="text-xs font-semibold text-stone-600 uppercase block mb-1">Nova Quantidade *</label>
             <div class="flex gap-2 items-center"><button type="button" onclick="decrementEditQty()" class="w-9 h-9 rounded-lg bg-stone-200 hover:bg-stone-300 flex items-center justify-center font-bold text-stone-700 text-sm">−</button><input id="edit-levels-new-qty" type="number" placeholder="Digite a quantidade" min="0" step="any" class="flex-1 input-field text-sm" required><button type="button" onclick="incrementEditQty()" class="w-9 h-9 rounded-lg bg-stone-200 hover:bg-stone-300 flex items-center justify-center font-bold text-stone-700 text-sm">+</button></div>
             <p class="text-xs text-stone-500 italic mt-1">Unidade: <span id="edit-levels-unit-hint"></span></p>
+            <div id="edit-levels-quick-add" class="hidden mt-3 p-3 bg-amber-50 border border-amber-100 rounded-lg">
+              <p class="text-xs font-semibold text-amber-800 mb-1.5">📦 Entrada rápida (unidade personalizada)</p>
+              <div class="flex gap-2">
+                <select id="edit-levels-quick-add-unit" class="input-field text-sm w-28"></select>
+                <input id="edit-levels-quick-add-qty" type="number" min="0" step="any" placeholder="Qtd recebida" class="flex-1 input-field text-sm">
+                <button type="button" onclick="applyQuickAddConversion()" class="btn-primary px-3 py-2.5 rounded-lg text-xs font-medium">Somar</button>
+              </div>
+            </div>
           </div>
           <div id="edit-levels-adjustment-preview" class="p-3 rounded-lg bg-stone-100 border border-stone-300"><p class="text-xs text-stone-600 font-medium mb-1">Resumo:</p><p class="text-xs text-stone-700"><span class="font-semibold">Anterior:</span> <span id="preview-old-qty"></span></p><p class="text-xs text-stone-700"><span class="font-semibold">Novo:</span> <span id="preview-new-qty"></span></p><p class="text-xs text-stone-700"><span class="font-semibold">Diferença:</span> <span id="preview-diff"></span></p></div>
         </div>
@@ -509,6 +517,31 @@
           <div class="border-l-4 border-amber-500 pl-3"><label class="text-xs font-bold text-stone-700 block mb-1">🟡 Baixo</label><input id="edit-levels-min" type="number" min="0" step="0.1" class="w-full input-field text-sm"></div>
           <div class="border-l-4 border-green-600 pl-3"><label class="text-xs font-bold text-stone-700 block mb-1">🟢 Confortável</label><input id="edit-levels-comfortable" type="number" min="0" step="0.1" class="w-full input-field text-sm"></div>
         </div>
+      </div>
+      <div class="bg-stone-50 rounded-lg p-4 mb-5 border border-stone-200">
+        <p class="text-xs font-bold text-stone-600 uppercase tracking-wide mb-1">Conversão Personalizada</p>
+        <p class="text-xs text-stone-500 mb-3">Ex: pão de queijo chega em grama, mas você conta por unidade — cadastre "1 unidade = 38 g" e use essa unidade na hora de lançar estoque ou montar receitas.</p>
+        <div id="edit-levels-cc-list" class="space-y-1.5 mb-3"></div>
+        <div class="flex gap-2 items-end flex-wrap">
+          <div class="flex-1 min-w-[110px]">
+            <label class="text-xs text-stone-500 block mb-1">1 unidade =</label>
+            <select id="edit-levels-cc-unit-select" class="w-full input-field text-sm" onchange="toggleCCCustomName()">
+              <option value="kg">kg</option>
+              <option value="g">g</option>
+              <option value="L">L</option>
+              <option value="ml">ml</option>
+              <option value="unidade">unidade</option>
+              <option value="__custom__">Personalizado...</option>
+            </select>
+            <input id="edit-levels-cc-unit-custom" type="text" placeholder="Nome (ex: bandeja)" class="w-full input-field text-sm mt-1.5 hidden">
+          </div>
+          <div class="w-24">
+            <label class="text-xs text-stone-500 block mb-1">Equivale a</label>
+            <input id="edit-levels-cc-equals" type="number" min="0.001" step="any" placeholder="Qtd" class="w-full input-field text-sm">
+          </div>
+          <span id="edit-levels-cc-base-unit-label" class="text-xs text-stone-500 pb-2.5 font-medium"></span>
+        </div>
+        <button type="button" onclick="addCustomConversion()" class="w-full mt-2 btn-ghost px-3 py-2 rounded-lg text-xs font-medium border border-stone-300">+ Adicionar conversão</button>
       </div>
       <div class="bg-stone-50 rounded-lg p-4 mb-5 border border-stone-200">
         <p class="text-xs font-bold text-stone-600 uppercase tracking-wide mb-2">Receita vinculada (opcional)</p>
@@ -762,8 +795,23 @@ function canConvert(from, to) {
   if (fg === 'count') return from.toLowerCase() === to.toLowerCase();
   return fg === tg;
 }
-function convertQuantity(qty, from, to) {
+// Lê e normaliza as conversões personalizadas salvas num produto (JSON: [{unit, equals}])
+// "equals" = quantos [storage_unit] equivalem a 1 [unit]. Ex: {unit:'unidade', equals:38} -> 1 unidade = 38 g
+function getCustomConversions(product) {
+  if (!product || !product.custom_conversions) return [];
+  try {
+    const list = JSON.parse(product.custom_conversions);
+    return Array.isArray(list) ? list : [];
+  } catch (e) { return []; }
+}
+function convertQuantity(qty, from, to, customConversions) {
   if (!from || !to || from === to) return qty;
+  if (customConversions && customConversions.length) {
+    const cc = customConversions.find(c => (c.unit||'').toLowerCase() === from.toLowerCase());
+    if (cc && cc.equals) return parseFloat((qty * cc.equals).toFixed(6));
+    const ccRev = customConversions.find(c => (c.unit||'').toLowerCase() === to.toLowerCase());
+    if (ccRev && ccRev.equals) return parseFloat((qty / ccRev.equals).toFixed(6));
+  }
   if (!canConvert(from, to)) return qty;
   const key = `${from}->${to}`;
   if (conversionFactors[key]) return parseFloat((qty * conversionFactors[key]).toFixed(6));
@@ -790,7 +838,7 @@ function blankRecord() {
     recipe_yield_unit:'', recipe_product_name:'', recipe_type:'', recipe_sector:'',
     movement_type:'', movement_product:'', movement_quantity:0, movement_date:'',
     movement_user:'', movement_note:'', batch_items:'', production_status:'',
-    production_recipe_id:'', production_real_yield:0, linked_recipe_id:'', loss_reason:'', loss_type:'' };
+    production_recipe_id:'', production_real_yield:0, linked_recipe_id:'', loss_reason:'', loss_type:'', custom_conversions:'[]' };
 }
 
 function getStockBadge(qty, critical, min, comfortable) {
@@ -935,7 +983,7 @@ function renderProductionSuggestions() {
       for (const ing of ingredients) {
         const p = allProds.find(x => x.product_name === ing.name);
         if (!p) { shortages.push(`${ing.name} (não cadastrado)`); continue; }
-        const needed = convertQuantity(ing.qty * recipesNeeded, ing.unit, p.storage_unit || p.unit);
+        const needed = convertQuantity(ing.qty * recipesNeeded, ing.unit, p.storage_unit || p.unit, getCustomConversions(p));
         if (p.quantity < needed) {
           const short = needed - p.quantity;
           shortages.push(`${ing.name}: falta ${fmtQty(short, p.storage_unit||p.unit)} ${p.storage_unit||p.unit}`);
@@ -1018,12 +1066,12 @@ async function confirmInsumoProduction(recipe, times) {
     const p = getProducts().find(x => x.product_name === ing.name);
     if (!p) return { ok:false, error:`${ing.name} não encontrado` };
     const su = p.storage_unit || p.unit;
-    if (p.quantity < convertQuantity(ing.qty * times, ing.unit, su)) return { ok:false, error:`falta ${ing.name}` };
+    if (p.quantity < convertQuantity(ing.qty * times, ing.unit, su, getCustomConversions(p))) return { ok:false, error:`falta ${ing.name}` };
   }
   for (const ing of ingredients) {
     const p = getProducts().find(x => x.product_name === ing.name);
     const su = p.storage_unit || p.unit;
-    const consumptionQty = convertQuantity(ing.qty * times, ing.unit, su);
+    const consumptionQty = convertQuantity(ing.qty * times, ing.unit, su, getCustomConversions(p));
     const res = await dbUpdate({...p, quantity: Math.max(0, p.quantity - consumptionQty)});
     if (!res.isOk) return { ok:false, error:`erro ao descontar ${ing.name}` };
   }
@@ -1104,7 +1152,7 @@ async function sendNToProduction(recipeId, times) {
     const p = products.find(x => x.product_name === ing.name);
     if (!p) { showToast(`Insumo ${ing.name} não encontrado`, true); return; }
     const storageUnit = p.storage_unit || p.unit;
-    const consumptionQty = convertQuantity(ing.qty * times, ing.unit, storageUnit);
+    const consumptionQty = convertQuantity(ing.qty * times, ing.unit, storageUnit, getCustomConversions(p));
     if (p.quantity < consumptionQty) { showToast(`Estoque insuficiente de ${ing.name} para ${times}× receita`, true); return; }
   }
   for (let i = 0; i < times; i++) await createProduction(recipe);
@@ -1223,6 +1271,7 @@ async function handleAddProduct(e) {
   if (r.isOk) { showToast('Insumo cadastrado!'); hideAddProduct(); e.target.reset(); } else showToast('Erro ao cadastrar', true);
 }
 
+let editingCustomConversions = [];
 function openEditLevels(id) {
   const p = allData.find(r => r.id === id); if (!p) return;
   editingProductId = id;
@@ -1236,10 +1285,74 @@ function openEditLevels(id) {
   document.getElementById('edit-levels-new-qty').value = p.quantity;
   const insumRecipes = getRecipes().filter(r => r.recipe_type === 'Insumo').sort((a,b) => a.recipe_name.localeCompare(b.recipe_name));
   document.getElementById('edit-levels-linked-recipe').innerHTML = '<option value="">Nenhuma receita vinculada</option>' + insumRecipes.map(r => `<option value="${r.id}" ${p.linked_recipe_id === r.id ? 'selected' : ''}>${r.recipe_name}</option>`).join('');
+  editingCustomConversions = getCustomConversions(p).slice();
+  document.getElementById('edit-levels-cc-base-unit-label').textContent = '= ' + (p.storage_unit || p.unit);
+  document.getElementById('edit-levels-cc-equals').value = '';
+  document.getElementById('edit-levels-cc-unit-custom').value = '';
+  document.getElementById('edit-levels-cc-unit-custom').classList.add('hidden');
+  document.getElementById('edit-levels-cc-unit-select').value = 'unidade';
+  renderCustomConversionsList();
+  renderQuickAddHelper();
   updateAdjustmentPreview();
   document.getElementById('edit-levels-modal').classList.remove('hidden');
 }
-function closeEditLevels() { document.getElementById('edit-levels-modal').classList.add('hidden'); editingProductId = null; }
+function closeEditLevels() { document.getElementById('edit-levels-modal').classList.add('hidden'); editingProductId = null; editingCustomConversions = []; }
+function toggleCCCustomName() {
+  const sel = document.getElementById('edit-levels-cc-unit-select');
+  document.getElementById('edit-levels-cc-unit-custom').classList.toggle('hidden', sel.value !== '__custom__');
+}
+function renderCustomConversionsList() {
+  const el = document.getElementById('edit-levels-cc-list');
+  const p = allData.find(r => r.id === editingProductId);
+  const base = p ? (p.storage_unit || p.unit) : '';
+  if (editingCustomConversions.length === 0) { el.innerHTML = '<p class="text-xs text-stone-400 italic">Nenhuma conversão cadastrada ainda.</p>'; return; }
+  el.innerHTML = editingCustomConversions.map((c, i) => `<div class="flex items-center justify-between bg-white border border-stone-200 rounded-lg px-3 py-2"><span class="text-xs text-stone-700">1 <strong>${c.unit}</strong> = ${fmtQty(c.equals, base)} ${base}</span><button type="button" onclick="removeCustomConversion(${i})" class="text-red-500 hover:text-red-700 text-xs font-bold px-2">×</button></div>`).join('');
+}
+function addCustomConversion() {
+  const sel = document.getElementById('edit-levels-cc-unit-select');
+  let unit = sel.value;
+  if (unit === '__custom__') {
+    unit = document.getElementById('edit-levels-cc-unit-custom').value.trim();
+    if (!unit) { showToast('Digite o nome da unidade personalizada', true); return; }
+  }
+  const equals = parseFloat(document.getElementById('edit-levels-cc-equals').value);
+  if (!equals || equals <= 0) { showToast('Informe a quantidade equivalente', true); return; }
+  const p = allData.find(r => r.id === editingProductId);
+  const base = p ? (p.storage_unit || p.unit) : '';
+  if (unit.toLowerCase() === base.toLowerCase()) { showToast('Essa unidade já é a padrão do insumo', true); return; }
+  if (editingCustomConversions.some(c => c.unit.toLowerCase() === unit.toLowerCase())) { showToast('Já existe uma conversão com esse nome — remova antes de adicionar outra', true); return; }
+  editingCustomConversions.push({ unit, equals });
+  renderCustomConversionsList();
+  renderQuickAddHelper();
+  document.getElementById('edit-levels-cc-equals').value = '';
+  document.getElementById('edit-levels-cc-unit-custom').value = '';
+}
+function removeCustomConversion(i) {
+  editingCustomConversions.splice(i, 1);
+  renderCustomConversionsList();
+  renderQuickAddHelper();
+}
+function renderQuickAddHelper() {
+  const wrap = document.getElementById('edit-levels-quick-add');
+  const sel = document.getElementById('edit-levels-quick-add-unit');
+  if (editingCustomConversions.length === 0) { wrap.classList.add('hidden'); return; }
+  wrap.classList.remove('hidden');
+  sel.innerHTML = editingCustomConversions.map(c => `<option value="${c.unit}">${c.unit}</option>`).join('');
+  document.getElementById('edit-levels-quick-add-qty').value = '';
+}
+function applyQuickAddConversion() {
+  const p = allData.find(r => r.id === editingProductId); if (!p) return;
+  const unit = document.getElementById('edit-levels-quick-add-unit').value;
+  const qty = parseFloat(document.getElementById('edit-levels-quick-add-qty').value);
+  if (!qty || qty <= 0) { showToast('Informe a quantidade recebida', true); return; }
+  const base = p.storage_unit || p.unit;
+  const converted = convertQuantity(qty, unit, base, editingCustomConversions);
+  const qtyInput = document.getElementById('edit-levels-new-qty');
+  qtyInput.value = parseFloat(((parseFloat(qtyInput.value) || 0) + converted).toFixed(6));
+  document.getElementById('edit-levels-quick-add-qty').value = '';
+  updateAdjustmentPreview();
+  showToast(`+${fmtQty(converted, base)} ${base} adicionado (${qty} ${unit})`);
+}
 function incrementEditQty() { const i = document.getElementById('edit-levels-new-qty'); i.value = (parseFloat(i.value)||0) + 1; updateAdjustmentPreview(); }
 function decrementEditQty() { const i = document.getElementById('edit-levels-new-qty'); i.value = Math.max(0, (parseFloat(i.value)||0) - 1); updateAdjustmentPreview(); }
 function updateAdjustmentPreview() {
@@ -1283,7 +1396,7 @@ async function saveEditedLevels() {
   }
   const oldQty = p.quantity;
   const diff = newQty - oldQty;
-  const r = await dbUpdate({...p, product_name:newName, quantity:newQty, category:cat, critical_stock:c, min_stock:m, comfortable_stock:co, linked_recipe_id:linkedRecipeId});
+  const r = await dbUpdate({...p, product_name:newName, quantity:newQty, category:cat, critical_stock:c, min_stock:m, comfortable_stock:co, linked_recipe_id:linkedRecipeId, custom_conversions:JSON.stringify(editingCustomConversions)});
   if (r.isOk) {
     if (diff !== 0) await dbCreate({ ...blankRecord(), type:'movement', movement_type:'ajuste_manual', movement_product:newName, movement_quantity:diff, movement_date:new Date().toISOString(), movement_note:`Ajuste: ${newName} → ${fmtQty(newQty,p.unit)} ${p.unit}` });
     if (nameChanged) {
@@ -1585,7 +1698,7 @@ function editRecipe(id) {
   else ingredients.forEach(ing => {
     const products = getProducts().sort((a,b) => a.product_name.localeCompare(b.product_name));
     const storageUnit = products.find(p => p.product_name===ing.name)?.storage_unit || ing.unit;
-    const compatibleUnits = getCompatibleUnits(storageUnit);
+    const compatibleUnits = getCompatibleUnits(storageUnit, ing.name);
     const div = document.createElement('div');
     div.className = 'ingredient-row flex gap-2 items-start mb-2';
     div.innerHTML = `<select class="ing-product flex-1 input-field text-sm" onchange="updateIngredientUnits(this)"><option value="">Insumo</option>${products.map(p=>`<option value="${p.product_name}" data-storage-unit="${p.storage_unit||p.unit}" ${ing.name===p.product_name?'selected':''}>${p.product_name}</option>`).join('')}${!products.some(p=>p.product_name===ing.name)?`<option value="${ing.name}" selected>${ing.name} (insumo não encontrado)</option>`:''}</select><select class="ing-unit w-24 input-field text-sm"><option value="" disabled hidden ${!ing.unit?'selected':''}>Unidade</option>${compatibleUnits.map(u=>`<option value="${u}" ${ing.unit===u?'selected':''}>${u}</option>`).join('')}</select><input type="number" class="ing-qty w-20 input-field text-sm" placeholder="Qtd" min="0.001" step="any" value="${ing.qty}"><button type="button" onclick="this.closest('.ingredient-row').remove()" class="w-8 h-8 rounded-lg btn-danger flex items-center justify-center text-lg flex-shrink-0">×</button>`;
@@ -1595,12 +1708,19 @@ function editRecipe(id) {
   document.getElementById('add-recipe-form').classList.remove('hidden');
   setTimeout(() => document.getElementById('add-recipe-form').scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
 }
-function getCompatibleUnits(storageUnit) {
+function getCompatibleUnits(storageUnit, productName) {
   if (!storageUnit) return [];
   const s = storageUnit.toLowerCase();
-  if (['kg','g'].includes(s)) return ['kg','g'];
-  if (['l','ml'].includes(s)) return ['L','ml'];
-  return [storageUnit];
+  let base;
+  if (['kg','g'].includes(s)) base = ['kg','g'];
+  else if (['l','ml'].includes(s)) base = ['L','ml'];
+  else base = [storageUnit];
+  if (productName) {
+    const product = getProducts().find(p => p.product_name === productName);
+    const customUnits = getCustomConversions(product).map(c => c.unit).filter(Boolean);
+    customUnits.forEach(u => { if (!base.some(b => b.toLowerCase() === u.toLowerCase())) base.push(u); });
+  }
+  return base;
 }
 function addIngredientField() {
   const products = getProducts().sort((a,b) => a.product_name.localeCompare(b.product_name));
@@ -1614,7 +1734,7 @@ function updateIngredientUnits(selectEl) {
   const row = selectEl.closest('.ingredient-row');
   const unitSelect = row.querySelector('.ing-unit');
   const storageUnit = selectEl.selectedOptions[0]?.dataset.storageUnit || '';
-  const compatibleUnits = getCompatibleUnits(storageUnit);
+  const compatibleUnits = getCompatibleUnits(storageUnit, selectEl.value);
   unitSelect.innerHTML = `<option value="" disabled hidden selected>Unidade</option>${compatibleUnits.map(u=>`<option value="${u}">${u}</option>`).join('')}`;
   unitSelect.value = '';
 }
@@ -1661,7 +1781,7 @@ function sendToProduction(recipeId) {
     const p = products.find(x => x.product_name === ing.name);
     if (!p) { showToast(`Insumo ${ing.name} não encontrado`, true); return; }
     const storageUnit = p.storage_unit || p.unit;
-    const consumptionQty = convertQuantity(ing.qty, ing.unit, storageUnit);
+    const consumptionQty = convertQuantity(ing.qty, ing.unit, storageUnit, getCustomConversions(p));
     if (p.quantity < consumptionQty) { showToast(`Estoque insuficiente de ${ing.name}`, true); return; }
   }
   createProduction(recipe);
@@ -1704,7 +1824,7 @@ function confirmFinalize() {
     const p = products.find(x => x.product_name === ing.name);
     if (!p) { document.getElementById('finalize-error').textContent=`Insumo ${ing.name} não encontrado`; document.getElementById('finalize-error').classList.remove('hidden'); return; }
     const storageUnit = p.storage_unit || p.unit;
-    const consumptionQty = convertQuantity(ing.qty, ing.unit, storageUnit);
+    const consumptionQty = convertQuantity(ing.qty, ing.unit, storageUnit, getCustomConversions(p));
     if (p.quantity < consumptionQty) { document.getElementById('finalize-error').textContent=`Estoque insuficiente de ${ing.name}`; document.getElementById('finalize-error').classList.remove('hidden'); return; }
   }
   document.getElementById('finalize-btn').disabled = true;
@@ -1715,7 +1835,7 @@ async function processFinalization(prod, realYield, ingredients) {
   for (const ing of ingredients) {
     const p = getProducts().find(x => x.product_name === ing.name);
     const storageUnit = p.storage_unit || p.unit;
-    const consumptionQty = convertQuantity(ing.qty, ing.unit, storageUnit);
+    const consumptionQty = convertQuantity(ing.qty, ing.unit, storageUnit, getCustomConversions(p));
     await dbUpdate({...p, quantity: Math.max(0, p.quantity - consumptionQty)});
   }
   const finishedName = prod.recipe_product_name || prod.recipe_name;
@@ -1869,7 +1989,7 @@ async function confirmSales() {
       for (const ing of ingredients) {
         const p = getProducts().find(x => x.product_name === ing.name);
         if (!p) { showToast(`Insumo ${ing.name} não encontrado`, true); return; }
-        const consumptionQty = convertQuantity(ing.qty * s.qty, ing.unit, p.storage_unit||p.unit);
+        const consumptionQty = convertQuantity(ing.qty * s.qty, ing.unit, p.storage_unit||p.unit, getCustomConversions(p));
         if (p.quantity < consumptionQty) { showToast(`Estoque insuficiente de ${ing.name}`, true); return; }
       }
     }
@@ -1887,7 +2007,7 @@ async function confirmSales() {
       let ingredients=[]; try{ingredients=JSON.parse(recipe.recipe_ingredients);}catch(e){}
       for (const ing of ingredients) {
         const p = getProducts().find(x => x.product_name === ing.name);
-        const deduct = convertQuantity(ing.qty * s.qty, ing.unit, p.storage_unit||p.unit);
+        const deduct = convertQuantity(ing.qty * s.qty, ing.unit, p.storage_unit||p.unit, getCustomConversions(p));
         await dbUpdate({...p, quantity: Math.max(0, p.quantity - deduct)});
       }
       notesParts.push(`${s.qty} ${s.name}`);
@@ -2132,7 +2252,7 @@ async function processBulkSales() {
       for (const ing of ingredients) {
         const p = getProducts().find(x => x.product_name === ing.name);
         if (!p) { showToast(`Insumo ${ing.name} não encontrado`, true); return; }
-        const deduct = convertQuantity(ing.qty*s.qty, ing.unit, p.storage_unit||p.unit);
+        const deduct = convertQuantity(ing.qty*s.qty, ing.unit, p.storage_unit||p.unit, getCustomConversions(p));
         await dbUpdate({...p, quantity: Math.max(0, p.quantity - deduct)});
       }
       notesParts.push(`${s.qty} ${s.name}`);
@@ -2368,7 +2488,7 @@ function renderConsumption() {
             for (const ing of ingredients) {
               const prod = getProducts().find(p=>p.product_name===ing.name);
               const finalUnit = ing.storage_unit||ing.unit;
-              const totalQty = convertQuantity(ing.qty*(item.qty||1), ing.unit, finalUnit);
+              const totalQty = convertQuantity(ing.qty*(item.qty||1), ing.unit, finalUnit, getCustomConversions(prod));
               const key = `${ing.name}|||${finalUnit}`;
               if (!consumptionMap[key]) consumptionMap[key]={name:ing.name,qty:0,unit:finalUnit,category:prod?prod.category:''};
               consumptionMap[key].qty += totalQty;
@@ -2381,7 +2501,7 @@ function renderConsumption() {
       for (const ing of ingredients) {
         const prod = getProducts().find(p=>p.product_name===ing.name);
         const finalUnit = ing.storage_unit||ing.unit;
-        const totalQty = convertQuantity(ing.qty, ing.unit, finalUnit);
+        const totalQty = convertQuantity(ing.qty, ing.unit, finalUnit, getCustomConversions(prod));
         const key = `${ing.name}|||${finalUnit}`;
         if (!consumptionMap[key]) consumptionMap[key]={name:ing.name,qty:0,unit:finalUnit,category:prod?prod.category:''};
         consumptionMap[key].qty += totalQty;
