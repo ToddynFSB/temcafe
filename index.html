@@ -150,9 +150,10 @@
       </div>
       <div id="quick-entry-form" class="hidden mt-4 pt-4 border-t border-stone-100">
         <div id="quick-batch-entry-container" class="space-y-2 mb-3">
-          <div class="batch-entry-item grid sm:grid-cols-3 gap-2 items-end">
-            <select class="batch-product input-field text-sm" required><option value="">Selecione o insumo</option></select>
+          <div class="batch-entry-item grid grid-cols-2 sm:grid-cols-4 gap-2 items-end">
+            <select class="batch-product input-field text-sm col-span-2 sm:col-span-1" onchange="populateUnitSelect(this.closest('.batch-entry-item').querySelector('.batch-unit'), this.value)" required><option value="">Selecione o insumo</option></select>
             <input type="number" class="batch-qty input-field text-sm" placeholder="Quantidade" min="0.001" step="any" required>
+            <select class="batch-unit input-field text-sm"></select>
             <button type="button" onclick="removeBatchItem(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button>
           </div>
         </div>
@@ -353,8 +354,9 @@
       <form onsubmit="handleRegisterLoss(event)">
         <div class="mb-4"><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-2">Tipo de Perda *</label><select id="loss-type" onchange="updateLossProductOptions()" required class="w-full input-field text-sm"><option value="">Selecione o tipo</option><option value="finished">Produto Pronto</option><option value="product">Insumo</option></select></div>
         <div class="mb-4"><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-2">Produto *</label><select id="loss-product" required class="w-full input-field text-sm"><option value="">Selecione um tipo de perda primeiro</option></select></div>
-        <div class="grid sm:grid-cols-2 gap-3 mb-4">
+        <div class="grid sm:grid-cols-3 gap-3 mb-4">
           <div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-2">Quantidade *</label><input id="loss-quantity" type="number" placeholder="Quantidade perdida" min="0.001" step="any" required class="w-full input-field text-sm"></div>
+          <div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-2">Medida</label><select id="loss-unit" class="w-full input-field text-sm"></select></div>
           <div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-2">Estoque Disponível</label><input id="loss-available" type="text" readonly class="w-full input-field text-sm bg-stone-50 text-stone-600" value="—"></div>
         </div>
         <div class="mb-4"><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-2">Motivo (opcional)</label><input id="loss-reason" type="text" placeholder="Ex: Derramado, Vencido, Queimou..." class="w-full input-field text-sm"></div>
@@ -486,44 +488,57 @@
 
   <!-- MODAL: Editar Insumo -->
   <div id="edit-levels-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-    <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl max-h-[90vh] overflow-y-auto">
-      <h3 class="font-bold mb-1 text-stone-800 text-lg">Editar Insumo</h3>
-      <div class="mb-5"><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-2">Nome do Insumo *</label><input id="edit-levels-product-name-input" type="text" class="w-full input-field text-sm" required></div>
-      <div class="mb-5"><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-2">Categoria:</label><select id="edit-levels-category" class="w-full input-field text-sm"><option value="Café">Café</option><option value="Cozinha">Cozinha</option><option value="Drinks">Drinks</option><option value="Limpeza">Limpeza</option><option value="Utensílios">Utensílios</option></select></div>
+    <div class="bg-white rounded-2xl p-6 w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
+      <h3 class="font-bold mb-4 text-stone-800 text-lg">Editar Insumo</h3>
+      <div class="grid sm:grid-cols-2 gap-4 mb-5">
+        <div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-2">Nome do Insumo *</label><input id="edit-levels-product-name-input" type="text" class="w-full input-field text-sm" required></div>
+        <div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-2">Categoria:</label><select id="edit-levels-category" class="w-full input-field text-sm"><option value="Café">Café</option><option value="Cozinha">Cozinha</option><option value="Drinks">Drinks</option><option value="Limpeza">Limpeza</option><option value="Utensílios">Utensílios</option></select></div>
+      </div>
       <div class="mb-5 pb-5 border-b border-stone-200">
         <p class="text-xs font-bold text-stone-600 uppercase tracking-wide mb-4">Ajuste Manual de Estoque</p>
-        <div class="space-y-3">
-          <div><label class="text-xs font-semibold text-stone-600 uppercase block mb-1">Quantidade Atual</label><input id="edit-levels-current-qty" type="text" readonly class="w-full input-field text-sm bg-stone-50 text-stone-600"></div>
-          <div>
-            <label class="text-xs font-semibold text-stone-600 uppercase block mb-1">Nova Quantidade *</label>
-            <div class="flex gap-2 items-center"><button type="button" onclick="decrementEditQty()" class="w-9 h-9 rounded-lg bg-stone-200 hover:bg-stone-300 flex items-center justify-center font-bold text-stone-700 text-sm">−</button><input id="edit-levels-new-qty" type="number" placeholder="Digite a quantidade" min="0" step="any" class="flex-1 input-field text-sm" required><button type="button" onclick="incrementEditQty()" class="w-9 h-9 rounded-lg bg-stone-200 hover:bg-stone-300 flex items-center justify-center font-bold text-stone-700 text-sm">+</button></div>
-            <p class="text-xs text-stone-500 italic mt-1">Unidade: <span id="edit-levels-unit-hint"></span></p>
-            <div id="edit-levels-quick-add" class="hidden mt-3 p-3 bg-amber-50 border border-amber-100 rounded-lg">
-              <p class="text-xs font-semibold text-amber-800 mb-1.5">📦 Entrada rápida (unidade personalizada)</p>
-              <div class="flex gap-2">
-                <select id="edit-levels-quick-add-unit" class="input-field text-sm w-28"></select>
-                <input id="edit-levels-quick-add-qty" type="number" min="0" step="any" placeholder="Qtd recebida" class="flex-1 input-field text-sm">
-                <button type="button" onclick="applyQuickAddConversion()" class="btn-primary px-3 py-2.5 rounded-lg text-xs font-medium">Somar</button>
-              </div>
+        <div class="grid sm:grid-cols-2 gap-4">
+          <div class="space-y-3">
+            <div><label class="text-xs font-semibold text-stone-600 uppercase block mb-1">Quantidade Atual</label><input id="edit-levels-current-qty" type="text" readonly class="w-full input-field text-sm bg-stone-50 text-stone-600"></div>
+            <div>
+              <label class="text-xs font-semibold text-stone-600 uppercase block mb-1">Nova Quantidade *</label>
+              <div class="flex gap-2 items-center"><button type="button" onclick="decrementEditQty()" class="w-9 h-9 rounded-lg bg-stone-200 hover:bg-stone-300 flex items-center justify-center font-bold text-stone-700 text-sm flex-shrink-0">−</button><input id="edit-levels-new-qty" type="number" placeholder="Digite a quantidade" min="0" step="any" class="flex-1 input-field text-sm min-w-0" required><button type="button" onclick="incrementEditQty()" class="w-9 h-9 rounded-lg bg-stone-200 hover:bg-stone-300 flex items-center justify-center font-bold text-stone-700 text-sm flex-shrink-0">+</button></div>
+              <p class="text-xs text-stone-500 italic mt-1">Unidade: <span id="edit-levels-unit-hint"></span></p>
             </div>
           </div>
-          <div id="edit-levels-adjustment-preview" class="p-3 rounded-lg bg-stone-100 border border-stone-300"><p class="text-xs text-stone-600 font-medium mb-1">Resumo:</p><p class="text-xs text-stone-700"><span class="font-semibold">Anterior:</span> <span id="preview-old-qty"></span></p><p class="text-xs text-stone-700"><span class="font-semibold">Novo:</span> <span id="preview-new-qty"></span></p><p class="text-xs text-stone-700"><span class="font-semibold">Diferença:</span> <span id="preview-diff"></span></p></div>
+          <div class="space-y-3">
+            <div id="edit-levels-quick-add" class="hidden p-3 bg-amber-50 border border-amber-100 rounded-lg h-full">
+              <p class="text-xs font-semibold text-amber-800 mb-2">📦 Entrada rápida (unidade personalizada)</p>
+              <div class="grid grid-cols-1 sm:grid-cols-[90px_1fr] gap-2 mb-2">
+                <select id="edit-levels-quick-add-unit" class="input-field text-sm w-full"></select>
+                <input id="edit-levels-quick-add-qty" type="number" min="0" step="any" placeholder="Qtd recebida" class="input-field text-sm w-full">
+              </div>
+              <button type="button" onclick="applyQuickAddConversion()" class="w-full btn-primary px-3 py-2.5 rounded-lg text-xs font-medium">Somar ao estoque</button>
+            </div>
+            <div id="edit-levels-adjustment-preview" class="p-3 rounded-lg bg-stone-100 border border-stone-300"><p class="text-xs text-stone-600 font-medium mb-1">Resumo:</p><p class="text-xs text-stone-700"><span class="font-semibold">Anterior:</span> <span id="preview-old-qty"></span></p><p class="text-xs text-stone-700"><span class="font-semibold">Novo:</span> <span id="preview-new-qty"></span></p><p class="text-xs text-stone-700"><span class="font-semibold">Diferença:</span> <span id="preview-diff"></span></p></div>
+          </div>
         </div>
       </div>
-      <div class="bg-stone-50 rounded-lg p-4 mb-5 border border-stone-200">
-        <p class="text-xs font-bold text-stone-600 uppercase tracking-wide mb-4">Níveis de Estoque</p>
-        <div class="space-y-3">
-          <div class="border-l-4 border-red-600 pl-3"><label class="text-xs font-bold text-stone-700 block mb-1">🔴 Crítico</label><input id="edit-levels-critical" type="number" min="0" step="0.1" class="w-full input-field text-sm"></div>
-          <div class="border-l-4 border-amber-500 pl-3"><label class="text-xs font-bold text-stone-700 block mb-1">🟡 Baixo</label><input id="edit-levels-min" type="number" min="0" step="0.1" class="w-full input-field text-sm"></div>
-          <div class="border-l-4 border-green-600 pl-3"><label class="text-xs font-bold text-stone-700 block mb-1">🟢 Confortável</label><input id="edit-levels-comfortable" type="number" min="0" step="0.1" class="w-full input-field text-sm"></div>
+      <div class="grid sm:grid-cols-2 gap-4 mb-5">
+        <div class="bg-stone-50 rounded-lg p-4 border border-stone-200">
+          <p class="text-xs font-bold text-stone-600 uppercase tracking-wide mb-4">Níveis de Estoque</p>
+          <div class="space-y-3">
+            <div class="border-l-4 border-red-600 pl-3"><label class="text-xs font-bold text-stone-700 block mb-1">🔴 Crítico</label><input id="edit-levels-critical" type="number" min="0" step="0.1" class="w-full input-field text-sm"></div>
+            <div class="border-l-4 border-amber-500 pl-3"><label class="text-xs font-bold text-stone-700 block mb-1">🟡 Baixo</label><input id="edit-levels-min" type="number" min="0" step="0.1" class="w-full input-field text-sm"></div>
+            <div class="border-l-4 border-green-600 pl-3"><label class="text-xs font-bold text-stone-700 block mb-1">🟢 Confortável</label><input id="edit-levels-comfortable" type="number" min="0" step="0.1" class="w-full input-field text-sm"></div>
+          </div>
+        </div>
+        <div class="bg-stone-50 rounded-lg p-4 border border-stone-200">
+          <p class="text-xs font-bold text-stone-600 uppercase tracking-wide mb-2">Receita vinculada (opcional)</p>
+          <select id="edit-levels-linked-recipe" class="w-full input-field text-sm"><option value="">Nenhuma receita vinculada</option></select>
+          <p class="text-xs text-stone-500 italic mt-2">Receita tipo "Insumo" que produz este item.</p>
         </div>
       </div>
       <div class="bg-stone-50 rounded-lg p-4 mb-5 border border-stone-200">
         <p class="text-xs font-bold text-stone-600 uppercase tracking-wide mb-1">Conversão Personalizada</p>
         <p class="text-xs text-stone-500 mb-3">Ex: pão de queijo chega em grama, mas você conta por unidade — cadastre "1 unidade = 38 g" e use essa unidade na hora de lançar estoque ou montar receitas.</p>
         <div id="edit-levels-cc-list" class="space-y-1.5 mb-3"></div>
-        <div class="flex gap-2 items-end flex-wrap">
-          <div class="flex-1 min-w-[110px]">
+        <div class="grid grid-cols-1 sm:grid-cols-[1fr_140px_auto] gap-3 items-end">
+          <div>
             <label class="text-xs text-stone-500 block mb-1">1 unidade =</label>
             <select id="edit-levels-cc-unit-select" class="w-full input-field text-sm" onchange="toggleCCCustomName()">
               <option value="kg">kg</option>
@@ -535,13 +550,12 @@
             </select>
             <input id="edit-levels-cc-unit-custom" type="text" placeholder="Nome (ex: bandeja)" class="w-full input-field text-sm mt-1.5 hidden">
           </div>
-          <div class="w-24">
+          <div>
             <label class="text-xs text-stone-500 block mb-1">Equivale a</label>
-            <input id="edit-levels-cc-equals" type="number" min="0.001" step="any" placeholder="Qtd" class="w-full input-field text-sm">
+            <div class="flex items-center gap-2"><input id="edit-levels-cc-equals" type="number" min="0.001" step="any" placeholder="Qtd" class="w-full input-field text-sm"><span id="edit-levels-cc-base-unit-label" class="text-xs text-stone-500 font-medium whitespace-nowrap"></span></div>
           </div>
-          <span id="edit-levels-cc-base-unit-label" class="text-xs text-stone-500 pb-2.5 font-medium"></span>
+          <button type="button" onclick="addCustomConversion()" class="btn-primary px-4 py-2.5 rounded-lg text-xs font-medium whitespace-nowrap">+ Adicionar</button>
         </div>
-        <button type="button" onclick="addCustomConversion()" class="w-full mt-2 btn-ghost px-3 py-2 rounded-lg text-xs font-medium border border-stone-300">+ Adicionar conversão</button>
       </div>
       <div class="bg-stone-50 rounded-lg p-4 mb-5 border border-stone-200">
         <p class="text-xs font-bold text-stone-600 uppercase tracking-wide mb-2">Receita vinculada (opcional)</p>
@@ -803,6 +817,16 @@ function getCustomConversions(product) {
     const list = JSON.parse(product.custom_conversions);
     return Array.isArray(list) ? list : [];
   } catch (e) { return []; }
+}
+// Preenche um <select> de unidade com as opções compatíveis do insumo (padrão + kg/g, L/ml + conversões personalizadas),
+// já vindo com a unidade padrão pré-selecionada.
+function populateUnitSelect(unitSelectEl, productId) {
+  if (!unitSelectEl) return;
+  const p = allData.find(r => r.id === productId);
+  if (!p) { unitSelectEl.innerHTML = ''; return; }
+  const base = p.storage_unit || p.unit;
+  const units = getCompatibleUnits(base, p.product_name);
+  unitSelectEl.innerHTML = units.map(u => `<option value="${u}" ${u === base ? 'selected' : ''}>${u}</option>`).join('');
 }
 function convertQuantity(qty, from, to, customConversions) {
   if (!from || !to || from === to) return qty;
@@ -1429,8 +1453,8 @@ function addQuickBatchItem() {
   const products = getProducts().sort((a,b) => a.product_name.localeCompare(b.product_name));
   const container = document.getElementById('quick-batch-entry-container');
   const div = document.createElement('div');
-  div.className = 'batch-entry-item grid sm:grid-cols-3 gap-2 items-end';
-  div.innerHTML = `<select class="batch-product input-field text-sm" required><option value="">Selecione o insumo</option>${products.map(p=>`<option value="${p.id}" data-name="${p.product_name}" data-unit="${p.unit}">${p.product_name} (${p.unit})</option>`).join('')}</select><input type="number" class="batch-qty input-field text-sm" placeholder="Quantidade" min="0.001" step="any" required><button type="button" onclick="removeBatchItem(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button>`;
+  div.className = 'batch-entry-item grid grid-cols-2 sm:grid-cols-4 gap-2 items-end';
+  div.innerHTML = `<select class="batch-product input-field text-sm col-span-2 sm:col-span-1" onchange="populateUnitSelect(this.closest('.batch-entry-item').querySelector('.batch-unit'), this.value)" required><option value="">Selecione o insumo</option>${products.map(p=>`<option value="${p.id}" data-name="${p.product_name}" data-unit="${p.unit}">${p.product_name} (${p.unit})</option>`).join('')}</select><input type="number" class="batch-qty input-field text-sm" placeholder="Quantidade" min="0.001" step="any" required><select class="batch-unit input-field text-sm"></select><button type="button" onclick="removeBatchItem(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button>`;
   container.appendChild(div);
 }
 async function confirmQuickEntry() {
@@ -1438,12 +1462,17 @@ async function confirmQuickEntry() {
   const batchData = [];
   for (const item of items) {
     const sel = item.querySelector('.batch-product');
+    const unitSel = item.querySelector('.batch-unit');
     const qty = parseFloat(item.querySelector('.batch-qty').value);
     if (!sel.value||!qty||qty<=0) { showToast('Preencha todos os campos', true); return; }
-    batchData.push({id:sel.value, name:sel.selectedOptions[0]?.dataset.name||'', unit:sel.selectedOptions[0]?.dataset.unit||'', qty});
+    const p = allData.find(r => r.id === sel.value);
+    const chosenUnit = unitSel.value || sel.selectedOptions[0]?.dataset.unit || '';
+    const baseUnit = p ? (p.storage_unit||p.unit) : chosenUnit;
+    const storageQty = p ? convertQuantity(qty, chosenUnit, baseUnit, getCustomConversions(p)) : qty;
+    batchData.push({id:sel.value, name:sel.selectedOptions[0]?.dataset.name||'', unit:chosenUnit, qty, storageQty});
   }
   const user = document.getElementById('quick-batch-entry-user').value.trim();
-  for (const b of batchData) { const prod = allData.find(r => r.id === b.id); if (prod) await dbUpdate({...prod, quantity: prod.quantity + b.qty}); }
+  for (const b of batchData) { const prod = allData.find(r => r.id === b.id); if (prod) await dbUpdate({...prod, quantity: prod.quantity + b.storageQty}); }
   const itemList = batchData.map(b=>`${fmtQty(b.qty,b.unit)} ${b.unit} ${b.name}`).join('; ');
   await dbCreate({ ...blankRecord(), type:'movement', movement_type:'entrada', movement_product:itemList, movement_quantity:batchData.length, movement_date:new Date().toISOString(), movement_user:user, movement_note:`Entrada: ${itemList}`, batch_items:JSON.stringify(batchData) });
   showToast('Entrada confirmada!'); resetQuickEntry();
@@ -1451,7 +1480,7 @@ async function confirmQuickEntry() {
 function cancelQuickEntry() { resetQuickEntry(); }
 function resetQuickEntry() {
   const products = getProducts().sort((a,b) => a.product_name.localeCompare(b.product_name));
-  document.getElementById('quick-batch-entry-container').innerHTML = `<div class="batch-entry-item grid sm:grid-cols-3 gap-2 items-end"><select class="batch-product input-field text-sm" required><option value="">Selecione o insumo</option>${products.map(p=>`<option value="${p.id}" data-name="${p.product_name}" data-unit="${p.unit}">${p.product_name} (${p.unit})</option>`).join('')}</select><input type="number" class="batch-qty input-field text-sm" placeholder="Quantidade" min="0.001" step="any" required><button type="button" onclick="removeBatchItem(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button></div>`;
+  document.getElementById('quick-batch-entry-container').innerHTML = `<div class="batch-entry-item grid grid-cols-2 sm:grid-cols-4 gap-2 items-end"><select class="batch-product input-field text-sm col-span-2 sm:col-span-1" onchange="populateUnitSelect(this.closest('.batch-entry-item').querySelector('.batch-unit'), this.value)" required><option value="">Selecione o insumo</option>${products.map(p=>`<option value="${p.id}" data-name="${p.product_name}" data-unit="${p.unit}">${p.product_name} (${p.unit})</option>`).join('')}</select><input type="number" class="batch-qty input-field text-sm" placeholder="Quantidade" min="0.001" step="any" required><select class="batch-unit input-field text-sm"></select><button type="button" onclick="removeBatchItem(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button></div>`;
   document.getElementById('quick-batch-entry-user').value = '';
   if (quickEntryOpen) toggleQuickEntry();
 }
@@ -1468,7 +1497,7 @@ function addBatchItem() {
   const container = document.getElementById('batch-entry-container');
   const div = document.createElement('div');
   div.className = 'batch-entry-item bg-stone-50 border border-stone-200 rounded-lg p-4 space-y-2';
-  div.innerHTML = `<label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block">Insumo</label><div class="relative"><i data-lucide="search" class="absolute left-3 top-3 w-4 h-4 text-stone-400"></i><input type="text" class="batch-search input-field text-sm w-full pl-9 pr-4" placeholder="Pesquisar insumo..."><div class="batch-dropdown hidden absolute top-full left-0 right-0 mt-1 bg-white border border-stone-200 rounded-lg shadow-lg z-10 max-h-40 overflow-y-auto"></div></div><select class="batch-product input-field text-sm w-full" required><option value="">Selecione o insumo</option>${products.map(p=>`<option value="${p.id}" data-name="${p.product_name}" data-unit="${p.unit}">${p.product_name} (${p.unit})</option>`).join('')}</select><div class="grid sm:grid-cols-2 gap-2 items-end"><div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Quantidade</label><input type="number" class="batch-qty input-field text-sm w-full" placeholder="Quantidade" min="0.001" step="any" required></div><button type="button" onclick="removeBatchItem(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button></div>`;
+  div.innerHTML = `<label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block">Insumo</label><div class="relative"><i data-lucide="search" class="absolute left-3 top-3 w-4 h-4 text-stone-400"></i><input type="text" class="batch-search input-field text-sm w-full pl-9 pr-4" placeholder="Pesquisar insumo..."><div class="batch-dropdown hidden absolute top-full left-0 right-0 mt-1 bg-white border border-stone-200 rounded-lg shadow-lg z-10 max-h-40 overflow-y-auto"></div></div><select class="batch-product input-field text-sm w-full" required><option value="">Selecione o insumo</option>${products.map(p=>`<option value="${p.id}" data-name="${p.product_name}" data-unit="${p.unit}">${p.product_name} (${p.unit})</option>`).join('')}</select><div class="grid sm:grid-cols-[1fr_110px_auto] gap-2 items-end"><div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Quantidade</label><input type="number" class="batch-qty input-field text-sm w-full" placeholder="Quantidade" min="0.001" step="any" required></div><div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Medida</label><select class="batch-unit input-field text-sm w-full"></select></div><button type="button" onclick="removeBatchItem(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button></div>`;
   container.appendChild(div);
   attachBatchSearchListeners(div);
   lucide.createIcons();
@@ -1489,7 +1518,7 @@ function attachBatchSearchListeners(container) {
     dropdown.innerHTML = filtered.map(p => `<div class="px-3 py-2 hover:bg-stone-100 cursor-pointer text-sm text-stone-700 border-b border-stone-100 last:border-b-0" onclick="selectBatchProduct(this,'${p.id}','${p.product_name.replace(/'/g,"\\'")}','${p.unit}')">${p.product_name} <span class="text-stone-400">(${p.unit})</span></div>`).join('');
     dropdown.classList.remove('hidden');
   });
-  selectEl.addEventListener('change', () => { dropdown.classList.add('hidden'); searchInput.value = ''; });
+  selectEl.addEventListener('change', () => { dropdown.classList.add('hidden'); searchInput.value = ''; populateUnitSelect(container.querySelector('.batch-unit'), selectEl.value); });
   document.addEventListener('click', (e) => { if (!container.contains(e.target)) dropdown.classList.add('hidden'); });
 }
 function selectBatchProduct(el, productId, productName, unit) {
@@ -1497,6 +1526,7 @@ function selectBatchProduct(el, productId, productName, unit) {
   container.querySelector('.batch-product').value = productId;
   container.querySelector('.batch-search').value = productName;
   container.querySelector('.batch-dropdown').classList.add('hidden');
+  populateUnitSelect(container.querySelector('.batch-unit'), productId);
 }
 function renderEntrySelect() {
   const products = getProducts().sort((a,b) => a.product_name.localeCompare(b.product_name));
@@ -1507,12 +1537,17 @@ async function confirmBatchEntry() {
   const batchData = [];
   for (const item of items) {
     const sel = item.querySelector('.batch-product');
+    const unitSel = item.querySelector('.batch-unit');
     const qty = parseFloat(item.querySelector('.batch-qty').value);
     if (!sel.value||!qty||qty<=0) { showToast('Preencha todos os campos', true); return; }
-    batchData.push({id:sel.value, name:sel.selectedOptions[0]?.dataset.name||'', unit:sel.selectedOptions[0]?.dataset.unit||'', qty});
+    const p = allData.find(r => r.id === sel.value);
+    const chosenUnit = unitSel.value || sel.selectedOptions[0]?.dataset.unit || '';
+    const baseUnit = p ? (p.storage_unit||p.unit) : chosenUnit;
+    const storageQty = p ? convertQuantity(qty, chosenUnit, baseUnit, getCustomConversions(p)) : qty;
+    batchData.push({id:sel.value, name:sel.selectedOptions[0]?.dataset.name||'', unit:chosenUnit, qty, storageQty});
   }
   const user = document.getElementById('batch-entry-user').value.trim();
-  for (const b of batchData) { const prod = allData.find(r => r.id === b.id); if (prod) await dbUpdate({...prod, quantity: prod.quantity + b.qty}); }
+  for (const b of batchData) { const prod = allData.find(r => r.id === b.id); if (prod) await dbUpdate({...prod, quantity: prod.quantity + b.storageQty}); }
   const itemList = batchData.map(b=>`${fmtQty(b.qty,b.unit)} ${b.unit} ${b.name}`).join('; ');
   await dbCreate({ ...blankRecord(), type:'movement', movement_type:'entrada', movement_product:itemList, movement_quantity:batchData.length, movement_date:new Date().toISOString(), movement_user:user, movement_note:`Entrada: ${itemList}`, batch_items:JSON.stringify(batchData) });
   showToast('Entrada confirmada!'); resetBatchForm();
@@ -1520,7 +1555,7 @@ async function confirmBatchEntry() {
 function cancelBatchEntry() { resetBatchForm(); }
 function resetBatchForm() {
   const products = getProducts().sort((a,b) => a.product_name.localeCompare(b.product_name));
-  document.getElementById('batch-entry-container').innerHTML = `<div class="batch-entry-item bg-stone-50 border border-stone-200 rounded-lg p-4 space-y-2"><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block">Insumo</label><div class="relative"><i data-lucide="search" class="absolute left-3 top-3 w-4 h-4 text-stone-400"></i><input type="text" class="batch-search input-field text-sm w-full pl-9 pr-4" placeholder="Pesquisar insumo..."><div class="batch-dropdown hidden absolute top-full left-0 right-0 mt-1 bg-white border border-stone-200 rounded-lg shadow-lg z-10 max-h-40 overflow-y-auto"></div></div><select class="batch-product input-field text-sm w-full" required><option value="">Selecione o insumo</option>${products.map(p=>`<option value="${p.id}" data-name="${p.product_name}" data-unit="${p.unit}">${p.product_name} (${p.unit})</option>`).join('')}</select><div class="grid sm:grid-cols-2 gap-2 items-end"><div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Quantidade</label><input type="number" class="batch-qty input-field text-sm w-full" placeholder="Quantidade" min="0.001" step="any" required></div><button type="button" onclick="removeBatchItem(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button></div></div>`;
+  document.getElementById('batch-entry-container').innerHTML = `<div class="batch-entry-item bg-stone-50 border border-stone-200 rounded-lg p-4 space-y-2"><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block">Insumo</label><div class="relative"><i data-lucide="search" class="absolute left-3 top-3 w-4 h-4 text-stone-400"></i><input type="text" class="batch-search input-field text-sm w-full pl-9 pr-4" placeholder="Pesquisar insumo..."><div class="batch-dropdown hidden absolute top-full left-0 right-0 mt-1 bg-white border border-stone-200 rounded-lg shadow-lg z-10 max-h-40 overflow-y-auto"></div></div><select class="batch-product input-field text-sm w-full" required><option value="">Selecione o insumo</option>${products.map(p=>`<option value="${p.id}" data-name="${p.product_name}" data-unit="${p.unit}">${p.product_name} (${p.unit})</option>`).join('')}</select><div class="grid sm:grid-cols-[1fr_110px_auto] gap-2 items-end"><div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Quantidade</label><input type="number" class="batch-qty input-field text-sm w-full" placeholder="Quantidade" min="0.001" step="any" required></div><div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Medida</label><select class="batch-unit input-field text-sm w-full"></select></div><button type="button" onclick="removeBatchItem(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button></div></div>`;
   document.getElementById('batch-entry-user').value = '';
   initBatchSearchListeners();
 }
@@ -1539,7 +1574,7 @@ function addManualExitItem() {
   const container = document.getElementById('manual-exit-container');
   const div = document.createElement('div');
   div.className = 'manual-exit-item bg-stone-50 border border-stone-200 rounded-lg p-4 space-y-2';
-  div.innerHTML = `<label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block">Insumo</label><div class="relative"><i data-lucide="search" class="absolute left-3 top-3 w-4 h-4 text-stone-400"></i><input type="text" class="manual-exit-search input-field text-sm w-full pl-9 pr-4" placeholder="Pesquisar insumo..."><div class="manual-exit-dropdown hidden absolute top-full left-0 right-0 mt-1 bg-white border border-stone-200 rounded-lg shadow-lg z-10 max-h-40 overflow-y-auto"></div></div><select class="manual-exit-product input-field text-sm w-full" required><option value="">Selecione o insumo</option>${products.map(p=>`<option value="${p.id}" data-name="${p.product_name}" data-unit="${p.unit}">${p.product_name} (${p.unit})</option>`).join('')}</select><div class="grid sm:grid-cols-2 gap-2 items-end"><div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Quantidade</label><input type="number" class="manual-exit-qty input-field text-sm w-full" placeholder="Quantidade" min="0.001" step="any" required></div><button type="button" onclick="removeManualExitItem(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button></div>`;
+  div.innerHTML = `<label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block">Insumo</label><div class="relative"><i data-lucide="search" class="absolute left-3 top-3 w-4 h-4 text-stone-400"></i><input type="text" class="manual-exit-search input-field text-sm w-full pl-9 pr-4" placeholder="Pesquisar insumo..."><div class="manual-exit-dropdown hidden absolute top-full left-0 right-0 mt-1 bg-white border border-stone-200 rounded-lg shadow-lg z-10 max-h-40 overflow-y-auto"></div></div><select class="manual-exit-product input-field text-sm w-full" required><option value="">Selecione o insumo</option>${products.map(p=>`<option value="${p.id}" data-name="${p.product_name}" data-unit="${p.unit}">${p.product_name} (${p.unit})</option>`).join('')}</select><div class="grid sm:grid-cols-[1fr_110px_auto] gap-2 items-end"><div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Quantidade</label><input type="number" class="manual-exit-qty input-field text-sm w-full" placeholder="Quantidade" min="0.001" step="any" required></div><div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Medida</label><select class="manual-exit-unit input-field text-sm w-full"></select></div><button type="button" onclick="removeManualExitItem(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button></div>`;
   container.appendChild(div);
   attachManualExitSearchListeners(div);
   lucide.createIcons();
@@ -1560,7 +1595,7 @@ function attachManualExitSearchListeners(container) {
     dropdown.innerHTML = filtered.map(p => `<div class="px-3 py-2 hover:bg-stone-100 cursor-pointer text-sm text-stone-700 border-b border-stone-100 last:border-b-0" onclick="selectManualExitProduct(this,'${p.id}','${p.product_name.replace(/'/g,"\\'")}','${p.unit}')">${p.product_name} <span class="text-stone-400">(${p.unit})</span></div>`).join('');
     dropdown.classList.remove('hidden');
   });
-  selectEl.addEventListener('change', () => { dropdown.classList.add('hidden'); searchInput.value = ''; });
+  selectEl.addEventListener('change', () => { dropdown.classList.add('hidden'); searchInput.value = ''; populateUnitSelect(container.querySelector('.manual-exit-unit'), selectEl.value); });
   document.addEventListener('click', (e) => { if (!container.contains(e.target)) dropdown.classList.add('hidden'); });
 }
 function selectManualExitProduct(el, productId, productName, unit) {
@@ -1568,6 +1603,7 @@ function selectManualExitProduct(el, productId, productName, unit) {
   container.querySelector('.manual-exit-product').value = productId;
   container.querySelector('.manual-exit-search').value = productName;
   container.querySelector('.manual-exit-dropdown').classList.add('hidden');
+  populateUnitSelect(container.querySelector('.manual-exit-unit'), productId);
 }
 function renderManualExitSelect() {
   const products = getProducts().sort((a,b) => a.product_name.localeCompare(b.product_name));
@@ -1578,16 +1614,21 @@ async function confirmManualExit() {
   const exitData = [];
   for (const item of items) {
     const sel = item.querySelector('.manual-exit-product');
+    const unitSel = item.querySelector('.manual-exit-unit');
     const qty = parseFloat(item.querySelector('.manual-exit-qty').value);
     if (!sel.value||!qty||qty<=0) { showToast('Preencha todos os campos', true); return; }
-    exitData.push({ id:sel.value, name:sel.selectedOptions[0]?.dataset.name||'', unit:sel.selectedOptions[0]?.dataset.unit||'', qty });
+    const p = allData.find(r => r.id === sel.value);
+    const chosenUnit = unitSel.value || sel.selectedOptions[0]?.dataset.unit || '';
+    const baseUnit = p ? (p.storage_unit||p.unit) : chosenUnit;
+    const storageQty = p ? convertQuantity(qty, chosenUnit, baseUnit, getCustomConversions(p)) : qty;
+    exitData.push({ id:sel.value, name:sel.selectedOptions[0]?.dataset.name||'', unit:chosenUnit, qty, storageQty });
   }
   for (const e of exitData) {
     const prod = allData.find(r => r.id === e.id); if (!prod) { showToast(`Insumo ${e.name} não encontrado`, true); return; }
-    if (prod.quantity < e.qty) { showToast(`Estoque insuficiente de ${e.name}`, true); return; }
+    if (prod.quantity < e.storageQty) { showToast(`Estoque insuficiente de ${e.name}`, true); return; }
   }
   const reason = document.getElementById('manual-exit-reason').value.trim();
-  for (const e of exitData) { const prod = allData.find(r => r.id === e.id); await dbUpdate({...prod, quantity: Math.max(0, prod.quantity - e.qty)}); }
+  for (const e of exitData) { const prod = allData.find(r => r.id === e.id); await dbUpdate({...prod, quantity: Math.max(0, prod.quantity - e.storageQty)}); }
   const itemList = exitData.map(e=>`${fmtQty(e.qty,e.unit)} ${e.unit} ${e.name}`).join('; ');
   await dbCreate({ ...blankRecord(), type:'movement', movement_type:'saida_manual', movement_product:itemList, movement_quantity:exitData.length, movement_date:new Date().toISOString(), movement_note:reason?`Saída Manual: ${itemList} (${reason})`:`Saída Manual: ${itemList}`, batch_items:JSON.stringify(exitData) });
   showToast('Saída confirmada!'); resetManualExitForm();
@@ -1595,7 +1636,7 @@ async function confirmManualExit() {
 function cancelManualExit() { resetManualExitForm(); }
 function resetManualExitForm() {
   const products = getProducts().sort((a,b) => a.product_name.localeCompare(b.product_name));
-  document.getElementById('manual-exit-container').innerHTML = `<div class="manual-exit-item bg-stone-50 border border-stone-200 rounded-lg p-4 space-y-2"><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block">Insumo</label><div class="relative"><i data-lucide="search" class="absolute left-3 top-3 w-4 h-4 text-stone-400"></i><input type="text" class="manual-exit-search input-field text-sm w-full pl-9 pr-4" placeholder="Pesquisar insumo..."><div class="manual-exit-dropdown hidden absolute top-full left-0 right-0 mt-1 bg-white border border-stone-200 rounded-lg shadow-lg z-10 max-h-40 overflow-y-auto"></div></div><select class="manual-exit-product input-field text-sm w-full" required><option value="">Selecione o insumo</option>${products.map(p=>`<option value="${p.id}" data-name="${p.product_name}" data-unit="${p.unit}">${p.product_name} (${p.unit})</option>`).join('')}</select><div class="grid sm:grid-cols-2 gap-2 items-end"><div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Quantidade</label><input type="number" class="manual-exit-qty input-field text-sm w-full" placeholder="Quantidade" min="0.001" step="any" required></div><button type="button" onclick="removeManualExitItem(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button></div></div>`;
+  document.getElementById('manual-exit-container').innerHTML = `<div class="manual-exit-item bg-stone-50 border border-stone-200 rounded-lg p-4 space-y-2"><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block">Insumo</label><div class="relative"><i data-lucide="search" class="absolute left-3 top-3 w-4 h-4 text-stone-400"></i><input type="text" class="manual-exit-search input-field text-sm w-full pl-9 pr-4" placeholder="Pesquisar insumo..."><div class="manual-exit-dropdown hidden absolute top-full left-0 right-0 mt-1 bg-white border border-stone-200 rounded-lg shadow-lg z-10 max-h-40 overflow-y-auto"></div></div><select class="manual-exit-product input-field text-sm w-full" required><option value="">Selecione o insumo</option>${products.map(p=>`<option value="${p.id}" data-name="${p.product_name}" data-unit="${p.unit}">${p.product_name} (${p.unit})</option>`).join('')}</select><div class="grid sm:grid-cols-[1fr_110px_auto] gap-2 items-end"><div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Quantidade</label><input type="number" class="manual-exit-qty input-field text-sm w-full" placeholder="Quantidade" min="0.001" step="any" required></div><div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Medida</label><select class="manual-exit-unit input-field text-sm w-full"></select></div><button type="button" onclick="removeManualExitItem(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button></div></div>`;
   document.getElementById('manual-exit-reason').value = '';
   initManualExitSearchListeners();
 }
@@ -2280,10 +2321,21 @@ function updateLossProductOptions() {
   else sel.innerHTML = '<option value="">Selecione um tipo de perda primeiro</option>';
   document.getElementById('loss-available').value = '—';
   document.getElementById('loss-quantity').value = '';
+  document.getElementById('loss-unit').innerHTML = '';
 }
 document.getElementById('loss-product')?.addEventListener('change', (e) => {
   const opt = e.target.selectedOptions[0];
   document.getElementById('loss-available').value = opt&&opt.dataset.qty ? `${fmtQty(parseFloat(opt.dataset.qty),opt.dataset.unit)} ${opt.dataset.unit}` : '—';
+  const lossType = document.getElementById('loss-type')?.value;
+  const unitSel = document.getElementById('loss-unit');
+  if (opt && opt.value && lossType === 'product') {
+    const productId = opt.value.replace('product_','');
+    populateUnitSelect(unitSel, productId);
+  } else if (opt && opt.dataset.unit) {
+    unitSel.innerHTML = `<option value="${opt.dataset.unit}" selected>${opt.dataset.unit}</option>`;
+  } else {
+    unitSel.innerHTML = '';
+  }
 });
 function resetLossForm() {
   document.getElementById('loss-type').value = '';
@@ -2291,12 +2343,14 @@ function resetLossForm() {
   document.getElementById('loss-quantity').value = '';
   document.getElementById('loss-reason').value = '';
   document.getElementById('loss-available').value = '—';
+  document.getElementById('loss-unit').innerHTML = '';
   document.getElementById('loss-error').classList.add('hidden');
 }
 async function handleRegisterLoss(e) {
   e.preventDefault();
   const lossType = document.getElementById('loss-type').value;
   const productValue = document.getElementById('loss-product').value;
+  const chosenUnit = document.getElementById('loss-unit').value;
   const qty = parseFloat(document.getElementById('loss-quantity').value);
   const reason = document.getElementById('loss-reason').value.trim();
   const errorEl = document.getElementById('loss-error');
@@ -2306,16 +2360,22 @@ async function handleRegisterLoss(e) {
     const finishedId = productValue.replace('finished_','');
     const finished = allData.find(r => r.id === finishedId);
     if (!finished) { errorEl.textContent='Produto não encontrado'; errorEl.classList.remove('hidden'); return; }
-    if (qty > finished.quantity) { errorEl.textContent=`Quantidade indisponível. Estoque: ${fmtQty(finished.quantity,finished.unit)} ${finished.unit}`; errorEl.classList.remove('hidden'); return; }
-    await dbUpdate({...finished, quantity: Math.max(0, finished.quantity - qty)});
-    await dbCreate({ ...blankRecord(), type:'movement', movement_type:'perda', movement_product:finished.product_name, movement_quantity:qty, movement_date:new Date().toISOString(), movement_note:reason?`Perda: ${finished.product_name} (${reason})`:`Perda: ${finished.product_name}`, loss_reason:reason, loss_type:'finished' });
+    const baseUnit = finished.storage_unit || finished.unit;
+    const unit = chosenUnit || baseUnit;
+    const storageQty = convertQuantity(qty, unit, baseUnit, getCustomConversions(finished));
+    if (storageQty > finished.quantity) { errorEl.textContent=`Quantidade indisponível. Estoque: ${fmtQty(finished.quantity,finished.unit)} ${finished.unit}`; errorEl.classList.remove('hidden'); return; }
+    await dbUpdate({...finished, quantity: Math.max(0, finished.quantity - storageQty)});
+    await dbCreate({ ...blankRecord(), type:'movement', movement_type:'perda', movement_product:finished.product_name, movement_quantity:qty, movement_date:new Date().toISOString(), movement_note:reason?`Perda: ${fmtQty(qty,unit)} ${unit} ${finished.product_name} (${reason})`:`Perda: ${fmtQty(qty,unit)} ${unit} ${finished.product_name}`, loss_reason:reason, loss_type:'finished' });
   } else if (lossType === 'product') {
     const productId = productValue.replace('product_','');
     const product = allData.find(r => r.id === productId);
     if (!product) { errorEl.textContent='Insumo não encontrado'; errorEl.classList.remove('hidden'); return; }
-    if (qty > product.quantity) { errorEl.textContent=`Quantidade indisponível. Estoque: ${fmtQty(product.quantity,product.unit)} ${product.unit}`; errorEl.classList.remove('hidden'); return; }
-    await dbUpdate({...product, quantity: Math.max(0, product.quantity - qty)});
-    await dbCreate({ ...blankRecord(), type:'movement', movement_type:'perda', movement_product:product.product_name, movement_quantity:qty, movement_date:new Date().toISOString(), movement_note:reason?`Perda: ${product.product_name} (${reason})`:`Perda: ${product.product_name}`, loss_reason:reason, loss_type:'product' });
+    const baseUnit = product.storage_unit || product.unit;
+    const unit = chosenUnit || baseUnit;
+    const storageQty = convertQuantity(qty, unit, baseUnit, getCustomConversions(product));
+    if (storageQty > product.quantity) { errorEl.textContent=`Quantidade indisponível. Estoque: ${fmtQty(product.quantity,product.unit)} ${product.unit}`; errorEl.classList.remove('hidden'); return; }
+    await dbUpdate({...product, quantity: Math.max(0, product.quantity - storageQty)});
+    await dbCreate({ ...blankRecord(), type:'movement', movement_type:'perda', movement_product:product.product_name, movement_quantity:qty, movement_date:new Date().toISOString(), movement_note:reason?`Perda: ${fmtQty(qty,unit)} ${unit} ${product.product_name} (${reason})`:`Perda: ${fmtQty(qty,unit)} ${unit} ${product.product_name}`, loss_reason:reason, loss_type:'product' });
   }
   showToast('Perda registrada!'); resetLossForm();
 }
