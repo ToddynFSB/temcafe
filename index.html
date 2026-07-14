@@ -227,8 +227,9 @@
           <label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block">Insumo</label>
           <div class="relative"><i data-lucide="search" class="absolute left-3 top-3 w-4 h-4 text-stone-400"></i><input type="text" class="manual-exit-search input-field text-sm w-full pl-9 pr-4" placeholder="Pesquisar insumo..."><div class="manual-exit-dropdown hidden absolute top-full left-0 right-0 mt-1 bg-white border border-stone-200 rounded-lg shadow-lg z-10 max-h-40 overflow-y-auto"></div></div>
           <select class="manual-exit-product input-field text-sm w-full" required><option value="">Selecione o insumo</option></select>
-          <div class="grid sm:grid-cols-2 gap-2 items-end">
+          <div class="grid sm:grid-cols-[1fr_110px_auto] gap-2 items-end">
             <div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Quantidade</label><input type="number" class="manual-exit-qty input-field text-sm w-full" placeholder="Quantidade" min="0.001" step="any" required></div>
+            <div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Medida</label><select class="manual-exit-unit input-field text-sm w-full"></select></div>
             <button type="button" onclick="removeManualExitItem(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button>
           </div>
         </div>
@@ -254,8 +255,9 @@
           <label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block">Insumo</label>
           <div class="relative"><i data-lucide="search" class="absolute left-3 top-3 w-4 h-4 text-stone-400"></i><input type="text" class="batch-search input-field text-sm w-full pl-9 pr-4" placeholder="Pesquisar insumo..."><div class="batch-dropdown hidden absolute top-full left-0 right-0 mt-1 bg-white border border-stone-200 rounded-lg shadow-lg z-10 max-h-40 overflow-y-auto"></div></div>
           <select class="batch-product input-field text-sm w-full" required><option value="">Selecione o insumo</option></select>
-          <div class="grid sm:grid-cols-2 gap-2 items-end">
+          <div class="grid sm:grid-cols-[1fr_110px_auto] gap-2 items-end">
             <div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Quantidade</label><input type="number" class="batch-qty input-field text-sm w-full" placeholder="Quantidade" min="0.001" step="any" required></div>
+            <div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Medida</label><select class="batch-unit input-field text-sm w-full"></select></div>
             <button type="button" onclick="removeBatchItem(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button>
           </div>
         </div>
@@ -564,6 +566,28 @@
       </div>
       <div class="flex gap-2"><button onclick="saveEditedLevels()" class="flex-1 btn-primary px-4 py-2.5 rounded-lg text-sm font-medium">Salvar</button><button onclick="closeEditLevels()" class="flex-1 btn-ghost px-4 py-2.5 rounded-lg text-sm font-medium">Cancelar</button></div>
       <div class="mt-3 pt-3 border-t border-stone-100"><button onclick="deleteProduct()" class="w-full btn-danger px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-1.5"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i>Excluir Insumo</button></div>
+    </div>
+  </div>
+
+  <!-- MODAL: Confirmar Produção -->
+  <div id="production-confirm-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+      <h3 class="font-bold mb-1 text-stone-800 text-lg">Confirmar Produção</h3>
+      <p class="text-sm text-stone-600 mb-4" id="production-confirm-recipe-name"></p>
+      <div class="mb-4">
+        <label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-2">Quantidade de receitas</label>
+        <div class="flex gap-2 items-center">
+          <button type="button" onclick="adjustProductionConfirmTimes(-1)" class="w-9 h-9 rounded-lg bg-stone-200 hover:bg-stone-300 flex items-center justify-center font-bold text-stone-700 text-sm flex-shrink-0">−</button>
+          <input id="production-confirm-times" type="number" min="1" step="1" value="1" class="flex-1 input-field text-sm text-center" oninput="updateProductionConfirmPreview()">
+          <button type="button" onclick="adjustProductionConfirmTimes(1)" class="w-9 h-9 rounded-lg bg-stone-200 hover:bg-stone-300 flex items-center justify-center font-bold text-stone-700 text-sm flex-shrink-0">+</button>
+        </div>
+      </div>
+      <div class="p-3 rounded-lg bg-amber-50 border border-amber-100 mb-4">
+        <p class="text-xs text-amber-800">Vai render aproximadamente:</p>
+        <p class="text-lg font-bold text-amber-900" id="production-confirm-yield"></p>
+      </div>
+      <p id="production-confirm-note" class="text-xs text-stone-500 mb-5"></p>
+      <div class="flex gap-2"><button onclick="confirmProductionAction()" class="flex-1 btn-success px-4 py-2.5 rounded-lg text-sm font-medium">✓ Confirmar</button><button onclick="closeProductionConfirm()" class="flex-1 btn-ghost px-4 py-2.5 rounded-lg text-sm font-medium">Cancelar</button></div>
     </div>
   </div>
 
@@ -1069,14 +1093,10 @@ function renderProductionSuggestions() {
 }
 
 function produceFromSuggestion(recipeId) {
-  const recipe = allData.find(r => r.id === recipeId); if (!recipe) return;
-  if (recipe.recipe_type === 'Insumo') { confirmInsumoProduction(recipe, 1).then(r => { if (r.ok) showToast(`${recipe.recipe_name} produzido!`); else showToast(`Erro: ${r.error}`, true); }); return; }
-  sendToProduction(recipeId);
+  openProductionConfirm(recipeId, 1, 'execute');
 }
 function produceNFromSuggestion(recipeId, times) {
-  const recipe = allData.find(r => r.id === recipeId); if (!recipe) return;
-  if (recipe.recipe_type === 'Insumo') { confirmInsumoProduction(recipe, times).then(r => { if (r.ok) showToast(`${times}× ${recipe.recipe_name} produzido!`); else showToast(`Erro: ${r.error}`, true); }); return; }
-  sendNToProduction(recipeId, times);
+  openProductionConfirm(recipeId, times, 'execute');
 }
 
 // Produz `times` vezes a receita (tipo Insumo): desconta ingredientes × times, credita rendimento × times no insumo vinculado
@@ -1685,7 +1705,7 @@ function renderRecipes() {
     const isFav = r.recipe_favorite === 'true' || r.recipe_favorite === true;
     const favBtn = `<button onclick="toggleFavorite('${r.id}')" title="${isFav?'Remover dos favoritos':'Adicionar aos favoritos'}" class="w-7 h-7 flex items-center justify-center rounded-lg text-base ${isFav?'text-amber-400 bg-amber-50 hover:bg-amber-100':'text-stone-300 hover:text-amber-400 bg-stone-50 hover:bg-amber-50'}">${isFav?'⭐':'☆'}</button>`;
     const notes = r.recipe_notes ? `<div class="mt-2 p-2 bg-amber-50 border border-amber-100 rounded-lg"><p class="text-xs text-amber-800 font-semibold mb-0.5">📝 Macetes:</p><p class="text-xs text-amber-700 whitespace-pre-wrap">${r.recipe_notes}</p></div>` : '';
-    return `<div class="bg-white rounded-xl p-4 shadow-sm border ${isFav?'border-amber-200':'border-stone-100'} card-hover"><div class="flex items-start justify-between mb-2"><div class="flex flex-wrap gap-1.5">${isFav?'<span class="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-amber-100 text-amber-700">⭐ Favorita</span>':''}<span class="text-[10px] px-2 py-0.5 rounded-full font-semibold ${sectorBg}">${r.recipe_sector}</span><span class="text-[10px] px-2 py-0.5 rounded-full font-semibold ${typeBg}">${r.recipe_type}</span></div>${favBtn}</div><div class="flex justify-between items-start mb-2"><h4 class="font-semibold text-stone-800 text-sm">${r.recipe_name}</h4><div class="flex gap-1 flex-shrink-0 ml-2"><button onclick="editRecipe('${r.id}')" class="px-2 py-1 bg-blue-50 text-blue-700 rounded-lg text-xs font-medium hover:bg-blue-100">Editar</button><button onclick="requestDeleteRecipe('${r.id}')" class="px-2 py-1 btn-danger rounded-lg text-xs font-medium">Excluir</button>${r.recipe_type==='Produção'?`<button onclick="sendToProduction('${r.id}')" class="btn-primary px-2 py-1 rounded-lg text-xs font-medium">Produzir</button>`:''}</div></div><ul class="text-xs text-stone-500 space-y-0.5 mb-2">${ingredients.map(i=>`<li>• ${fmtQty(i.qty,i.unit)} ${i.unit} de ${i.name}</li>`).join('')}</ul><p class="text-xs text-amber-700 font-semibold">Rendimento: ${r.recipe_yield} ${r.recipe_yield_unit}</p>${notes}</div>`;
+    return `<div class="bg-white rounded-xl p-4 shadow-sm border ${isFav?'border-amber-200':'border-stone-100'} card-hover"><div class="flex items-start justify-between mb-2"><div class="flex flex-wrap gap-1.5">${isFav?'<span class="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-amber-100 text-amber-700">⭐ Favorita</span>':''}<span class="text-[10px] px-2 py-0.5 rounded-full font-semibold ${sectorBg}">${r.recipe_sector}</span><span class="text-[10px] px-2 py-0.5 rounded-full font-semibold ${typeBg}">${r.recipe_type}</span></div>${favBtn}</div><div class="flex justify-between items-start mb-2"><h4 class="font-semibold text-stone-800 text-sm">${r.recipe_name}</h4><div class="flex gap-1 flex-shrink-0 ml-2"><button onclick="openProductionConfirm('${r.id}', 1, 'queue')" class="px-2 py-1 btn-primary rounded-lg text-xs font-medium flex items-center gap-1"><i data-lucide="play" class="w-3 h-3"></i>Produzir</button><button onclick="editRecipe('${r.id}')" class="px-2 py-1 bg-blue-50 text-blue-700 rounded-lg text-xs font-medium hover:bg-blue-100">Editar</button><button onclick="requestDeleteRecipe('${r.id}')" class="px-2 py-1 btn-danger rounded-lg text-xs font-medium">Excluir</button></div></div><ul class="text-xs text-stone-500 space-y-0.5 mb-2">${ingredients.map(i=>`<li>• ${fmtQty(i.qty,i.unit)} ${i.unit} de ${i.name}</li>`).join('')}</ul><p class="text-xs text-amber-700 font-semibold">Rendimento: ${r.recipe_yield} ${r.recipe_yield_unit}</p>${notes}</div>`;
   }).join('');
 }
 async function toggleFavorite(id) {
@@ -1831,6 +1851,62 @@ async function createProduction(recipe) {
   const r = await dbCreate({ ...blankRecord(), type:'production', recipe_name:recipe.recipe_name, recipe_ingredients:recipe.recipe_ingredients, recipe_yield:recipe.recipe_yield, recipe_yield_unit:recipe.recipe_yield_unit, recipe_product_name:recipe.recipe_product_name||recipe.recipe_name, recipe_type:recipe.recipe_type, recipe_sector:recipe.recipe_sector, movement_date:new Date().toISOString(), production_status:'pending', production_recipe_id:recipe.id });
   if (r.isOk) showToast(`${recipe.recipe_name} enviado para produção!`); else showToast('Erro', true);
 }
+
+// ============================================================
+// CONFIRMAÇÃO DE PRODUÇÃO (popup) — usado tanto pelas Sugestões do
+// Dashboard (mode 'execute': mantém a lógica de sempre) quanto pelo
+// botão "Produzir" das Receitas (mode 'queue': sempre manda para
+// Produções Pendentes, independente do tipo da receita)
+// ============================================================
+let productionConfirmState = null;
+function openProductionConfirm(recipeId, times, mode) {
+  const recipe = allData.find(r => r.id === recipeId); if (!recipe) return;
+  productionConfirmState = { recipeId, mode };
+  document.getElementById('production-confirm-recipe-name').textContent = recipe.recipe_name;
+  document.getElementById('production-confirm-times').value = Math.max(1, parseInt(times) || 1);
+  document.getElementById('production-confirm-note').textContent = mode === 'queue'
+    ? 'Isso vai enviar para Produções Pendentes — o estoque só é alterado quando você finalizar.'
+    : (recipe.recipe_type === 'Insumo' ? 'Isso vai descontar os insumos e creditar o estoque na hora.' : 'Isso vai enviar para Produções Pendentes.');
+  updateProductionConfirmPreview();
+  document.getElementById('production-confirm-modal').classList.remove('hidden');
+}
+function closeProductionConfirm() {
+  document.getElementById('production-confirm-modal').classList.add('hidden');
+  productionConfirmState = null;
+}
+function adjustProductionConfirmTimes(delta) {
+  const input = document.getElementById('production-confirm-times');
+  input.value = Math.max(1, (parseInt(input.value) || 1) + delta);
+  updateProductionConfirmPreview();
+}
+function updateProductionConfirmPreview() {
+  if (!productionConfirmState) return;
+  const recipe = allData.find(r => r.id === productionConfirmState.recipeId); if (!recipe) return;
+  const times = Math.max(1, parseInt(document.getElementById('production-confirm-times').value) || 1);
+  const yieldQty = (parseFloat(recipe.recipe_yield) || 0) * times;
+  document.getElementById('production-confirm-yield').textContent = `${fmtQty(yieldQty, recipe.recipe_yield_unit)} ${recipe.recipe_yield_unit}`;
+}
+async function confirmProductionAction() {
+  if (!productionConfirmState) return;
+  const { recipeId, mode } = productionConfirmState;
+  const recipe = allData.find(r => r.id === recipeId);
+  const times = Math.max(1, parseInt(document.getElementById('production-confirm-times').value) || 1);
+  closeProductionConfirm();
+  if (!recipe) return;
+  if (mode === 'queue') {
+    for (let i = 0; i < times; i++) await createProduction(recipe);
+    showToast(`${times}× ${recipe.recipe_name} enviado${times>1?'s':''} para Produções Pendentes!`);
+    return;
+  }
+  // mode === 'execute': mantém a lógica original (instantâneo p/ Insumo, fila p/ Produção)
+  if (recipe.recipe_type === 'Insumo') {
+    const r = await confirmInsumoProduction(recipe, times);
+    if (r.ok) showToast(`${times>1?times+'× ':''}${recipe.recipe_name} produzido!`); else showToast(`Erro: ${r.error}`, true);
+  } else {
+    for (let i = 0; i < times; i++) await createProduction(recipe);
+    showToast(`${times}× ${recipe.recipe_name} enviado${times>1?'s':''} para Produções Pendentes!`);
+  }
+}
 function renderPendingProductions() {
   const pending = getProductions().filter(p => p.production_status === 'pending');
   const el = document.getElementById('pending-production-list');
@@ -1879,12 +1955,33 @@ async function processFinalization(prod, realYield, ingredients) {
     const consumptionQty = convertQuantity(ing.qty, ing.unit, storageUnit, getCustomConversions(p));
     await dbUpdate({...p, quantity: Math.max(0, p.quantity - consumptionQty)});
   }
+  const ingNote = ingredients.map(i=>`${fmtQty(i.qty,i.unit)} ${i.unit} ${i.name}`).join(', ');
+
+  if (prod.recipe_type === 'Insumo') {
+    // Receita tipo Insumo: credita o insumo VINCULADO (não cria um "produto pronto")
+    const target = getProducts().find(p => p.linked_recipe_id === prod.production_recipe_id);
+    if (!target) {
+      document.getElementById('finalize-error').textContent = 'Sem insumo vinculado a esta receita — edite o insumo e vincule esta receita antes de finalizar.';
+      document.getElementById('finalize-error').classList.remove('hidden');
+      document.getElementById('finalize-btn').disabled = false;
+      document.getElementById('finalize-btn').textContent = 'Finalizar';
+      return;
+    }
+    await dbUpdate({...target, quantity: target.quantity + realYield});
+    await dbCreate({ ...blankRecord(), type:'movement', movement_type:'producao', movement_product:target.product_name, movement_quantity:realYield, movement_date:new Date().toISOString(), movement_note:`Produção: ${fmtQty(realYield,target.unit)} ${target.unit} de ${target.product_name}. Insumos: ${ingNote}`, batch_items:prod.recipe_ingredients, production_recipe_id:prod.production_recipe_id, production_real_yield:realYield });
+    await dbUpdate({...prod, production_status:'done', production_real_yield:realYield});
+    document.getElementById('finalize-btn').disabled = false;
+    document.getElementById('finalize-btn').textContent = 'Finalizar';
+    closeFinalize();
+    showToast(`${fmtQty(realYield,target.unit)} ${target.unit} de ${target.product_name} produzido!`);
+    return;
+  }
+
   const finishedName = prod.recipe_product_name || prod.recipe_name;
   const finishedUnit = prod.recipe_yield_unit;
   const existing = getFinishedProducts().find(f => f.product_name === finishedName);
   if (existing) { await dbUpdate({...existing, quantity: existing.quantity + realYield}); }
   else { await dbCreate({ ...blankRecord(), type:'finished_product', product_name:finishedName, quantity:realYield, unit:finishedUnit, storage_unit:finishedUnit, critical_stock:2, min_stock:5, comfortable_stock:10, linked_recipe_id:prod.production_recipe_id }); }
-  const ingNote = ingredients.map(i=>`${fmtQty(i.qty,i.unit)} ${i.unit} ${i.name}`).join(', ');
   await dbCreate({ ...blankRecord(), type:'movement', movement_type:'producao', movement_product:finishedName, movement_quantity:realYield, movement_date:new Date().toISOString(), movement_note:`Produção: ${fmtQty(realYield,finishedUnit)} ${finishedUnit} de ${finishedName}. Insumos: ${ingNote}`, batch_items:prod.recipe_ingredients, production_recipe_id:prod.production_recipe_id, production_real_yield:realYield });
   await dbUpdate({...prod, production_status:'done', production_real_yield:realYield});
   document.getElementById('finalize-btn').disabled = false;
