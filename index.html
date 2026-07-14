@@ -354,8 +354,7 @@
     <div class="bg-white rounded-xl p-5 shadow-sm border border-stone-100 mb-5">
       <h3 class="font-semibold mb-4 text-stone-800 text-sm">Registrar Perda</h3>
       <form onsubmit="handleRegisterLoss(event)">
-        <div class="mb-4"><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-2">Tipo de Perda *</label><select id="loss-type" onchange="updateLossProductOptions()" required class="w-full input-field text-sm"><option value="">Selecione o tipo</option><option value="finished">Produto Pronto</option><option value="product">Insumo</option></select></div>
-        <div class="mb-4"><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-2">Produto *</label><select id="loss-product" required class="w-full input-field text-sm"><option value="">Selecione um tipo de perda primeiro</option></select></div>
+        <div class="mb-4"><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-2">Insumo *</label><select id="loss-product" required class="w-full input-field text-sm"><option value="">Selecione o insumo</option></select></div>
         <div class="grid sm:grid-cols-3 gap-3 mb-4">
           <div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-2">Quantidade *</label><input id="loss-quantity" type="number" placeholder="Quantidade perdida" min="0.001" step="any" required class="w-full input-field text-sm"></div>
           <div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-2">Medida</label><select id="loss-unit" class="w-full input-field text-sm"></select></div>
@@ -399,7 +398,7 @@
 
       <p class="text-xs text-stone-500 mb-2">Ou cole manualmente (Nome do Produto → TAB → Quantidade):</p>
       <textarea id="bulk-sales-textarea" class="w-full input-field text-sm mb-4 min-h-[140px]" placeholder="Exemplo:&#10;Cappuccino    12&#10;Brownie    7&#10;Aperol Spritz    3"></textarea>
-      <div class="flex gap-2 mb-4"><button onclick="processBulkSales()" class="btn-success px-4 py-2.5 rounded-lg text-sm font-medium flex items-center gap-1.5 flex-1"><i data-lucide="check" class="w-4 h-4"></i>Processar Vendas</button><button onclick="clearBulkSalesForm()" class="btn-ghost px-4 py-2.5 rounded-lg text-sm font-medium flex-1">Limpar</button></div>
+      <div id="bulk-manual-actions" class="flex gap-2 mb-4"><button onclick="processBulkSales()" class="btn-success px-4 py-2.5 rounded-lg text-sm font-medium flex items-center gap-1.5 flex-1"><i data-lucide="check" class="w-4 h-4"></i>Processar Vendas</button><button onclick="clearBulkSalesForm()" class="btn-ghost px-4 py-2.5 rounded-lg text-sm font-medium flex-1">Limpar</button></div>
       <div id="bulk-sales-feedback" class="hidden p-4 rounded-lg border"><p class="text-xs font-semibold mb-2" id="bulk-feedback-title"></p><div id="bulk-feedback-content" class="space-y-1 text-xs"></div></div>
     </div>
     <h3 class="font-semibold mb-3 text-stone-800 text-sm">Vendas Registradas Hoje</h3>
@@ -947,6 +946,7 @@ function renderAll() {
   renderSalesToday();
   renderQuickEntrySelect();
   renderLosses();
+  updateLossProductOptions();
   renderConsumption();
   lucide.createIcons();
 }
@@ -1705,7 +1705,7 @@ function renderRecipes() {
     const isFav = r.recipe_favorite === 'true' || r.recipe_favorite === true;
     const favBtn = `<button onclick="toggleFavorite('${r.id}')" title="${isFav?'Remover dos favoritos':'Adicionar aos favoritos'}" class="w-7 h-7 flex items-center justify-center rounded-lg text-base ${isFav?'text-amber-400 bg-amber-50 hover:bg-amber-100':'text-stone-300 hover:text-amber-400 bg-stone-50 hover:bg-amber-50'}">${isFav?'⭐':'☆'}</button>`;
     const notes = r.recipe_notes ? `<div class="mt-2 p-2 bg-amber-50 border border-amber-100 rounded-lg"><p class="text-xs text-amber-800 font-semibold mb-0.5">📝 Macetes:</p><p class="text-xs text-amber-700 whitespace-pre-wrap">${r.recipe_notes}</p></div>` : '';
-    return `<div class="bg-white rounded-xl p-4 shadow-sm border ${isFav?'border-amber-200':'border-stone-100'} card-hover"><div class="flex items-start justify-between mb-2"><div class="flex flex-wrap gap-1.5">${isFav?'<span class="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-amber-100 text-amber-700">⭐ Favorita</span>':''}<span class="text-[10px] px-2 py-0.5 rounded-full font-semibold ${sectorBg}">${r.recipe_sector}</span><span class="text-[10px] px-2 py-0.5 rounded-full font-semibold ${typeBg}">${r.recipe_type}</span></div>${favBtn}</div><div class="flex justify-between items-start mb-2"><h4 class="font-semibold text-stone-800 text-sm">${r.recipe_name}</h4><div class="flex gap-1 flex-shrink-0 ml-2"><button onclick="openProductionConfirm('${r.id}', 1, 'queue')" class="px-2 py-1 btn-primary rounded-lg text-xs font-medium flex items-center gap-1"><i data-lucide="play" class="w-3 h-3"></i>Produzir</button><button onclick="editRecipe('${r.id}')" class="px-2 py-1 bg-blue-50 text-blue-700 rounded-lg text-xs font-medium hover:bg-blue-100">Editar</button><button onclick="requestDeleteRecipe('${r.id}')" class="px-2 py-1 btn-danger rounded-lg text-xs font-medium">Excluir</button></div></div><ul class="text-xs text-stone-500 space-y-0.5 mb-2">${ingredients.map(i=>`<li>• ${fmtQty(i.qty,i.unit)} ${i.unit} de ${i.name}</li>`).join('')}</ul><p class="text-xs text-amber-700 font-semibold">Rendimento: ${r.recipe_yield} ${r.recipe_yield_unit}</p>${notes}</div>`;
+    return `<div class="bg-white rounded-xl p-4 shadow-sm border ${isFav?'border-amber-200':'border-stone-100'} card-hover"><div class="flex items-start justify-between mb-2"><div class="flex flex-wrap gap-1.5">${isFav?'<span class="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-amber-100 text-amber-700">⭐ Favorita</span>':''}<span class="text-[10px] px-2 py-0.5 rounded-full font-semibold ${sectorBg}">${r.recipe_sector}</span><span class="text-[10px] px-2 py-0.5 rounded-full font-semibold ${typeBg}">${r.recipe_type}</span></div>${favBtn}</div><div class="flex justify-between items-start mb-2"><h4 class="font-semibold text-stone-800 text-sm">${r.recipe_name}</h4><div class="flex gap-1 flex-shrink-0 ml-2">${(r.recipe_type==='Insumo'||r.recipe_type==='Produção')?`<button onclick="queueProductionDirect('${r.id}')" class="px-2 py-1 btn-primary rounded-lg text-xs font-medium flex items-center gap-1"><i data-lucide="play" class="w-3 h-3"></i>Produzir</button>`:''}<button onclick="editRecipe('${r.id}')" class="px-2 py-1 bg-blue-50 text-blue-700 rounded-lg text-xs font-medium hover:bg-blue-100">Editar</button><button onclick="requestDeleteRecipe('${r.id}')" class="px-2 py-1 btn-danger rounded-lg text-xs font-medium">Excluir</button></div></div><ul class="text-xs text-stone-500 space-y-0.5 mb-2">${ingredients.map(i=>`<li>• ${fmtQty(i.qty,i.unit)} ${i.unit} de ${i.name}</li>`).join('')}</ul><p class="text-xs text-amber-700 font-semibold">Rendimento: ${r.recipe_yield} ${r.recipe_yield_unit}</p>${notes}</div>`;
   }).join('');
 }
 async function toggleFavorite(id) {
@@ -1833,6 +1833,13 @@ async function handleAddRecipe(e) {
 // ============================================================
 // PRODUÇÃO
 // ============================================================
+// Botão "Produzir" da aba Receitas: manda direto pra Produções Pendentes, sem popup.
+// A confirmação de fato acontece depois, quando a pessoa clicar em "Produzir" no card
+// da produção pendente (que aí sim abre a tela de finalizar/confirmar).
+async function queueProductionDirect(recipeId) {
+  const recipe = allData.find(r => r.id === recipeId); if (!recipe) return;
+  await createProduction(recipe);
+}
 function sendToProduction(recipeId) {
   const recipe = allData.find(r => r.id === recipeId); if (!recipe) return;
   if (recipe.recipe_type !== 'Produção') { showToast('Apenas receitas tipo Produção', true); return; }
@@ -1913,7 +1920,57 @@ function renderPendingProductions() {
   if (pending.length===0) { el.innerHTML = '<p class="text-stone-400 text-center py-6 text-sm">Nenhuma produção pendente</p>'; return; }
   el.innerHTML = pending.map(p => {
     let ingredients=[]; try{ingredients=JSON.parse(p.recipe_ingredients);}catch(e){}
-    return `<div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 card-hover"><div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"><div><h4 class="font-semibold text-stone-800">${p.recipe_name}</h4><p class="text-xs text-stone-400 mt-0.5">Rendimento esperado: ${p.recipe_yield} ${p.recipe_yield_unit}</p><ul class="text-xs text-stone-500 mt-1">${ingredients.map(i=>`<li>• ${fmtQty(i.qty,i.unit)} ${i.unit} ${i.name}</li>`).join('')}</ul></div><div class="flex gap-2 flex-shrink-0"><button onclick="openFinalize('${p.id}')" class="btn-success px-4 py-2 rounded-lg text-xs font-medium">✓ Finalizar</button><button onclick="removePendingProduction('${p.id}')" class="btn-danger px-3 py-2 rounded-lg text-xs font-medium">Remover</button></div></div></div>`;
+
+    // Acha o item vinculado (insumo produzido internamente OU produto pronto) pra mostrar nível de estoque, igual às Sugestões
+    let target = null;
+    if (p.recipe_type === 'Insumo') target = getProducts().find(x => x.linked_recipe_id === p.production_recipe_id);
+    else target = getFinishedProducts().find(f => f.product_name === (p.recipe_product_name || p.recipe_name));
+
+    const actions = `<div class="flex gap-2 flex-shrink-0"><button onclick="openFinalize('${p.id}')" class="btn-primary px-3 py-1.5 rounded-lg text-xs flex-shrink-0 font-medium flex items-center gap-1"><i data-lucide="play" class="w-3 h-3"></i>Produzir</button><button onclick="removePendingProduction('${p.id}')" class="btn-danger px-3 py-1.5 rounded-lg text-xs font-medium">Remover</button></div>`;
+    const ingList = `<ul class="text-xs text-stone-500 mt-2 space-y-0.5">${ingredients.map(i=>`<li>• ${fmtQty(i.qty,i.unit)} ${i.unit} ${i.name}</li>`).join('')}</ul>`;
+
+    if (!target) {
+      // Sem item vinculado encontrado — mostra versão simples (mesmo assim com o botão Produzir/Finalizar)
+      return `<div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 card-hover"><div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3"><div class="flex-1 min-w-0"><h4 class="font-semibold text-stone-800">${p.recipe_name}</h4><p class="text-xs text-stone-400 mt-0.5">Rendimento esperado: ${p.recipe_yield} ${p.recipe_yield_unit}</p>${ingList}</div>${actions}</div></div>`;
+    }
+
+    const current = target.quantity;
+    const comfortable = target.comfortable_stock || 0;
+    const critical = target.critical_stock || 0;
+    const unit = target.unit;
+    const urgency = current === 0 ? ['🔴','bg-red-50 border-red-200','text-red-700','Acabou'] :
+                    current <= critical ? ['🔴','bg-red-50 border-red-200','text-red-700','Crítico'] :
+                    current <= (target.min_stock||0) ? ['🟡','bg-amber-50 border-amber-200','text-amber-700','Baixo'] :
+                    ['🟢','bg-emerald-50 border-emerald-200','text-emerald-700','OK'];
+    const pct = comfortable > 0 ? Math.min(100, Math.round((current / comfortable) * 100)) : 0;
+    const barColor = current === 0 ? 'bg-red-500' : current <= critical ? 'bg-red-400' : current <= (target.min_stock||0) ? 'bg-amber-400' : 'bg-emerald-400';
+
+    return `<div class="bg-white rounded-xl p-4 shadow-sm border ${urgency[1]} card-hover">
+      <div class="flex items-start justify-between gap-3 mb-3">
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="font-semibold text-stone-800 text-sm">${target.product_name}</span>
+            <span class="text-[10px] px-2 py-0.5 rounded-full font-semibold ${urgency[1].replace('border-','').replace(' border','').replace('bg-','').replace('50','100')} ${urgency[2]}">${urgency[0]} ${urgency[3]}</span>
+          </div>
+          <p class="text-xs text-stone-400 mt-0.5">Receita: ${p.recipe_name} · rendimento esperado: ${fmtQty(p.recipe_yield,p.recipe_yield_unit)} ${p.recipe_yield_unit}</p>
+        </div>
+        ${actions}
+      </div>
+      <div class="mb-1">
+        <div class="flex justify-between text-xs text-stone-500 mb-1">
+          <span>Estoque atual</span>
+          <span>Meta confortável</span>
+        </div>
+        <div class="h-2 bg-stone-100 rounded-full overflow-hidden">
+          <div class="h-2 rounded-full ${barColor} transition-all" style="width:${pct}%"></div>
+        </div>
+        <div class="flex justify-between text-xs mt-1">
+          <span class="font-bold ${urgency[2]}">${fmtQty(current, unit)} ${unit}</span>
+          <span class="text-stone-500">${fmtQty(comfortable, unit)} ${unit}</span>
+        </div>
+      </div>
+      ${ingList}
+    </div>`;
   }).join('');
 }
 async function removePendingProduction(id) {
@@ -2314,6 +2371,7 @@ function showBulkMatchPreview(items) {
   
   document.getElementById('bulk-sales-textarea').classList.add('hidden');
   document.getElementById('bulk-drop-zone').classList.add('hidden');
+  document.getElementById('bulk-manual-actions').classList.add('hidden');
   document.querySelector('#sales-bulk-section > p:nth-of-type(2)').classList.add('hidden');
   
   let preview = document.getElementById('bulk-match-preview');
@@ -2332,6 +2390,7 @@ function cancelBulkMatch() {
   if (preview) preview.classList.add('hidden');
   document.getElementById('bulk-sales-textarea').classList.remove('hidden');
   document.getElementById('bulk-drop-zone').classList.remove('hidden');
+  document.getElementById('bulk-manual-actions').classList.remove('hidden');
   document.querySelector('#sales-bulk-section > p:nth-of-type(2)').classList.remove('hidden');
   clearBulkSalesForm();
 }
@@ -2355,6 +2414,7 @@ async function confirmBulkMatch() {
   await processBulkSales();
   
   document.getElementById('bulk-drop-zone').classList.remove('hidden');
+  document.getElementById('bulk-manual-actions').classList.remove('hidden');
   document.querySelector('#sales-bulk-section > p:nth-of-type(2)').classList.remove('hidden');
 }
 
@@ -2409,34 +2469,21 @@ async function processBulkSales() {
 // PERDAS
 // ============================================================
 function updateLossProductOptions() {
-  const finished = getFinishedProducts();
-  const products = getProducts();
-  const lossType = document.getElementById('loss-type')?.value;
-  const sel = document.getElementById('loss-product');
-  if (lossType === 'finished') sel.innerHTML = '<option value="">Selecione o produto pronto</option>' + finished.map(f=>`<option value="finished_${f.id}" data-name="${f.product_name}" data-unit="${f.unit}" data-qty="${f.quantity}">${f.product_name} (${f.unit})</option>`).join('');
-  else if (lossType === 'product') sel.innerHTML = '<option value="">Selecione o insumo</option>' + products.map(p=>`<option value="product_${p.id}" data-name="${p.product_name}" data-unit="${p.unit}" data-qty="${p.quantity}">${p.product_name} (${p.unit})</option>`).join('');
-  else sel.innerHTML = '<option value="">Selecione um tipo de perda primeiro</option>';
-  document.getElementById('loss-available').value = '—';
-  document.getElementById('loss-quantity').value = '';
-  document.getElementById('loss-unit').innerHTML = '';
+  const products = getProducts().sort((a,b) => a.product_name.localeCompare(b.product_name));
+  const sel = document.getElementById('loss-product'); if (!sel) return;
+  const val = sel.value;
+  sel.innerHTML = '<option value="">Selecione o insumo</option>' + products.map(p=>`<option value="${p.id}" data-name="${p.product_name}" data-unit="${p.unit}" data-qty="${p.quantity}">${p.product_name} (${p.unit})</option>`).join('');
+  sel.value = val;
 }
 document.getElementById('loss-product')?.addEventListener('change', (e) => {
   const opt = e.target.selectedOptions[0];
   document.getElementById('loss-available').value = opt&&opt.dataset.qty ? `${fmtQty(parseFloat(opt.dataset.qty),opt.dataset.unit)} ${opt.dataset.unit}` : '—';
-  const lossType = document.getElementById('loss-type')?.value;
   const unitSel = document.getElementById('loss-unit');
-  if (opt && opt.value && lossType === 'product') {
-    const productId = opt.value.replace('product_','');
-    populateUnitSelect(unitSel, productId);
-  } else if (opt && opt.dataset.unit) {
-    unitSel.innerHTML = `<option value="${opt.dataset.unit}" selected>${opt.dataset.unit}</option>`;
-  } else {
-    unitSel.innerHTML = '';
-  }
+  if (opt && opt.value) populateUnitSelect(unitSel, opt.value);
+  else unitSel.innerHTML = '';
 });
 function resetLossForm() {
-  document.getElementById('loss-type').value = '';
-  document.getElementById('loss-product').innerHTML = '<option value="">Selecione um tipo de perda primeiro</option>';
+  updateLossProductOptions();
   document.getElementById('loss-quantity').value = '';
   document.getElementById('loss-reason').value = '';
   document.getElementById('loss-available').value = '—';
@@ -2445,35 +2492,21 @@ function resetLossForm() {
 }
 async function handleRegisterLoss(e) {
   e.preventDefault();
-  const lossType = document.getElementById('loss-type').value;
-  const productValue = document.getElementById('loss-product').value;
+  const productId = document.getElementById('loss-product').value;
   const chosenUnit = document.getElementById('loss-unit').value;
   const qty = parseFloat(document.getElementById('loss-quantity').value);
   const reason = document.getElementById('loss-reason').value.trim();
   const errorEl = document.getElementById('loss-error');
   errorEl.classList.add('hidden');
-  if (!lossType||!productValue||!qty||qty<=0) { errorEl.textContent='Preencha todos os campos obrigatórios'; errorEl.classList.remove('hidden'); return; }
-  if (lossType === 'finished') {
-    const finishedId = productValue.replace('finished_','');
-    const finished = allData.find(r => r.id === finishedId);
-    if (!finished) { errorEl.textContent='Produto não encontrado'; errorEl.classList.remove('hidden'); return; }
-    const baseUnit = finished.storage_unit || finished.unit;
-    const unit = chosenUnit || baseUnit;
-    const storageQty = convertQuantity(qty, unit, baseUnit, getCustomConversions(finished));
-    if (storageQty > finished.quantity) { errorEl.textContent=`Quantidade indisponível. Estoque: ${fmtQty(finished.quantity,finished.unit)} ${finished.unit}`; errorEl.classList.remove('hidden'); return; }
-    await dbUpdate({...finished, quantity: Math.max(0, finished.quantity - storageQty)});
-    await dbCreate({ ...blankRecord(), type:'movement', movement_type:'perda', movement_product:finished.product_name, movement_quantity:qty, movement_date:new Date().toISOString(), movement_note:reason?`Perda: ${fmtQty(qty,unit)} ${unit} ${finished.product_name} (${reason})`:`Perda: ${fmtQty(qty,unit)} ${unit} ${finished.product_name}`, loss_reason:reason, loss_type:'finished' });
-  } else if (lossType === 'product') {
-    const productId = productValue.replace('product_','');
-    const product = allData.find(r => r.id === productId);
-    if (!product) { errorEl.textContent='Insumo não encontrado'; errorEl.classList.remove('hidden'); return; }
-    const baseUnit = product.storage_unit || product.unit;
-    const unit = chosenUnit || baseUnit;
-    const storageQty = convertQuantity(qty, unit, baseUnit, getCustomConversions(product));
-    if (storageQty > product.quantity) { errorEl.textContent=`Quantidade indisponível. Estoque: ${fmtQty(product.quantity,product.unit)} ${product.unit}`; errorEl.classList.remove('hidden'); return; }
-    await dbUpdate({...product, quantity: Math.max(0, product.quantity - storageQty)});
-    await dbCreate({ ...blankRecord(), type:'movement', movement_type:'perda', movement_product:product.product_name, movement_quantity:qty, movement_date:new Date().toISOString(), movement_note:reason?`Perda: ${fmtQty(qty,unit)} ${unit} ${product.product_name} (${reason})`:`Perda: ${fmtQty(qty,unit)} ${unit} ${product.product_name}`, loss_reason:reason, loss_type:'product' });
-  }
+  if (!productId||!qty||qty<=0) { errorEl.textContent='Preencha todos os campos obrigatórios'; errorEl.classList.remove('hidden'); return; }
+  const product = allData.find(r => r.id === productId);
+  if (!product) { errorEl.textContent='Insumo não encontrado'; errorEl.classList.remove('hidden'); return; }
+  const baseUnit = product.storage_unit || product.unit;
+  const unit = chosenUnit || baseUnit;
+  const storageQty = convertQuantity(qty, unit, baseUnit, getCustomConversions(product));
+  if (storageQty > product.quantity) { errorEl.textContent=`Quantidade indisponível. Estoque: ${fmtQty(product.quantity,product.unit)} ${product.unit}`; errorEl.classList.remove('hidden'); return; }
+  await dbUpdate({...product, quantity: Math.max(0, product.quantity - storageQty)});
+  await dbCreate({ ...blankRecord(), type:'movement', movement_type:'perda', movement_product:product.product_name, movement_quantity:qty, movement_date:new Date().toISOString(), movement_note:reason?`Perda: ${fmtQty(qty,unit)} ${unit} ${product.product_name} (${reason})`:`Perda: ${fmtQty(qty,unit)} ${unit} ${product.product_name}`, loss_reason:reason, loss_type:'product' });
   showToast('Perda registrada!'); resetLossForm();
 }
 function renderLosses() {
