@@ -411,41 +411,62 @@
 
   <!-- CONSUMO -->
   <section id="panel-consumo" class="hidden fade-in">
-    <h2 class="text-lg font-bold text-stone-800 mb-4 flex items-center gap-2">📊 Consumo do Dia</h2>
-    <div class="flex flex-wrap gap-2 mb-4">
-      <button class="consumption-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-800 text-white" data-filter="today">Hoje</button>
-      <button class="consumption-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-filter="7days">Últimos 7 dias</button>
-      <button class="consumption-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-filter="30days">Últimos 30 dias</button>
-      <button class="consumption-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-filter="custom">Personalizado</button>
-    </div>
-    <div id="custom-date-form" class="hidden bg-white rounded-xl p-4 shadow-sm border border-stone-100 mb-4">
-      <div class="grid sm:grid-cols-2 gap-3">
-        <div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-2">Data Específica</label><input id="custom-single-date" type="date" class="w-full input-field text-sm"><button onclick="applyCustomSingleDate()" class="mt-2 w-full btn-primary px-3 py-2 rounded-lg text-xs font-medium">Aplicar</button></div>
-        <div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-2">Período</label><div class="flex gap-2 mb-2"><input id="custom-date-from" type="date" class="flex-1 input-field text-sm"><input id="custom-date-to" type="date" class="flex-1 input-field text-sm"></div><button onclick="applyCustomDateRange()" class="w-full btn-primary px-3 py-2 rounded-lg text-xs font-medium">Aplicar</button></div>
+    <h2 class="text-lg font-bold text-stone-800 mb-4 flex items-center gap-2">📊 Consumo</h2>
+
+    <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 mb-4 space-y-3">
+      <div>
+        <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-1.5">Período</p>
+        <div class="flex flex-wrap gap-1.5">
+          <button class="consumption-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-800 text-white" data-filter="today">Hoje</button>
+          <button class="consumption-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-filter="7days">7 dias</button>
+          <button class="consumption-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-filter="30days">30 dias</button>
+          <button class="consumption-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-filter="custom">Personalizado</button>
+        </div>
+      </div>
+      <div id="custom-date-form" class="hidden bg-stone-50 rounded-lg p-3 border border-stone-200">
+        <div class="grid sm:grid-cols-2 gap-3">
+          <div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-2">Data Específica</label><input id="custom-single-date" type="date" class="w-full input-field text-sm"><button onclick="applyCustomSingleDate()" class="mt-2 w-full btn-primary px-3 py-2 rounded-lg text-xs font-medium">Aplicar</button></div>
+          <div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-2">Período</label><div class="flex gap-2 mb-2"><input id="custom-date-from" type="date" class="flex-1 input-field text-sm"><input id="custom-date-to" type="date" class="flex-1 input-field text-sm"></div><button onclick="applyCustomDateRange()" class="w-full btn-primary px-3 py-2 rounded-lg text-xs font-medium">Aplicar</button></div>
+        </div>
+      </div>
+      <div class="flex flex-wrap items-center gap-4 pt-1 border-t border-stone-100">
+        <div class="flex items-center gap-1.5"><button class="consumption-mode-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-800 text-white" data-mode="total">Total</button><button class="consumption-mode-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-mode="average">📈 Média/dia</button></div>
+        <div class="flex items-center gap-1.5"><button class="consumption-view-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-800 text-white" data-view="all">Lista</button><button class="consumption-view-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-view="grouped">Por categoria</button></div>
+      </div>
+      <div>
+        <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-1.5">Dias de funcionamento considerados</p>
+        <div id="consumption-weekday-filters" class="flex flex-wrap gap-1.5">
+          <button class="consumption-weekday-btn px-2.5 py-1 rounded-lg text-xs font-medium bg-stone-800 text-white" data-weekday="0">Dom</button>
+          <button class="consumption-weekday-btn px-2.5 py-1 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-weekday="1">Seg</button>
+          <button class="consumption-weekday-btn px-2.5 py-1 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-weekday="2">Ter</button>
+          <button class="consumption-weekday-btn px-2.5 py-1 rounded-lg text-xs font-medium bg-stone-800 text-white" data-weekday="3">Qua</button>
+          <button class="consumption-weekday-btn px-2.5 py-1 rounded-lg text-xs font-medium bg-stone-800 text-white" data-weekday="4">Qui</button>
+          <button class="consumption-weekday-btn px-2.5 py-1 rounded-lg text-xs font-medium bg-stone-800 text-white" data-weekday="5">Sex</button>
+          <button class="consumption-weekday-btn px-2.5 py-1 rounded-lg text-xs font-medium bg-stone-800 text-white" data-weekday="6">Sáb</button>
+        </div>
+        <p id="consumption-avg-info" class="hidden text-xs text-stone-500 mt-1.5"></p>
       </div>
     </div>
-    <div class="flex flex-wrap gap-2 mb-4">
-      <button class="consumption-view-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-800 text-white" data-view="all">Todos os Insumos</button>
-      <button class="consumption-view-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-view="grouped">Agrupar por Categoria</button>
-    </div>
-    <div class="flex flex-wrap gap-2 mb-2">
-      <button class="consumption-mode-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-800 text-white" data-mode="total">Total do Período</button>
-      <button class="consumption-mode-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-mode="average">📈 Média Diária</button>
-    </div>
-    <div id="consumption-weekday-filters" class="hidden flex flex-wrap gap-2 mb-4">
-      <button class="consumption-weekday-btn px-3 py-1 rounded-lg text-xs font-medium bg-stone-800 text-white" data-weekday="all">Todos os dias</button>
-      <button class="consumption-weekday-btn px-3 py-1 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-weekday="0">Domingo</button>
-      <button class="consumption-weekday-btn px-3 py-1 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-weekday="1">Segunda</button>
-      <button class="consumption-weekday-btn px-3 py-1 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-weekday="2">Terça</button>
-      <button class="consumption-weekday-btn px-3 py-1 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-weekday="3">Quarta</button>
-      <button class="consumption-weekday-btn px-3 py-1 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-weekday="4">Quinta</button>
-      <button class="consumption-weekday-btn px-3 py-1 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-weekday="5">Sexta</button>
-      <button class="consumption-weekday-btn px-3 py-1 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-weekday="6">Sábado</button>
-    </div>
-    <div id="consumption-avg-info" class="hidden text-xs text-stone-500 mb-3"></div>
-    <div id="consumption-list" class="space-y-3"></div>
+
+    <p class="text-xs text-stone-400 mb-2 px-1">Toque num insumo pra ver o gráfico e onde ele é mais usado.</p>
+    <div id="consumption-list" class="space-y-2"></div>
     <div id="consumption-empty" class="hidden text-stone-400 text-center py-8 text-sm">Nenhum consumo registrado neste período</div>
   </section>
+
+  <!-- MODAL: Detalhe de Consumo por Insumo -->
+  <div id="consumption-detail-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl p-6 w-full max-w-lg shadow-2xl max-h-[85vh] overflow-y-auto">
+      <div class="flex items-start justify-between mb-1 gap-2">
+        <h3 class="font-bold text-stone-800 text-lg" id="consumption-detail-name"></h3>
+        <button onclick="closeConsumptionDetail()" class="text-stone-400 hover:text-stone-600 text-2xl leading-none flex-shrink-0">×</button>
+      </div>
+      <p class="text-sm text-amber-700 font-semibold mb-4" id="consumption-detail-total"></p>
+      <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-2">Consumo por dia</p>
+      <div id="consumption-detail-chart" class="mb-5"></div>
+      <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-2">Onde é mais usado</p>
+      <div id="consumption-detail-sources" class="space-y-2.5"></div>
+    </div>
+  </div>
 
   <!-- HISTÓRICO -->
   <section id="panel-historico" class="hidden fade-in">
@@ -685,7 +706,9 @@ let pendingDeleteType = null;
 let activeConsumptionFilter = 'today';
 let activeConsumptionView = 'all';
 let activeConsumptionMode = 'total';
-let activeConsumptionWeekday = 'all';
+let activeConsumptionWeekdays = new Set([0,3,4,5,6]); // Dom, Qua, Qui, Sex, Sáb (padrão: dias de funcionamento)
+let consumptionMapCache = {};
+let consumptionRangeStart = null, consumptionRangeEnd = null;
 let consumptionCustomStartDate = null;
 let consumptionCustomEndDate = null;
 
@@ -2693,14 +2716,22 @@ document.addEventListener('click', (e) => {
   const btn = e.target.closest('.consumption-mode-btn'); if (!btn) return;
   activeConsumptionMode = btn.dataset.mode;
   document.querySelectorAll('.consumption-mode-btn').forEach(b => { b.className = `consumption-mode-btn px-3 py-1.5 rounded-lg text-xs font-medium ${b.dataset.mode===activeConsumptionMode?'bg-stone-800 text-white':'bg-stone-100 text-stone-600 hover:bg-stone-200'}`; });
-  document.getElementById('consumption-weekday-filters').classList.toggle('hidden', activeConsumptionMode !== 'average');
   renderConsumption();
 });
 document.addEventListener('click', (e) => {
   const btn = e.target.closest('.consumption-weekday-btn'); if (!btn) return;
-  activeConsumptionWeekday = btn.dataset.weekday;
-  document.querySelectorAll('.consumption-weekday-btn').forEach(b => { b.className = `consumption-weekday-btn px-3 py-1 rounded-lg text-xs font-medium ${b.dataset.weekday===activeConsumptionWeekday?'bg-stone-800 text-white':'bg-stone-100 text-stone-600 hover:bg-stone-200'}`; });
+  const wd = btn.dataset.weekday;
+  if (activeConsumptionWeekdays.has(Number(wd))) {
+    if (activeConsumptionWeekdays.size > 1) activeConsumptionWeekdays.delete(Number(wd));
+  } else {
+    activeConsumptionWeekdays.add(Number(wd));
+  }
+  document.querySelectorAll('.consumption-weekday-btn').forEach(b => { const active = activeConsumptionWeekdays.has(Number(b.dataset.weekday)); b.className = `consumption-weekday-btn px-2.5 py-1 rounded-lg text-xs font-medium ${active?'bg-stone-800 text-white':'bg-stone-100 text-stone-600 hover:bg-stone-200'}`; });
   renderConsumption();
+});
+document.addEventListener('click', (e) => {
+  const row = e.target.closest('.consumption-row'); if (!row) return;
+  openConsumptionDetail(decodeURIComponent(row.dataset.key));
 });
 function applyCustomSingleDate() {
   const date = document.getElementById('custom-single-date').value; if (!date) { showToast('Selecione uma data', true); return; }
@@ -2727,16 +2758,26 @@ function renderConsumption() {
   else if (activeConsumptionFilter==='30days') { startDate.setDate(startDate.getDate()-30); startDate.setHours(0,0,0,0); }
   else if (activeConsumptionFilter==='custom') { startDate=consumptionCustomStartDate; endDate=consumptionCustomEndDate; }
   if (!startDate||!endDate) return;
+  consumptionRangeStart = startDate; consumptionRangeEnd = endDate;
   const isAverage = activeConsumptionMode==='average';
-  const weekdayFilter = activeConsumptionWeekday;
-  let relevantMovements = getMovements().filter(m=>{const moveDate=new Date(m.movement_date);return(m.movement_type==='venda'||m.movement_type==='producao')&&moveDate>=startDate&&moveDate<=endDate;});
-  if (isAverage && weekdayFilter!=='all') {
-    relevantMovements = relevantMovements.filter(m=>new Date(m.movement_date).getDay()===Number(weekdayFilter));
-  }
+  // Só considera movimentos nos dias da semana marcados como "de funcionamento" — isso já evita contar
+  // segunda/terça (fechado) tanto no total quanto na média.
+  let relevantMovements = getMovements().filter(m=>{
+    const moveDate=new Date(m.movement_date);
+    return (m.movement_type==='venda'||m.movement_type==='producao') && moveDate>=startDate && moveDate<=endDate && activeConsumptionWeekdays.has(moveDate.getDay());
+  });
   const consumptionMap = {};
+  function addConsumption(name, qty, unit, category, dateStr, sourceLabel) {
+    const key = `${name}|||${unit}`;
+    if (!consumptionMap[key]) consumptionMap[key] = {name, qty:0, unit, category, daily:{}, sources:{}};
+    consumptionMap[key].qty += qty;
+    consumptionMap[key].daily[dateStr] = (consumptionMap[key].daily[dateStr]||0) + qty;
+    consumptionMap[key].sources[sourceLabel] = (consumptionMap[key].sources[sourceLabel]||0) + qty;
+  }
   for (const m of relevantMovements) {
-    let batchItems=[]; try{batchItems=JSON.parse(m.batch_items||'[]');}catch(e){}
+    const dateStr = new Date(m.movement_date).toISOString().slice(0,10);
     if (m.movement_type==='venda') {
+      let batchItems=[]; try{batchItems=JSON.parse(m.batch_items||'[]');}catch(e){}
       for (const item of batchItems) {
         if (item.value&&item.value.startsWith('recipe_')) {
           const recipeId = item.value.replace('recipe_','');
@@ -2747,9 +2788,7 @@ function renderConsumption() {
               const prod = getProducts().find(p=>p.product_name===ing.name);
               const finalUnit = ing.storage_unit||ing.unit;
               const totalQty = convertQuantity(ing.qty*(item.qty||1), ing.unit, finalUnit, getCustomConversions(prod));
-              const key = `${ing.name}|||${finalUnit}`;
-              if (!consumptionMap[key]) consumptionMap[key]={name:ing.name,qty:0,unit:finalUnit,category:prod?prod.category:''};
-              consumptionMap[key].qty += totalQty;
+              addConsumption(ing.name, totalQty, finalUnit, prod?prod.category:'', dateStr, `🛒 Venda: ${recipe.recipe_name}`);
             }
           }
         }
@@ -2760,48 +2799,89 @@ function renderConsumption() {
         const prod = getProducts().find(p=>p.product_name===ing.name);
         const finalUnit = ing.storage_unit||ing.unit;
         const totalQty = convertQuantity(ing.qty, ing.unit, finalUnit, getCustomConversions(prod));
-        const key = `${ing.name}|||${finalUnit}`;
-        if (!consumptionMap[key]) consumptionMap[key]={name:ing.name,qty:0,unit:finalUnit,category:prod?prod.category:''};
-        consumptionMap[key].qty += totalQty;
+        addConsumption(ing.name, totalQty, finalUnit, prod?prod.category:'', dateStr, `👩‍🍳 Produção: ${m.recipe_name||'—'}`);
       }
     }
   }
   const avgInfoEl = document.getElementById('consumption-avg-info');
   let dayDivisor = 1;
   if (isAverage) {
-    dayDivisor = countMatchingDays(startDate, endDate, weekdayFilter);
+    dayDivisor = countMatchingDays(startDate, endDate, activeConsumptionWeekdays);
     if (dayDivisor < 1) dayDivisor = 1;
-    const weekdayNames = {'all':'todos os dias','0':'domingos','1':'segundas-feiras','2':'terças-feiras','3':'quartas-feiras','4':'quintas-feiras','5':'sextas-feiras','6':'sábados'};
-    avgInfoEl.textContent = `Média calculada sobre ${dayDivisor} ${weekdayFilter==='all'?'dia(s)':weekdayNames[weekdayFilter]} no período selecionado.`;
+    avgInfoEl.textContent = `Média calculada sobre ${dayDivisor} dia(s) de funcionamento no período selecionado.`;
     avgInfoEl.classList.remove('hidden');
     Object.values(consumptionMap).forEach(item=>{ item.qty = item.qty / dayDivisor; });
   } else {
     avgInfoEl.classList.add('hidden');
   }
+  consumptionMapCache = consumptionMap;
   const el = document.getElementById('consumption-list');
   const emptyEl = document.getElementById('consumption-empty');
   if (Object.keys(consumptionMap).length===0) { el.innerHTML=''; emptyEl.classList.remove('hidden'); return; }
   emptyEl.classList.add('hidden');
   const suffix = isAverage ? '/dia' : '';
+  const rowHtml = (item, key) => `<div class="consumption-row flex items-center justify-between p-3 bg-stone-50 rounded-lg border border-stone-200 hover:bg-stone-100 hover:border-amber-300 cursor-pointer transition-colors" data-key="${encodeURIComponent(key)}"><span class="font-medium text-stone-700">${item.name}</span><span class="font-bold text-stone-800 flex items-center gap-1.5">${fmtQty(item.qty,item.unit)} ${item.unit}${suffix}<i data-lucide="chevron-right" class="w-4 h-4 text-stone-400"></i></span></div>`;
   if (activeConsumptionView==='all') {
-    el.innerHTML = Object.values(consumptionMap).sort((a,b)=>a.name.localeCompare(b.name)).map(item=>`<div class="flex items-center justify-between p-3 bg-stone-50 rounded-lg border border-stone-200"><span class="font-medium text-stone-700">${item.name}</span><span class="font-bold text-stone-800">${fmtQty(item.qty,item.unit)} ${item.unit}${suffix}</span></div>`).join('');
+    el.innerHTML = Object.entries(consumptionMap).sort((a,b)=>b[1].qty-a[1].qty).map(([key,item])=>rowHtml(item,key)).join('');
   } else {
     const grouped = {};
-    Object.values(consumptionMap).forEach(item=>{const cat=item.category||'Sem categoria';if(!grouped[cat])grouped[cat]=[];grouped[cat].push(item);});
-    el.innerHTML = ['Café','Cozinha','Drinks','Limpeza','Utensílios'].filter(c=>grouped[c]).map(cat=>`<div class="mb-4"><h4 class="font-bold text-sm text-stone-800 mb-2 pb-2 border-b border-stone-300">${cat}</h4><div class="space-y-2">${grouped[cat].map(item=>`<div class="flex items-center justify-between p-2.5 bg-stone-50 rounded-lg border border-stone-200"><span class="text-sm text-stone-700">${item.name}</span><span class="font-semibold text-stone-800">${fmtQty(item.qty,item.unit)} ${item.unit}${suffix}</span></div>`).join('')}</div></div>`).join('');
+    Object.entries(consumptionMap).forEach(([key,item])=>{const cat=item.category||'Sem categoria';if(!grouped[cat])grouped[cat]=[];grouped[cat].push([key,item]);});
+    el.innerHTML = ['Café','Cozinha','Drinks','Limpeza','Utensílios','Sem categoria'].filter(c=>grouped[c]).map(cat=>`<div class="mb-4"><h4 class="font-bold text-sm text-stone-800 mb-2 pb-2 border-b border-stone-300">${cat}</h4><div class="space-y-2">${grouped[cat].sort((a,b)=>b[1].qty-a[1].qty).map(([key,item])=>rowHtml(item,key)).join('')}</div></div>`).join('');
   }
+  lucide.createIcons();
 }
-function countMatchingDays(startDate, endDate, weekdayFilter) {
+function countMatchingDays(startDate, endDate, weekdaysSet) {
   const start = new Date(startDate.getFullYear(),startDate.getMonth(),startDate.getDate());
   const end = new Date(endDate.getFullYear(),endDate.getMonth(),endDate.getDate());
   let count = 0;
   const d = new Date(start);
   while (d <= end) {
-    if (weekdayFilter==='all' || d.getDay()===Number(weekdayFilter)) count++;
+    if (weekdaysSet.has(d.getDay())) count++;
     d.setDate(d.getDate()+1);
   }
   return count;
 }
+// Gráfico de barras simples (SVG) do consumo dia a dia — só considera os dias de funcionamento marcados.
+function buildConsumptionChartSVG(dailyMap, startDate, endDate, weekdaysSet, unit) {
+  const days = [];
+  const d = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+  const end = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+  while (d <= end) {
+    if (weekdaysSet.has(d.getDay())) {
+      const key = d.toISOString().slice(0,10);
+      days.push({date:new Date(d), key, qty: dailyMap[key]||0});
+    }
+    d.setDate(d.getDate()+1);
+  }
+  if (days.length===0) return '<p class="text-xs text-stone-400">Sem dados suficientes pra gráfico.</p>';
+  const max = Math.max(...days.map(x=>x.qty), 0.0001);
+  const barW = 22, gap = 6, chartH = 100;
+  const width = days.length*(barW+gap)+gap;
+  const bars = days.map((x,i)=>{
+    const h = Math.max(2, Math.round((x.qty/max)*chartH));
+    const xPos = gap + i*(barW+gap);
+    const label = `${x.date.getDate()}/${x.date.getMonth()+1}`;
+    return `<g><title>${label}: ${fmtQty(x.qty,unit)} ${unit}</title><rect x="${xPos}" y="${chartH-h+16}" width="${barW}" height="${h}" rx="3" fill="${x.qty>0?'#d97706':'#e7e5e4'}"></rect><text x="${xPos+barW/2}" y="${chartH+30}" font-size="8" fill="#78716c" text-anchor="middle">${label}</text></g>`;
+  }).join('');
+  return `<div class="overflow-x-auto -mx-1 px-1"><svg width="${width}" height="140" viewBox="0 0 ${width} 140" xmlns="http://www.w3.org/2000/svg" style="min-width:${width}px">${bars}</svg></div>`;
+}
+function openConsumptionDetail(key) {
+  const item = consumptionMapCache[key]; if (!item) return;
+  const isAverage = activeConsumptionMode==='average';
+  const suffix = isAverage ? '/dia' : '';
+  document.getElementById('consumption-detail-name').textContent = item.name;
+  document.getElementById('consumption-detail-total').textContent = `${fmtQty(item.qty, item.unit)} ${item.unit}${suffix} no período selecionado`;
+  document.getElementById('consumption-detail-chart').innerHTML = buildConsumptionChartSVG(item.daily, consumptionRangeStart, consumptionRangeEnd, activeConsumptionWeekdays, item.unit);
+  const sourcesSorted = Object.entries(item.sources).sort((a,b)=>b[1]-a[1]);
+  const sourcesTotal = sourcesSorted.reduce((s,[,q])=>s+q,0) || 1;
+  document.getElementById('consumption-detail-sources').innerHTML = sourcesSorted.length ? sourcesSorted.map(([label,qty])=>{
+    const pct = Math.round((qty/sourcesTotal)*100);
+    return `<div><div class="flex justify-between text-xs mb-1"><span class="text-stone-700">${label}</span><span class="font-semibold text-stone-800">${fmtQty(qty,item.unit)} ${item.unit} (${pct}%)</span></div><div class="h-1.5 bg-stone-100 rounded-full overflow-hidden"><div class="h-1.5 bg-amber-400 rounded-full" style="width:${pct}%"></div></div></div>`;
+  }).join('') : '<p class="text-xs text-stone-400">Sem detalhamento disponível.</p>';
+  document.getElementById('consumption-detail-modal').classList.remove('hidden');
+}
+function closeConsumptionDetail() { document.getElementById('consumption-detail-modal').classList.add('hidden'); }
+
 
 // ============================================================
 // CONFIRMAÇÃO DE EXCLUSÃO
