@@ -573,6 +573,15 @@
   </div>
 
   <!-- MODAL: Confirmar Produção -->
+  <!-- MODAL: Progresso/Carregando (bloqueia clique duplo em ações que demoram) -->
+  <div id="loading-progress-modal" class="hidden fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl p-6 w-full max-w-xs shadow-2xl text-center">
+      <div class="mx-auto mb-4 w-10 h-10 border-4 border-stone-200 border-t-amber-600 rounded-full animate-spin"></div>
+      <p class="font-semibold text-stone-800 mb-1" id="loading-progress-title">Confirmando...</p>
+      <p class="text-sm text-stone-500" id="loading-progress-detail"></p>
+    </div>
+  </div>
+
   <div id="production-confirm-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
     <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
       <h3 class="font-bold mb-1 text-stone-800 text-lg">Confirmar Produção</h3>
@@ -844,6 +853,19 @@ function getCustomConversions(product) {
     const list = JSON.parse(product.custom_conversions);
     return Array.isArray(list) ? list : [];
   } catch (e) { return []; }
+}
+// Popup de carregamento — usado em ações que fazem várias chamadas seguidas (entrada/saída em lote),
+// pra impedir clique duplo e dar feedback visual de que está processando.
+function showLoadingProgress(title) {
+  document.getElementById('loading-progress-title').textContent = title;
+  document.getElementById('loading-progress-detail').textContent = '';
+  document.getElementById('loading-progress-modal').classList.remove('hidden');
+}
+function updateLoadingProgress(detail) {
+  document.getElementById('loading-progress-detail').textContent = detail;
+}
+function hideLoadingProgress() {
+  document.getElementById('loading-progress-modal').classList.add('hidden');
 }
 // Preenche um <select> de unidade com as opções compatíveis do insumo (padrão + kg/g, L/ml + conversões personalizadas),
 // já vindo com a unidade padrão pré-selecionada.
@@ -1496,10 +1518,24 @@ async function confirmQuickEntry() {
     batchData.push({id:sel.value, name:sel.selectedOptions[0]?.dataset.name||'', unit:chosenUnit, qty, storageQty});
   }
   const user = document.getElementById('quick-batch-entry-user').value.trim();
-  for (const b of batchData) { const prod = allData.find(r => r.id === b.id); if (prod) await dbUpdate({...prod, quantity: prod.quantity + b.storageQty}); }
-  const itemList = batchData.map(b=>`${fmtQty(b.qty,b.unit)} ${b.unit} ${b.name}`).join('; ');
-  await dbCreate({ ...blankRecord(), type:'movement', movement_type:'entrada', movement_product:itemList, movement_quantity:batchData.length, movement_date:new Date().toISOString(), movement_user:user, movement_note:`Entrada: ${itemList}`, batch_items:JSON.stringify(batchData) });
-  showToast('Entrada confirmada!'); resetQuickEntry();
+  showLoadingProgress('Confirmando entrada...');
+  try {
+    let done = 0;
+    for (const b of batchData) {
+      updateLoadingProgress(`Adicionando ${done+1}/${batchData.length}: ${b.name}`);
+      const prod = allData.find(r => r.id === b.id);
+      if (prod) await dbUpdate({...prod, quantity: prod.quantity + b.storageQty});
+      done++;
+    }
+    const itemList = batchData.map(b=>`${fmtQty(b.qty,b.unit)} ${b.unit} ${b.name}`).join('; ');
+    await dbCreate({ ...blankRecord(), type:'movement', movement_type:'entrada', movement_product:itemList, movement_quantity:batchData.length, movement_date:new Date().toISOString(), movement_user:user, movement_note:`Entrada: ${itemList}`, batch_items:JSON.stringify(batchData) });
+    hideLoadingProgress();
+    showToast('Entrada confirmada!'); resetQuickEntry();
+  } catch (err) {
+    hideLoadingProgress();
+    console.error('Erro ao confirmar entrada:', err);
+    showToast('Erro ao confirmar entrada: ' + err.message, true);
+  }
 }
 function cancelQuickEntry() { resetQuickEntry(); }
 function resetQuickEntry() {
@@ -1571,10 +1607,24 @@ async function confirmBatchEntry() {
     batchData.push({id:sel.value, name:sel.selectedOptions[0]?.dataset.name||'', unit:chosenUnit, qty, storageQty});
   }
   const user = document.getElementById('batch-entry-user').value.trim();
-  for (const b of batchData) { const prod = allData.find(r => r.id === b.id); if (prod) await dbUpdate({...prod, quantity: prod.quantity + b.storageQty}); }
-  const itemList = batchData.map(b=>`${fmtQty(b.qty,b.unit)} ${b.unit} ${b.name}`).join('; ');
-  await dbCreate({ ...blankRecord(), type:'movement', movement_type:'entrada', movement_product:itemList, movement_quantity:batchData.length, movement_date:new Date().toISOString(), movement_user:user, movement_note:`Entrada: ${itemList}`, batch_items:JSON.stringify(batchData) });
-  showToast('Entrada confirmada!'); resetBatchForm();
+  showLoadingProgress('Confirmando entrada...');
+  try {
+    let done = 0;
+    for (const b of batchData) {
+      updateLoadingProgress(`Adicionando ${done+1}/${batchData.length}: ${b.name}`);
+      const prod = allData.find(r => r.id === b.id);
+      if (prod) await dbUpdate({...prod, quantity: prod.quantity + b.storageQty});
+      done++;
+    }
+    const itemList = batchData.map(b=>`${fmtQty(b.qty,b.unit)} ${b.unit} ${b.name}`).join('; ');
+    await dbCreate({ ...blankRecord(), type:'movement', movement_type:'entrada', movement_product:itemList, movement_quantity:batchData.length, movement_date:new Date().toISOString(), movement_user:user, movement_note:`Entrada: ${itemList}`, batch_items:JSON.stringify(batchData) });
+    hideLoadingProgress();
+    showToast('Entrada confirmada!'); resetBatchForm();
+  } catch (err) {
+    hideLoadingProgress();
+    console.error('Erro ao confirmar entrada:', err);
+    showToast('Erro ao confirmar entrada: ' + err.message, true);
+  }
 }
 function cancelBatchEntry() { resetBatchForm(); }
 function resetBatchForm() {
@@ -1652,10 +1702,24 @@ async function confirmManualExit() {
     if (prod.quantity < e.storageQty) { showToast(`Estoque insuficiente de ${e.name}`, true); return; }
   }
   const reason = document.getElementById('manual-exit-reason').value.trim();
-  for (const e of exitData) { const prod = allData.find(r => r.id === e.id); await dbUpdate({...prod, quantity: Math.max(0, prod.quantity - e.storageQty)}); }
-  const itemList = exitData.map(e=>`${fmtQty(e.qty,e.unit)} ${e.unit} ${e.name}`).join('; ');
-  await dbCreate({ ...blankRecord(), type:'movement', movement_type:'saida_manual', movement_product:itemList, movement_quantity:exitData.length, movement_date:new Date().toISOString(), movement_note:reason?`Saída Manual: ${itemList} (${reason})`:`Saída Manual: ${itemList}`, batch_items:JSON.stringify(exitData) });
-  showToast('Saída confirmada!'); resetManualExitForm();
+  showLoadingProgress('Confirmando saída...');
+  try {
+    let done = 0;
+    for (const e of exitData) {
+      updateLoadingProgress(`Retirando ${done+1}/${exitData.length}: ${e.name}`);
+      const prod = allData.find(r => r.id === e.id);
+      await dbUpdate({...prod, quantity: Math.max(0, prod.quantity - e.storageQty)});
+      done++;
+    }
+    const itemList = exitData.map(e=>`${fmtQty(e.qty,e.unit)} ${e.unit} ${e.name}`).join('; ');
+    await dbCreate({ ...blankRecord(), type:'movement', movement_type:'saida_manual', movement_product:itemList, movement_quantity:exitData.length, movement_date:new Date().toISOString(), movement_note:reason?`Saída Manual: ${itemList} (${reason})`:`Saída Manual: ${itemList}`, batch_items:JSON.stringify(exitData) });
+    hideLoadingProgress();
+    showToast('Saída confirmada!'); resetManualExitForm();
+  } catch (err) {
+    hideLoadingProgress();
+    console.error('Erro ao confirmar saída:', err);
+    showToast('Erro ao confirmar saída: ' + err.message, true);
+  }
 }
 function cancelManualExit() { resetManualExitForm(); }
 function resetManualExitForm() {
