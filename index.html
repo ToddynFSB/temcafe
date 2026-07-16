@@ -488,6 +488,7 @@
           <option value="ajuste_manual">Ajustes Manuais</option>
           <option value="saida_manual">Saídas Manuais</option>
           <option value="estorno_producao">Produções Canceladas</option>
+          <option value="estorno">Estornos</option>
         </select>
         <select id="filter-history-period" onchange="renderHistory()" class="input-field text-sm">
           <option value="all">Todo o período</option>
@@ -627,6 +628,20 @@
       <div class="flex gap-2">
         <button onclick="confirmCancelProduction()" class="flex-1 btn-danger px-4 py-2.5 rounded-lg text-sm font-medium">↩️ Confirmar Cancelamento</button>
         <button onclick="closeCancelProductionModal()" class="flex-1 btn-ghost px-4 py-2.5 rounded-lg text-sm font-medium">Voltar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Desfazer Movimentação (genérico — entrada, saída, perda, ajuste, venda) -->
+  <div id="undo-movement-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+      <h3 class="font-bold mb-1 text-stone-800 text-lg">↩️ Desfazer Movimentação</h3>
+      <p class="text-sm text-stone-600 mb-3" id="undo-movement-summary"></p>
+      <div id="undo-movement-details" class="bg-stone-50 rounded-lg p-3 border border-stone-200 mb-4 text-xs text-stone-600 space-y-1 max-h-40 overflow-y-auto"></div>
+      <p class="text-xs text-amber-700 mb-5">⚠️ Isso ajusta o estoque de volta e marca essa movimentação como desfeita — ela continua aparecendo no histórico, só sinalizada.</p>
+      <div class="flex gap-2">
+        <button onclick="confirmUndoMovement()" class="flex-1 btn-danger px-4 py-2.5 rounded-lg text-sm font-medium">↩️ Confirmar Desfazer</button>
+        <button onclick="closeUndoModal()" class="flex-1 btn-ghost px-4 py-2.5 rounded-lg text-sm font-medium">Voltar</button>
       </div>
     </div>
   </div>
@@ -1627,7 +1642,7 @@ async function saveEditedLevels() {
   const diff = newQty - oldQty;
   const r = await dbUpdate({...p, product_name:newName, quantity:newQty, category:cat, critical_stock:c, min_stock:m, comfortable_stock:co, linked_recipe_id:linkedRecipeId, custom_conversions:JSON.stringify(editingCustomConversions)});
   if (r.isOk) {
-    if (diff !== 0) await dbCreate({ ...blankRecord(), type:'movement', movement_type:'ajuste_manual', movement_product:newName, movement_quantity:diff, movement_date:new Date().toISOString(), movement_note:`Ajuste: ${newName} → ${fmtQty(newQty,p.unit)} ${p.unit}` });
+    if (diff !== 0) await dbCreate({ ...blankRecord(), type:'movement', movement_type:'ajuste_manual', movement_product:newName, movement_quantity:diff, movement_date:new Date().toISOString(), movement_note:`Ajuste: ${newName} → ${fmtQty(newQty,p.unit)} ${p.unit}`, batch_items:JSON.stringify([{name:newName, qty:diff, unit:p.unit, productId:p.id}]) });
     if (nameChanged) {
       const count = await renameProductInRecipes(oldName, newName);
       showToast(count > 0 ? `Insumo renomeado! ${count} receita(s) atualizada(s).` : 'Insumo renomeado!');
@@ -2445,7 +2460,9 @@ function addSalesItem() {
   renderSalesSelect();
 }
 function removeSalesItem(btn) { const parent = btn.closest('.sales-item'); if (parent.parentElement.children.length > 1) parent.remove(); }
+let salesSubmitInProgress = false;
 async function confirmSales() {
+  if (salesSubmitInProgress) { showToast('Já tem uma venda sendo processada, aguarde...', true); return; }
   const items = document.querySelectorAll('.sales-item');
   const salesData = [];
   for (const item of items) {
@@ -2472,29 +2489,45 @@ async function confirmSales() {
       }
     }
   }
-  const notesParts = [];
-  for (const s of salesData) {
-    if (s.value.startsWith('finished_')) {
-      const id = s.value.replace('finished_','');
-      const fp = allData.find(r => r.id === id);
-      await dbUpdate({...fp, quantity: fp.quantity - s.qty});
-      notesParts.push(`${s.qty} ${s.name}`);
-    } else if (s.value.startsWith('recipe_')) {
-      const id = s.value.replace('recipe_','');
-      const recipe = allData.find(r => r.id === id);
-      let ingredients=[]; try{ingredients=JSON.parse(recipe.recipe_ingredients);}catch(e){}
-      for (const ing of ingredients) {
-        const p = getProducts().find(x => x.product_name === ing.name);
-        const deduct = convertQuantity(ing.qty * s.qty, ing.unit, p.storage_unit||p.unit, getCustomConversions(p));
-        await dbUpdate({...p, quantity: Math.max(0, p.quantity - deduct)});
+  showLoadingProgress('Registrando vendas...');
+  salesSubmitInProgress = true;
+  try {
+    const notesParts = [];
+    let done = 0;
+    for (const s of salesData) {
+      updateLoadingProgress(`Processando ${done+1}/${salesData.length}: ${s.name}`);
+      if (s.value.startsWith('finished_')) {
+        const id = s.value.replace('finished_','');
+        const fp = allData.find(r => r.id === id);
+        await dbUpdate({...fp, quantity: fp.quantity - s.qty});
+        notesParts.push(`${s.qty} ${s.name}`);
+      } else if (s.value.startsWith('recipe_')) {
+        const id = s.value.replace('recipe_','');
+        const recipe = allData.find(r => r.id === id);
+        let ingredients=[]; try{ingredients=JSON.parse(recipe.recipe_ingredients);}catch(e){}
+        for (const ing of ingredients) {
+          const p = getProducts().find(x => x.product_name === ing.name);
+          const deduct = convertQuantity(ing.qty * s.qty, ing.unit, p.storage_unit||p.unit, getCustomConversions(p));
+          await dbUpdate({...p, quantity: Math.max(0, p.quantity - deduct)});
+        }
+        notesParts.push(`${s.qty} ${s.name}`);
       }
-      notesParts.push(`${s.qty} ${s.name}`);
+      done++;
     }
+    updateLoadingProgress('Salvando registro da venda...');
+    await dbCreate({ ...blankRecord(), type:'movement', movement_type:'venda', movement_product:notesParts.join('; '), movement_quantity:salesData.reduce((a,s)=>a+s.qty,0), movement_date:new Date().toISOString(), movement_note:`Venda: ${notesParts.join('; ')}`, batch_items:JSON.stringify(salesData) });
+    hideLoadingProgress();
+    salesSubmitInProgress = false;
+    showToast('Vendas registradas!');
+    document.getElementById('sales-items-container').innerHTML = '<div class="sales-item grid grid-cols-1 sm:grid-cols-3 gap-2 items-end"><select class="sales-product input-field text-sm min-w-0" required><option value="">Selecione o produto</option></select><input type="number" class="sales-qty input-field text-sm min-w-0" placeholder="Quantidade" min="1" step="1" required><button type="button" onclick="removeSalesItem(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button></div>';
+    renderSalesSelect();
+    renderSalesToday();
+  } catch (err) {
+    hideLoadingProgress();
+    salesSubmitInProgress = false;
+    console.error('Erro ao registrar vendas:', err);
+    showToast('Erro ao registrar vendas: ' + err.message, true);
   }
-  await dbCreate({ ...blankRecord(), type:'movement', movement_type:'venda', movement_product:notesParts.join('; '), movement_quantity:salesData.reduce((a,s)=>a+s.qty,0), movement_date:new Date().toISOString(), movement_note:`Venda: ${notesParts.join('; ')}`, batch_items:JSON.stringify(salesData) });
-  showToast('Vendas registradas!');
-  document.getElementById('sales-items-container').innerHTML = '<div class="sales-item grid grid-cols-1 sm:grid-cols-3 gap-2 items-end"><select class="sales-product input-field text-sm min-w-0" required><option value="">Selecione o produto</option></select><input type="number" class="sales-qty input-field text-sm min-w-0" placeholder="Quantidade" min="1" step="1" required><button type="button" onclick="removeSalesItem(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button></div>';
-  renderSalesSelect();
 }
 function renderSalesToday() {
   const today = new Date().toLocaleDateString('pt-BR');
@@ -2536,8 +2569,10 @@ function handleBulkFileUpload(event) {
         if (name.startsWith('- ')) {
           const cleanName = name.substring(2).trim();
           const qty = parseInt(row[1]);
+          const totalValueRaw = parseFloat(row[2]); // coluna "Valor Total" (R$ vendido desse item)
+          const totalValue = (!isNaN(totalValueRaw) && totalValueRaw > 0) ? totalValueRaw : null;
           if (cleanName && qty > 0) {
-            items.push({ original: cleanName, qty });
+            items.push({ original: cleanName, qty, totalValue });
           }
         }
       }
@@ -2632,16 +2667,17 @@ function showBulkMatchPreview(items) {
 
     html += `<div class="p-3 rounded-lg border ${statusClass} flex flex-col sm:flex-row sm:items-center gap-2">
       <div class="flex-1 min-w-0">
-        <div class="flex items-center gap-2 mb-1">
+        <div class="flex items-center gap-2 mb-1 flex-wrap">
           <span class="text-xs font-bold ${m.match ? 'text-emerald-700' : 'text-red-700'}">${statusIcon}</span>
           <span class="text-xs text-stone-500">Planilha:</span>
           <span class="text-sm font-medium text-stone-800 truncate">${m.original}</span>
           <span class="text-xs font-bold text-stone-600">×${m.qty}</span>
+          ${m.totalValue ? `<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">💰 ${fmtCurrency(m.totalValue)}</span>` : ''}
           ${m.fromAlias ? '<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">🔒 vínculo salvo</span>' : ''}
         </div>
         <div class="flex items-center gap-2">
           <span class="text-xs text-stone-400 ml-5">→ Sistema:</span>
-          <select class="bulk-match-select input-field text-xs py-1 px-2 flex-1" data-idx="${i}" data-qty="${m.qty}" data-original="${m.original.replace(/"/g,'&quot;')}">
+          <select class="bulk-match-select input-field text-xs py-1 px-2 flex-1" data-idx="${i}" data-qty="${m.qty}" data-original="${m.original.replace(/"/g,'&quot;')}" data-total-value="${m.totalValue||''}">
             <option value="">— Ignorar —</option>
             ${allSystemNames.sort().map(n => `<option value="${n}" ${n === m.match ? 'selected' : ''}>${n}</option>`).join('')}
           </select>
@@ -2676,10 +2712,15 @@ async function confirmBulkMatch() {
   const selects = document.querySelectorAll('.bulk-match-select');
   const salesText = [];
   const aliasesToSave = [];
+  const priceHints = [];
   for (const sel of selects) {
     if (sel.value) {
       salesText.push(sel.value + '\t' + sel.dataset.qty);
       aliasesToSave.push({ original: sel.dataset.original, systemName: sel.value });
+      const totalValue = parseFloat(sel.dataset.totalValue);
+      if (!isNaN(totalValue) && totalValue > 0) {
+        priceHints.push({ systemName: sel.value, qty: parseFloat(sel.dataset.qty), totalValue });
+      }
     }
   }
   if (salesText.length === 0) { showToast('Nenhum item selecionado', true); return; }
@@ -2689,12 +2730,15 @@ async function confirmBulkMatch() {
   document.getElementById('bulk-match-preview').innerHTML = '';
   document.getElementById('bulk-upload-form').classList.remove('hidden');
 
-  await saveSaleAliases(aliasesToSave);
-  await processBulkSales();
+  showLoadingProgress('Salvando vínculos...');
+  try { await saveSaleAliases(aliasesToSave); } catch (e) { console.error('Erro ao salvar vínculos:', e); }
+  hideLoadingProgress();
+  await processBulkSales(priceHints);
 }
 
 function clearBulkSalesForm() { document.getElementById('bulk-sales-textarea').value=''; document.getElementById('bulk-sales-feedback').classList.add('hidden'); document.getElementById('bulk-file-input').value=''; document.getElementById('bulk-file-name').classList.add('hidden'); }
-async function processBulkSales() {
+async function processBulkSales(priceHints) {
+  if (salesSubmitInProgress) { showToast('Já tem uma venda sendo processada, aguarde...', true); return; }
   const text = document.getElementById('bulk-sales-textarea').value.trim();
   if (!text) { showToast('Cole os dados das vendas', true); return; }
   const parsed = text.split('\n').map(parseBulkSalesLine).filter(Boolean);
@@ -2710,34 +2754,56 @@ async function processBulkSales() {
     else notFound.push(item.name);
   }
   if (salesData.length === 0) { showToast('Nenhum produto encontrado', true); return; }
-  const notesParts = [];
-  for (const s of salesData) {
-    if (s.value.startsWith('finished_')) {
-      const id = s.value.replace('finished_','');
-      const fp = allData.find(r => r.id === id);
-      if (!fp||fp.quantity<s.qty) { showToast(`Estoque insuficiente de ${s.name}`, true); return; }
-      await dbUpdate({...fp, quantity: fp.quantity - s.qty});
-      notesParts.push(`${s.qty} ${s.name}`);
-    } else if (s.value.startsWith('recipe_')) {
-      const id = s.value.replace('recipe_','');
-      const recipe = allData.find(r => r.id === id);
-      let ingredients=[]; try{ingredients=JSON.parse(recipe.recipe_ingredients);}catch(e){}
-      for (const ing of ingredients) {
-        const p = getProducts().find(x => x.product_name === ing.name);
-        if (!p) { showToast(`Insumo ${ing.name} não encontrado`, true); return; }
-        const deduct = convertQuantity(ing.qty*s.qty, ing.unit, p.storage_unit||p.unit, getCustomConversions(p));
-        await dbUpdate({...p, quantity: Math.max(0, p.quantity - deduct)});
+  showLoadingProgress('Processando vendas...');
+  salesSubmitInProgress = true;
+  try {
+    const notesParts = [];
+    let done = 0;
+    for (const s of salesData) {
+      updateLoadingProgress(`Processando ${done+1}/${salesData.length}: ${s.name}`);
+      if (s.value.startsWith('finished_')) {
+        const id = s.value.replace('finished_','');
+        const fp = allData.find(r => r.id === id);
+        if (!fp||fp.quantity<s.qty) { hideLoadingProgress(); salesSubmitInProgress=false; showToast(`Estoque insuficiente de ${s.name}`, true); return; }
+        await dbUpdate({...fp, quantity: fp.quantity - s.qty});
+        notesParts.push(`${s.qty} ${s.name}`);
+      } else if (s.value.startsWith('recipe_')) {
+        const id = s.value.replace('recipe_','');
+        const recipe = allData.find(r => r.id === id);
+        let ingredients=[]; try{ingredients=JSON.parse(recipe.recipe_ingredients);}catch(e){}
+        for (const ing of ingredients) {
+          const p = getProducts().find(x => x.product_name === ing.name);
+          if (!p) { hideLoadingProgress(); salesSubmitInProgress=false; showToast(`Insumo ${ing.name} não encontrado`, true); return; }
+          const deduct = convertQuantity(ing.qty*s.qty, ing.unit, p.storage_unit||p.unit, getCustomConversions(p));
+          await dbUpdate({...p, quantity: Math.max(0, p.quantity - deduct)});
+        }
+        notesParts.push(`${s.qty} ${s.name}`);
       }
-      notesParts.push(`${s.qty} ${s.name}`);
+      done++;
     }
+    updateLoadingProgress('Salvando registro da venda...');
+    await dbCreate({ ...blankRecord(), type:'movement', movement_type:'venda', movement_product:notesParts.join('; '), movement_quantity:salesData.reduce((a,s)=>a+s.qty,0), movement_date:new Date().toISOString(), movement_note:`Venda em lote: ${notesParts.join('; ')}`, batch_items:JSON.stringify(salesData) });
+    // Se veio da importação de planilha com "Valor Total", aproveita e já registra o valor de venda
+    // (pra alimentar o faturamento e a margem no CMV), sem precisar digitar preço manualmente.
+    if (priceHints && priceHints.length && financeUnlocked) {
+      updateLoadingProgress('Salvando valores de venda...');
+      try { await saveSalePrices(priceHints); } catch (e) { console.error('Erro ao salvar preços de venda:', e); }
+    }
+    const feedbackEl = document.getElementById('bulk-sales-feedback');
+    document.getElementById('bulk-feedback-title').textContent = `✓ ${salesData.length} venda(s) registrada(s)${notFound.length>0?` (${notFound.length} não encontrado(s))`:''}`;
+    document.getElementById('bulk-feedback-content').innerHTML = `<div class="p-2 bg-emerald-50 rounded border border-emerald-200"><strong class="text-emerald-700">Processados:</strong> ${salesData.map(s=>`${s.qty} ${s.name}`).join(', ')}</div>${notFound.length>0?`<div class="p-2 bg-red-50 rounded border border-red-200"><strong class="text-red-700">Não encontrados:</strong> ${notFound.join(', ')}</div>`:''}`;
+    feedbackEl.classList.remove('hidden');
+    hideLoadingProgress();
+    salesSubmitInProgress = false;
+    showToast(`${salesData.length} venda(s) processada(s)!`);
+    document.getElementById('bulk-sales-textarea').value = '';
+    renderSalesToday();
+  } catch (err) {
+    hideLoadingProgress();
+    salesSubmitInProgress = false;
+    console.error('Erro ao processar vendas:', err);
+    showToast('Erro ao processar vendas: ' + err.message, true);
   }
-  await dbCreate({ ...blankRecord(), type:'movement', movement_type:'venda', movement_product:notesParts.join('; '), movement_quantity:salesData.reduce((a,s)=>a+s.qty,0), movement_date:new Date().toISOString(), movement_note:`Venda em lote: ${notesParts.join('; ')}`, batch_items:JSON.stringify(salesData) });
-  const feedbackEl = document.getElementById('bulk-sales-feedback');
-  document.getElementById('bulk-feedback-title').textContent = `✓ ${salesData.length} venda(s) registrada(s)${notFound.length>0?` (${notFound.length} não encontrado(s))`:''}`;
-  document.getElementById('bulk-feedback-content').innerHTML = `<div class="p-2 bg-emerald-50 rounded border border-emerald-200"><strong class="text-emerald-700">Processados:</strong> ${salesData.map(s=>`${s.qty} ${s.name}`).join(', ')}</div>${notFound.length>0?`<div class="p-2 bg-red-50 rounded border border-red-200"><strong class="text-red-700">Não encontrados:</strong> ${notFound.join(', ')}</div>`:''}`;
-  feedbackEl.classList.remove('hidden');
-  showToast(`${salesData.length} venda(s) processada(s)!`);
-  document.getElementById('bulk-sales-textarea').value = '';
 }
 
 // ============================================================
@@ -2783,7 +2849,7 @@ async function handleRegisterLoss(e) {
   showLoadingProgress('Registrando perda...');
   try {
     await dbUpdate({...product, quantity: Math.max(0, product.quantity - storageQty)});
-    await dbCreate({ ...blankRecord(), type:'movement', movement_type:'perda', movement_product:product.product_name, movement_quantity:qty, movement_date:new Date().toISOString(), movement_note:reason?`Perda: ${fmtQty(qty,unit)} ${unit} ${product.product_name} (${reason})`:`Perda: ${fmtQty(qty,unit)} ${unit} ${product.product_name}`, loss_reason:reason, loss_type:'product' });
+    await dbCreate({ ...blankRecord(), type:'movement', movement_type:'perda', movement_product:product.product_name, movement_quantity:qty, movement_date:new Date().toISOString(), movement_note:reason?`Perda: ${fmtQty(qty,unit)} ${unit} ${product.product_name} (${reason})`:`Perda: ${fmtQty(qty,unit)} ${unit} ${product.product_name}`, loss_reason:reason, loss_type:'product', batch_items:JSON.stringify([{name:product.product_name, qty, unit}]) });
     hideLoadingProgress();
     showToast('Perda registrada!'); resetLossForm();
   } catch (err) {
@@ -2895,10 +2961,11 @@ function toggleHistoryDetail(id) {
 }
 function renderHistoryRow(m, idx) {
   const d = new Date(m.movement_date);
-  const labels = {entrada:'Entrada',producao:'Produção',venda:'Venda',ajuste_manual:'Ajuste Manual',ajuste_manual_pronto:'Ajuste Pronto',perda:'Perda',saida_manual:'Saída Manual',estorno_producao:'Produção Cancelada'};
-  const colors = {entrada:'text-emerald-700',producao:'text-purple-700',venda:'text-blue-700',ajuste_manual:'text-stone-600',ajuste_manual_pronto:'text-blue-600',perda:'text-red-600',saida_manual:'text-orange-700',estorno_producao:'text-stone-500'};
-  const badgeBg = {entrada:'bg-emerald-50',producao:'bg-purple-50',venda:'bg-blue-50',ajuste_manual:'bg-stone-100',ajuste_manual_pronto:'bg-blue-50',perda:'bg-red-50',saida_manual:'bg-orange-50',estorno_producao:'bg-stone-100'};
+  const labels = {entrada:'Entrada',producao:'Produção',venda:'Venda',ajuste_manual:'Ajuste Manual',ajuste_manual_pronto:'Ajuste Pronto',perda:'Perda',saida_manual:'Saída Manual',estorno_producao:'Produção Cancelada',estorno:'Estorno'};
+  const colors = {entrada:'text-emerald-700',producao:'text-purple-700',venda:'text-blue-700',ajuste_manual:'text-stone-600',ajuste_manual_pronto:'text-blue-600',perda:'text-red-600',saida_manual:'text-orange-700',estorno_producao:'text-stone-500',estorno:'text-stone-500'};
+  const badgeBg = {entrada:'bg-emerald-50',producao:'bg-purple-50',venda:'bg-blue-50',ajuste_manual:'bg-stone-100',ajuste_manual_pronto:'bg-blue-50',perda:'bg-red-50',saida_manual:'bg-orange-50',estorno_producao:'bg-stone-100',estorno:'bg-stone-100'};
   const isCancelled = (m.movement_note||'').startsWith('🚫 CANCELADA');
+  const isUndone = (m.movement_note||'').startsWith('↩️ DESFEITA');
   let title = m.movement_product;
   let qtyLine = m.movement_quantity ? `${fmtQty(m.movement_quantity,'')} item(ns)` : '';
   if (m.movement_type === 'producao') {
@@ -2912,16 +2979,18 @@ function renderHistoryRow(m, idx) {
     qtyLine = fmtQty(m.movement_quantity,'') + (m.loss_reason ? ` · ${m.loss_reason}` : '');
   } else if (m.movement_type === 'ajuste_manual') {
     qtyLine = `${m.movement_quantity>0?'+':''}${fmtQty(m.movement_quantity,'')}`;
-  } else if (m.movement_type === 'estorno_producao') {
+  } else if (m.movement_type === 'estorno_producao' || m.movement_type === 'estorno') {
     qtyLine = `Devolvido ao estoque: ${fmtQty(m.movement_quantity,'')} de ${m.movement_product}`;
   }
   const detailItems = getMovementDetailItems(m);
   const hasDetail = detailItems.length > 0 || m.movement_note;
-  const canCancel = m.movement_type === 'producao' && !isCancelled;
-  return `<div class="p-4 bg-white rounded-xl shadow-sm border ${isCancelled?'border-stone-200 opacity-60':'border-stone-100'} card-hover">
+  const canCancelProduction = m.movement_type === 'producao' && !isCancelled;
+  const canUndoGeneric = ['entrada','saida_manual','perda','ajuste_manual','venda'].includes(m.movement_type) && !isUndone;
+  const flagged = isCancelled || isUndone;
+  return `<div class="p-4 bg-white rounded-xl shadow-sm border ${flagged?'border-stone-200 opacity-60':'border-stone-100'} card-hover">
     <div class="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-1">
       <div class="min-w-0">
-        <span class="${colors[m.movement_type]||'text-stone-600'} ${badgeBg[m.movement_type]||'bg-stone-100'} font-semibold text-[10px] px-2 py-0.5 rounded-full inline-block mb-1">${labels[m.movement_type]||m.movement_type}${isCancelled?' · Cancelada':''}</span>
+        <span class="${colors[m.movement_type]||'text-stone-600'} ${badgeBg[m.movement_type]||'bg-stone-100'} font-semibold text-[10px] px-2 py-0.5 rounded-full inline-block mb-1">${labels[m.movement_type]||m.movement_type}${isCancelled?' · Cancelada':''}${isUndone?' · Desfeita':''}</span>
         <p class="text-sm font-medium text-stone-700 break-words">${title}</p>
         <p class="text-xs text-stone-500 mt-0.5">${qtyLine}</p>
         ${m.movement_user?`<p class="text-xs text-stone-400 mt-0.5">por ${m.movement_user}</p>`:''}
@@ -2930,7 +2999,8 @@ function renderHistoryRow(m, idx) {
         <span class="text-xs text-stone-400">${d.toLocaleDateString('pt-BR')} ${d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</span>
         <div class="flex items-center gap-2">
           ${hasDetail?`<button onclick="toggleHistoryDetail(${idx})" class="text-[11px] text-amber-700 hover:text-amber-800 font-medium flex items-center gap-0.5">Detalhes <i data-lucide="chevron-down" class="w-3 h-3"></i></button>`:''}
-          ${canCancel?`<button onclick="openCancelProductionModal('${m.id}')" class="text-[11px] text-red-600 hover:text-red-700 font-medium flex items-center gap-0.5">↩️ Cancelar Produção</button>`:''}
+          ${canCancelProduction?`<button onclick="openCancelProductionModal('${m.id}')" class="text-[11px] text-red-600 hover:text-red-700 font-medium flex items-center gap-0.5">↩️ Cancelar Produção</button>`:''}
+          ${canUndoGeneric?`<button onclick="openUndoModal('${m.id}')" class="text-[11px] text-red-600 hover:text-red-700 font-medium flex items-center gap-0.5">↩️ Desfazer</button>`:''}
         </div>
       </div>
     </div>
@@ -3001,6 +3071,111 @@ async function confirmCancelProduction() {
     showToast('Erro ao cancelar produção: ' + err.message, true);
   }
 }
+// ============================================================
+// DESFAZER MOVIMENTAÇÃO — genérico, cobre entrada, saída manual, perda,
+// ajuste manual e venda. Produção continua com o "Cancelar Produção" próprio
+// (lógica um pouco diferente: credita insumo vinculado, não só reverte estoque).
+// ============================================================
+function movementTypeLabel(type) {
+  const labels = {entrada:'Entrada',producao:'Produção',venda:'Venda',ajuste_manual:'Ajuste Manual',ajuste_manual_pronto:'Ajuste Pronto',perda:'Perda',saida_manual:'Saída Manual',estorno_producao:'Produção Cancelada',estorno:'Estorno'};
+  return labels[type] || type;
+}
+function isMovementUndone(m) {
+  return (m.movement_note||'').startsWith('↩️ DESFEITA') || (m.movement_note||'').startsWith('🚫 CANCELADA');
+}
+// Calcula o que precisa mudar no estoque pra desfazer uma movimentação, e a mensagem de contexto.
+// Retorna null se o tipo não for desfazível por aqui (ex: produção, que tem fluxo próprio).
+function getUndoPreview(m) {
+  if (m.movement_type === 'entrada') {
+    const items = getMovementDetailItems(m);
+    return { verb:'remove', items, note:'Vai remover do estoque o que foi adicionado nesta entrada:' };
+  }
+  if (m.movement_type === 'saida_manual') {
+    const items = getMovementDetailItems(m);
+    return { verb:'add', items, note:'Vai devolver ao estoque o que foi retirado nesta saída:' };
+  }
+  if (m.movement_type === 'perda') {
+    const items = getMovementDetailItems(m);
+    const finalItems = items.length ? items : [{name:m.movement_product, qty:m.movement_quantity, unit:''}];
+    return { verb:'add', items: finalItems, note:'Vai devolver ao estoque a quantidade perdida:' };
+  }
+  if (m.movement_type === 'ajuste_manual') {
+    const items = getMovementDetailItems(m);
+    const finalItems = items.length ? items : [{name:m.movement_product, qty:Math.abs(m.movement_quantity), unit:''}];
+    const isIncrease = parseFloat(m.movement_quantity) >= 0;
+    return { verb: isIncrease?'remove':'add', items: finalItems, note: isIncrease ? 'Vai remover do estoque o que foi adicionado neste ajuste:' : 'Vai devolver ao estoque o que foi retirado neste ajuste:' };
+  }
+  if (m.movement_type === 'venda') {
+    let saleItems = []; try { saleItems = JSON.parse(m.batch_items||'[]'); } catch(e) {}
+    const returnItems = [];
+    for (const it of saleItems) {
+      if (it.value && it.value.startsWith('finished_')) {
+        returnItems.push({name: it.name, qty: it.qty, unit: ''});
+      } else if (it.value && it.value.startsWith('recipe_')) {
+        const recipe = allData.find(r=>r.id===it.value.replace('recipe_',''));
+        if (recipe) {
+          let ingredients=[]; try{ingredients=JSON.parse(recipe.recipe_ingredients);}catch(e){}
+          for (const ing of ingredients) returnItems.push({name: ing.name, qty: ing.qty*it.qty, unit: ing.unit});
+        }
+      }
+    }
+    return { verb:'add', items: returnItems, note:'Vai devolver ao estoque os insumos usados nesta venda:' };
+  }
+  return null;
+}
+let undoingMovementId = null;
+function openUndoModal(movementId) {
+  const m = allData.find(r => r.id === movementId); if (!m) return;
+  if (isMovementUndone(m)) { showToast('Essa movimentação já foi desfeita', true); return; }
+  const preview = getUndoPreview(m);
+  if (!preview) { showToast('Não é possível desfazer esse tipo de movimentação', true); return; }
+  undoingMovementId = movementId;
+  document.getElementById('undo-movement-summary').textContent = preview.note;
+  document.getElementById('undo-movement-details').innerHTML = preview.items.length
+    ? preview.items.map(it=>`<div>• ${fmtQty(it.qty,it.unit)} ${it.unit} ${it.name}</div>`).join('')
+    : '<p class="italic text-stone-400">Sem detalhamento disponível — só a nota vai ser marcada como desfeita.</p>';
+  document.getElementById('undo-movement-modal').classList.remove('hidden');
+}
+function closeUndoModal() {
+  document.getElementById('undo-movement-modal').classList.add('hidden');
+  undoingMovementId = null;
+}
+async function confirmUndoMovement() {
+  const movementId = undoingMovementId;
+  const m = allData.find(r => r.id === movementId);
+  closeUndoModal();
+  if (!m) return;
+  const preview = getUndoPreview(m);
+  if (!preview) return;
+  showLoadingProgress('Desfazendo...');
+  try {
+    let done = 0;
+    for (const it of preview.items) {
+      updateLoadingProgress(`Ajustando ${done+1}/${preview.items.length}: ${it.name}`);
+      const p = getProducts().find(x => x.product_name === it.name) || getFinishedProducts().find(x => x.product_name === it.name);
+      if (p) {
+        const storageUnit = p.storage_unit || p.unit;
+        const qtyInStorageUnit = it.unit ? convertQuantity(it.qty, it.unit, storageUnit, getCustomConversions(p)) : it.qty;
+        const newQty = preview.verb === 'add' ? p.quantity + qtyInStorageUnit : Math.max(0, p.quantity - qtyInStorageUnit);
+        await dbUpdate({...p, quantity: newQty});
+      }
+      done++;
+    }
+    updateLoadingProgress('Marcando como desfeita...');
+    // Marca a movimentação original como desfeita (mantém no histórico, só sinaliza)
+    await dbUpdate({...m, movement_note: `↩️ DESFEITA — ${m.movement_note||''}`});
+    // Cria um registro de estorno, pra ficar rastreável no histórico
+    const itemsNote = preview.items.map(it=>`${fmtQty(it.qty,it.unit)} ${it.unit} ${it.name}`).join(', ') || 'sem detalhamento';
+    await dbCreate({ ...blankRecord(), type:'movement', movement_type:'estorno', movement_product:m.movement_product, movement_quantity:m.movement_quantity, movement_date:new Date().toISOString(), movement_note:`Desfeito: ${movementTypeLabel(m.movement_type)} de "${m.movement_product}". ${preview.note} ${itemsNote}` });
+    hideLoadingProgress();
+    renderAll();
+    showToast('Movimentação desfeita!');
+  } catch (err) {
+    hideLoadingProgress();
+    console.error('Erro ao desfazer movimentação:', err);
+    showToast('Erro ao desfazer: ' + err.message, true);
+  }
+}
 function renderHistory() {
   const customDates = document.getElementById('history-custom-dates');
   const period = document.getElementById('filter-history-period')?.value || 'all';
@@ -3024,11 +3199,11 @@ function renderHistory() {
   if (countEl) countEl.textContent = `${movements.length} movimentaç${movements.length===1?'ão':'ões'} encontrada${movements.length===1?'':'s'}`;
 
   // Resumo por tipo (sobre TODO o filtrado, não só os 100 exibidos)
-  const labels = {entrada:'Entrada',producao:'Produção',venda:'Venda',ajuste_manual:'Ajuste Manual',ajuste_manual_pronto:'Ajuste Pronto',perda:'Perda',saida_manual:'Saída Manual',estorno_producao:'Produção Cancelada'};
+  const labels = {entrada:'Entrada',producao:'Produção',venda:'Venda',ajuste_manual:'Ajuste Manual',ajuste_manual_pronto:'Ajuste Pronto',perda:'Perda',saida_manual:'Saída Manual',estorno_producao:'Produção Cancelada',estorno:'Estorno'};
   const counts = {};
   movements.forEach(m => { counts[m.movement_type] = (counts[m.movement_type]||0)+1; });
   const summaryEl = document.getElementById('history-summary');
-  const pluralLabels = {entrada:'Entradas',producao:'Produções',venda:'Vendas',ajuste_manual:'Ajustes Manuais',ajuste_manual_pronto:'Ajustes Pronto',perda:'Perdas',saida_manual:'Saídas Manuais',estorno_producao:'Produções Canceladas'};
+  const pluralLabels = {entrada:'Entradas',producao:'Produções',venda:'Vendas',ajuste_manual:'Ajustes Manuais',ajuste_manual_pronto:'Ajustes Pronto',perda:'Perdas',saida_manual:'Saídas Manuais',estorno_producao:'Produções Canceladas',estorno:'Estornos'};
   summaryEl.innerHTML = Object.entries(counts).map(([type,n])=>`<span class="text-[11px] px-2.5 py-1 rounded-full bg-stone-100 text-stone-600 font-medium">${n} ${n===1?(labels[type]||type):(pluralLabels[type]||type)}</span>`).join('');
 
   const el = document.getElementById('history-list');
@@ -3051,7 +3226,7 @@ function renderHistory() {
 
 function confirmClearHistory() {
   const { movements, filter, period } = getFilteredHistoryMovements();
-  const labels = {entrada:'Entrada',producao:'Produção',venda:'Venda',ajuste_manual:'Ajuste Manual',ajuste_manual_pronto:'Ajuste Pronto',perda:'Perda',saida_manual:'Saída Manual',estorno_producao:'Produção Cancelada'};
+  const labels = {entrada:'Entrada',producao:'Produção',venda:'Venda',ajuste_manual:'Ajuste Manual',ajuste_manual_pronto:'Ajuste Pronto',perda:'Perda',saida_manual:'Saída Manual',estorno_producao:'Produção Cancelada',estorno:'Estorno'};
   const periodLabels = {all:'todo o período',today:'hoje','7days':'últimos 7 dias','30days':'últimos 30 dias',custom:'período personalizado selecionado'};
   const typeText = filter==='all' ? 'todos os tipos' : (labels[filter]||filter);
   const msgEl = document.getElementById('clear-history-message');
@@ -3517,6 +3692,29 @@ async function saveSaleAliases(pairs) {
     }
   }
 }
+// Guarda o preço médio de venda de cada item, a partir do "Valor Total" que já vem na planilha
+// importada — vai acumulando (quantidade total vendida + faturamento total) pra manter uma média
+// real ao longo do tempo, do mesmo jeito que já fazemos com o custo médio dos insumos.
+function getFinanceSalePrice(productName) {
+  const rec = financeData.find(r => r.type==='sale_price' && r.product_name===productName);
+  return rec ? { price: rec.sale_price, totalQty: rec.total_qty_sold, totalRevenue: rec.total_revenue, updatedAt: rec.sale_price_updated_at } : null;
+}
+async function saveSalePrices(items) {
+  for (const it of items) {
+    if (!it.totalValue || it.totalValue <= 0 || !it.qty) continue;
+    const existing = financeData.find(r => r.type==='sale_price' && r.product_name === it.systemName);
+    const newTotalQty = (existing ? (existing.total_qty_sold||0) : 0) + it.qty;
+    const newTotalRevenue = (existing ? (existing.total_revenue||0) : 0) + it.totalValue;
+    const avgPrice = newTotalQty > 0 ? newTotalRevenue / newTotalQty : 0;
+    if (existing) {
+      await financeApiCall('update', { data: { ...existing, total_qty_sold:newTotalQty, total_revenue:newTotalRevenue, sale_price:avgPrice, sale_price_updated_at:new Date().toISOString() } });
+      Object.assign(existing, { total_qty_sold:newTotalQty, total_revenue:newTotalRevenue, sale_price:avgPrice, sale_price_updated_at:new Date().toISOString() });
+    } else {
+      const r = await financeApiCall('create', { data: { type:'sale_price', product_name:it.systemName, total_qty_sold:newTotalQty, total_revenue:newTotalRevenue, sale_price:avgPrice, sale_price_updated_at:new Date().toISOString() } });
+      financeData.push({ id:r.id, type:'sale_price', product_name:it.systemName, total_qty_sold:newTotalQty, total_revenue:newTotalRevenue, sale_price:avgPrice, sale_price_updated_at:new Date().toISOString() });
+    }
+  }
+}
 function renderFinanceiro() {
   const lockScreen = document.getElementById('finance-lock-screen');
   const nav = document.getElementById('finance-nav');
@@ -3697,17 +3895,32 @@ function renderFinanceCMV() {
     const yieldQty = parseFloat(r.recipe_yield) || 1;
     const costPerUnit = totalCost / yieldQty;
     const hasAllCosts = missing.length===0 && ingredients.length>0;
-    return { recipe: r, totalCost, costPerUnit, missing, hasAllCosts };
+    const saleRec = getFinanceSalePrice(r.recipe_name);
+    return { recipe: r, totalCost, costPerUnit, missing, hasAllCosts, saleRec };
   });
-  el.innerHTML = rows.map(row => `<div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100">
+  // Resumo geral do faturamento capturado (soma de todas as receitas que já têm venda registrada)
+  const totalFaturamento = rows.reduce((s,row)=>s+(row.saleRec?row.saleRec.totalRevenue:0),0);
+  const summaryHtml = totalFaturamento > 0 ? `<div class="bg-emerald-50 rounded-xl p-4 border border-emerald-100 mb-4"><p class="text-[10px] font-bold text-emerald-700 uppercase tracking-wide mb-1">Faturamento total capturado</p><p class="text-xl font-bold text-emerald-800">${fmtCurrency(totalFaturamento)}</p></div>` : '';
+  el.innerHTML = summaryHtml + rows.map(row => {
+    let marginHtml = '';
+    if (row.hasAllCosts && row.saleRec && row.saleRec.price > 0) {
+      const margin = row.saleRec.price - row.costPerUnit;
+      const marginPct = Math.round((margin / row.saleRec.price) * 100);
+      const marginColor = marginPct >= 50 ? 'text-emerald-700' : marginPct >= 25 ? 'text-amber-600' : 'text-red-600';
+      marginHtml = `<div class="mt-2 pt-2 border-t border-stone-100 flex justify-between items-center"><span class="text-xs text-stone-500">Venda média: ${fmtCurrency(row.saleRec.price)} · Faturado: ${fmtCurrency(row.saleRec.totalRevenue)}</span><span class="text-sm font-bold ${marginColor}">${marginPct}% margem</span></div>`;
+    } else if (row.hasAllCosts && !row.saleRec) {
+      marginHtml = `<p class="text-[11px] text-stone-400 mt-1">Sem venda registrada ainda pra calcular a margem</p>`;
+    }
+    return `<div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100">
     <div class="flex justify-between items-start mb-1">
       <span class="font-semibold text-stone-800 text-sm">${row.recipe.recipe_name}</span>
       <span class="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-stone-100 text-stone-600">${row.recipe.recipe_type}</span>
     </div>
     ${row.hasAllCosts
-      ? `<p class="text-sm text-amber-700 font-bold">${fmtCurrency(row.costPerUnit)} / ${row.recipe.recipe_yield_unit}</p><p class="text-xs text-stone-400">Custo do lote: ${fmtCurrency(row.totalCost)} para ${fmtQty(row.recipe.recipe_yield,row.recipe.recipe_yield_unit)} ${row.recipe.recipe_yield_unit}</p>`
+      ? `<p class="text-sm text-amber-700 font-bold">${fmtCurrency(row.costPerUnit)} / ${row.recipe.recipe_yield_unit} (custo)</p><p class="text-xs text-stone-400">Custo do lote: ${fmtCurrency(row.totalCost)} para ${fmtQty(row.recipe.recipe_yield,row.recipe.recipe_yield_unit)} ${row.recipe.recipe_yield_unit}</p>${marginHtml}`
       : `<p class="text-xs text-stone-400 italic">Custo incompleto — falta lançar em Custos Pendentes: ${row.missing.length?row.missing.join(', '):'sem ingredientes cadastrados'}</p>`}
-  </div>`).join('');
+  </div>`;
+  }).join('');
 }
 
 
