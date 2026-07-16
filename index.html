@@ -112,7 +112,6 @@
     <button class="tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-tab="producao"><i data-lucide="chef-hat" class="w-5 h-5"></i>Produzir</button>
     <button class="tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-tab="prontos"><i data-lucide="cake" class="w-5 h-5"></i>Produzidos</button>
     <button class="tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-tab="perdas"><i data-lucide="trash-2" class="w-5 h-5"></i>Perdas</button>
-    <button class="tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-tab="vendas"><i data-lucide="credit-card" class="w-5 h-5"></i>Vendas</button>
     <button class="tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-tab="consumo"><span class="text-lg leading-none">📊</span>Consumo</button>
     <button class="tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-tab="historico"><i data-lucide="history" class="w-5 h-5"></i>Histórico</button>
   </div>
@@ -385,42 +384,6 @@
     <div id="losses-list" class="space-y-2"></div>
   </section>
 
-  <!-- VENDAS -->
-  <section id="panel-vendas" class="hidden fade-in">
-    <h2 class="text-lg font-bold text-stone-800 mb-4 flex items-center gap-2"><i data-lucide="credit-card" class="w-5 h-5 text-emerald-600"></i>Vendas do Dia</h2>
-    <div class="flex gap-2 mb-4">
-      <button id="sales-mode-manual-btn" class="sales-mode-btn px-4 py-2 rounded-lg text-sm font-medium bg-emerald-700 text-white" data-mode="manual">Venda Manual</button>
-      <button id="sales-mode-bulk-btn" class="sales-mode-btn px-4 py-2 rounded-lg text-sm font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-mode="bulk">Vendas em Lote</button>
-    </div>
-    <div class="bg-white rounded-xl p-5 shadow-sm border border-stone-100 mb-5" id="sales-manual-section">
-      <h3 class="font-semibold mb-4 text-stone-800 text-sm">Registrar Vendas</h3>
-      <div id="sales-items-container" class="space-y-2 mb-3">
-        <div class="sales-item grid sm:grid-cols-3 gap-2 items-end"><select class="sales-product input-field text-sm" required><option value="">Selecione o produto</option></select><input type="number" class="sales-qty input-field text-sm" placeholder="Quantidade" min="1" step="1" required><button type="button" onclick="removeSalesItem(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button></div>
-      </div>
-      <button type="button" onclick="addSalesItem()" class="text-sm font-medium flex items-center gap-1 mb-4 btn-ghost px-3 py-1.5 rounded-lg"><i data-lucide="plus" class="w-4 h-4"></i>Adicionar produto</button>
-      <button onclick="confirmSales()" class="btn-success px-4 py-2.5 rounded-lg text-sm font-medium flex items-center gap-1.5"><i data-lucide="check" class="w-4 h-4"></i>Confirmar Vendas</button>
-    </div>
-    <div class="bg-white rounded-xl p-5 shadow-sm border border-stone-100 mb-5 hidden" id="sales-bulk-section">
-      <h3 class="font-semibold mb-4 text-stone-800 text-sm">Registrar Vendas em Lote</h3>
-      
-      <!-- Upload de arquivo -->
-      <div class="mb-4 p-4 border-2 border-dashed border-stone-300 rounded-xl text-center hover:border-amber-500 transition-colors cursor-pointer" onclick="document.getElementById('bulk-file-input').click()" id="bulk-drop-zone">
-        <i data-lucide="upload" class="w-8 h-8 text-stone-400 mx-auto mb-2"></i>
-        <p class="text-sm font-medium text-stone-600">Clique para importar planilha do sistema</p>
-        <p class="text-xs text-stone-400 mt-1">Aceita arquivos .xlsx</p>
-        <input type="file" id="bulk-file-input" accept=".xlsx,.xls,.csv" class="hidden" onchange="handleBulkFileUpload(event)">
-      </div>
-      <p id="bulk-file-name" class="hidden text-xs text-emerald-700 font-medium mb-3 flex items-center gap-1">📄 <span></span></p>
-
-      <p class="text-xs text-stone-500 mb-2">Ou cole manualmente (Nome do Produto → TAB → Quantidade):</p>
-      <textarea id="bulk-sales-textarea" class="w-full input-field text-sm mb-4 min-h-[140px]" placeholder="Exemplo:&#10;Cappuccino    12&#10;Brownie    7&#10;Aperol Spritz    3"></textarea>
-      <div id="bulk-manual-actions" class="flex gap-2 mb-4"><button onclick="processBulkSales()" class="btn-success px-4 py-2.5 rounded-lg text-sm font-medium flex items-center gap-1.5 flex-1"><i data-lucide="check" class="w-4 h-4"></i>Processar Vendas</button><button onclick="clearBulkSalesForm()" class="btn-ghost px-4 py-2.5 rounded-lg text-sm font-medium flex-1">Limpar</button></div>
-      <div id="bulk-sales-feedback" class="hidden p-4 rounded-lg border"><p class="text-xs font-semibold mb-2" id="bulk-feedback-title"></p><div id="bulk-feedback-content" class="space-y-1 text-xs"></div></div>
-    </div>
-    <h3 class="font-semibold mb-3 text-stone-800 text-sm">Vendas Registradas Hoje</h3>
-    <div id="sales-today-list" class="space-y-2"></div>
-  </section>
-
   <!-- CONSUMO -->
   <section id="panel-consumo" class="hidden fade-in">
     <h2 class="text-lg font-bold text-stone-800 mb-4 flex items-center gap-2">📊 Consumo</h2>
@@ -571,6 +534,7 @@
     <div class="nav-grid">
       <button class="finance-tab-btn finance-tab-active px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="custos"><i data-lucide="banknote" class="w-5 h-5"></i>Custos Pendentes</button>
       <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="cmv"><i data-lucide="percent" class="w-5 h-5"></i>CMV</button>
+      <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="vendas"><i data-lucide="credit-card" class="w-5 h-5"></i>Vendas</button>
     </div>
   </nav>
 
@@ -604,6 +568,51 @@
       </div>
       <p class="text-xs text-stone-400 mb-4">Custo estimado de cada receita, com base no custo médio já lançado dos insumos.</p>
       <div id="finance-cmv-list" class="space-y-2"></div>
+    </section>
+
+    <!-- Sub-aba: Vendas -->
+    <section id="fpanel-vendas" class="hidden fade-in">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-bold text-stone-800 flex items-center gap-2"><i data-lucide="credit-card" class="w-5 h-5 text-emerald-600"></i>Vendas do Dia</h2>
+        <button onclick="lockFinanceiro()" class="text-xs text-stone-400 hover:text-stone-600 flex items-center gap-1"><i data-lucide="lock" class="w-3.5 h-3.5"></i>Bloquear</button>
+      </div>
+      <div class="flex gap-2 mb-4">
+        <button id="sales-mode-manual-btn" class="sales-mode-btn px-4 py-2 rounded-lg text-sm font-medium bg-emerald-700 text-white" data-mode="manual">Venda Manual</button>
+        <button id="sales-mode-bulk-btn" class="sales-mode-btn px-4 py-2 rounded-lg text-sm font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-mode="bulk">Vendas em Lote</button>
+      </div>
+      <div class="bg-white rounded-xl p-5 shadow-sm border border-stone-100 mb-5" id="sales-manual-section">
+        <h3 class="font-semibold mb-4 text-stone-800 text-sm">Registrar Vendas</h3>
+        <div id="sales-items-container" class="space-y-2 mb-3">
+          <div class="sales-item grid grid-cols-1 sm:grid-cols-3 gap-2 items-end"><select class="sales-product input-field text-sm min-w-0" required><option value="">Selecione o produto</option></select><input type="number" class="sales-qty input-field text-sm min-w-0" placeholder="Quantidade" min="1" step="1" required><button type="button" onclick="removeSalesItem(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button></div>
+        </div>
+        <button type="button" onclick="addSalesItem()" class="text-sm font-medium flex items-center gap-1 mb-4 btn-ghost px-3 py-1.5 rounded-lg"><i data-lucide="plus" class="w-4 h-4"></i>Adicionar produto</button>
+        <button onclick="confirmSales()" class="px-4 py-2.5 rounded-lg text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 transition-colors flex items-center gap-1.5"><i data-lucide="check" class="w-4 h-4"></i>Confirmar Vendas</button>
+      </div>
+      <div class="bg-white rounded-xl p-5 shadow-sm border border-stone-100 mb-5 hidden" id="sales-bulk-section">
+        <h3 class="font-semibold mb-4 text-stone-800 text-sm">Registrar Vendas em Lote</h3>
+
+        <!-- Formulário de upload/colagem — some inteiro quando o preview de conferência aparece -->
+        <div id="bulk-upload-form">
+          <div class="mb-4 p-4 border-2 border-dashed border-stone-300 rounded-xl text-center hover:border-emerald-500 transition-colors cursor-pointer" onclick="document.getElementById('bulk-file-input').click()" id="bulk-drop-zone">
+            <i data-lucide="upload" class="w-8 h-8 text-stone-400 mx-auto mb-2"></i>
+            <p class="text-sm font-medium text-stone-600">Clique para importar planilha do sistema</p>
+            <p class="text-xs text-stone-400 mt-1">Aceita arquivos .xlsx</p>
+            <input type="file" id="bulk-file-input" accept=".xlsx,.xls,.csv" class="hidden" onchange="handleBulkFileUpload(event)">
+          </div>
+          <p id="bulk-file-name" class="hidden text-xs text-emerald-700 font-medium mb-3 flex items-center gap-1">📄 <span></span></p>
+
+          <p class="text-xs text-stone-500 mb-2">Ou cole manualmente (Nome do Produto → TAB → Quantidade):</p>
+          <textarea id="bulk-sales-textarea" class="w-full input-field text-sm mb-4 min-h-[140px]" placeholder="Exemplo:&#10;Cappuccino    12&#10;Brownie    7&#10;Aperol Spritz    3"></textarea>
+          <div id="bulk-manual-actions" class="flex gap-2 mb-4"><button onclick="processBulkSales()" class="px-4 py-2.5 rounded-lg text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 transition-colors flex items-center justify-center gap-1.5 flex-1"><i data-lucide="check" class="w-4 h-4"></i>Processar Vendas</button><button onclick="clearBulkSalesForm()" class="btn-ghost px-4 py-2.5 rounded-lg text-sm font-medium flex-1">Limpar</button></div>
+        </div>
+
+        <!-- Preview de conferência (matching planilha ↔ sistema) — some o form acima quando isso aparece -->
+        <div id="bulk-match-preview" class="hidden"></div>
+
+        <div id="bulk-sales-feedback" class="hidden p-4 rounded-lg border"><p class="text-xs font-semibold mb-2" id="bulk-feedback-title"></p><div id="bulk-feedback-content" class="space-y-1 text-xs"></div></div>
+      </div>
+      <h3 class="font-semibold mb-3 text-stone-800 text-sm">Vendas Registradas Hoje</h3>
+      <div id="sales-today-list" class="space-y-2"></div>
     </section>
   </main>
 </div>
@@ -1095,8 +1104,6 @@ document.getElementById('tab-nav').addEventListener('click', (e) => {
   document.querySelectorAll('[id^="panel-"]').forEach(p => p.classList.add('hidden'));
   const panel = document.getElementById('panel-' + currentTab);
   if (panel) panel.classList.remove('hidden');
-  if (currentTab === 'vendas') renderSalesSelect();
-  if (currentTab === 'financeiro') renderFinanceiro();
 });
 
 // ============================================================
@@ -2432,8 +2439,8 @@ function renderSalesSelect() {
 function addSalesItem() {
   const container = document.getElementById('sales-items-container');
   const div = document.createElement('div');
-  div.className = 'sales-item grid sm:grid-cols-3 gap-2 items-end';
-  div.innerHTML = `<select class="sales-product input-field text-sm" required><option value="">Selecione o produto</option></select><input type="number" class="sales-qty input-field text-sm" placeholder="Quantidade" min="1" step="1" required><button type="button" onclick="removeSalesItem(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button>`;
+  div.className = 'sales-item grid grid-cols-1 sm:grid-cols-3 gap-2 items-end';
+  div.innerHTML = `<select class="sales-product input-field text-sm min-w-0" required><option value="">Selecione o produto</option></select><input type="number" class="sales-qty input-field text-sm min-w-0" placeholder="Quantidade" min="1" step="1" required><button type="button" onclick="removeSalesItem(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button>`;
   container.appendChild(div);
   renderSalesSelect();
 }
@@ -2486,7 +2493,7 @@ async function confirmSales() {
   }
   await dbCreate({ ...blankRecord(), type:'movement', movement_type:'venda', movement_product:notesParts.join('; '), movement_quantity:salesData.reduce((a,s)=>a+s.qty,0), movement_date:new Date().toISOString(), movement_note:`Venda: ${notesParts.join('; ')}`, batch_items:JSON.stringify(salesData) });
   showToast('Vendas registradas!');
-  document.getElementById('sales-items-container').innerHTML = '<div class="sales-item grid sm:grid-cols-3 gap-2 items-end"><select class="sales-product input-field text-sm" required><option value="">Selecione o produto</option></select><input type="number" class="sales-qty input-field text-sm" placeholder="Quantidade" min="1" step="1" required><button type="button" onclick="removeSalesItem(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button></div>';
+  document.getElementById('sales-items-container').innerHTML = '<div class="sales-item grid grid-cols-1 sm:grid-cols-3 gap-2 items-end"><select class="sales-product input-field text-sm min-w-0" required><option value="">Selecione o produto</option></select><input type="number" class="sales-qty input-field text-sm min-w-0" placeholder="Quantidade" min="1" step="1" required><button type="button" onclick="removeSalesItem(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button></div>';
   renderSalesSelect();
 }
 function renderSalesToday() {
@@ -2550,11 +2557,8 @@ function handleBulkFileUpload(event) {
 
 function normalizeForMatch(name) {
   return name.toLowerCase()
-    .replace(/\s*\([^)]*\)\s*/g, '') // remove (200ml), (150ml) etc
     .replace(/\s*-\s*v60\s*/gi, '')
     .replace(/\s*-\s*prensa\s*/gi, '')
-    .replace(/\s*\d+\s*ml\s*/gi, '')
-    .replace(/\s*\d+\s*g\s*/gi, '')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -2600,26 +2604,32 @@ function showBulkMatchPreview(items) {
     ...finished.map(f => f.product_name),
     ...vendaDireta.map(r => r.recipe_name)
   ];
-  
+
+  // Primeiro checa se já existe um vínculo salvo (memorizado de uma correção anterior) pra esse
+  // nome exato vindo da planilha. Se existir, usa direto — não tenta "adivinhar" de novo.
   const matched = items.map(item => {
+    const alias = getSaleAlias(item.original);
+    if (alias && allSystemNames.includes(alias)) {
+      return { ...item, match: alias, score: 100, fromAlias: true };
+    }
     const match = findBestMatch(item.original, allSystemNames);
-    return { ...item, match: match ? match.name : '', score: match ? match.score : 0 };
+    return { ...item, match: match ? match.name : '', score: match ? match.score : 0, fromAlias: false };
   });
-  
+
   const foundCount = matched.filter(m => m.match).length;
   const notFoundCount = matched.filter(m => !m.match).length;
-  
+
   let html = `<div class="mb-3 flex gap-2 text-xs">
     <span class="px-2 py-1 rounded-full bg-emerald-100 text-emerald-800 font-medium">${foundCount} encontrados</span>
     ${notFoundCount > 0 ? `<span class="px-2 py-1 rounded-full bg-red-100 text-red-800 font-medium">${notFoundCount} não encontrados</span>` : ''}
   </div>
   <div class="space-y-2 max-h-[400px] overflow-y-auto mb-4">`;
-  
+
   for (let i = 0; i < matched.length; i++) {
     const m = matched[i];
     const statusClass = m.match ? 'border-emerald-200 bg-emerald-50' : 'border-red-200 bg-red-50';
     const statusIcon = m.match ? '✓' : '✗';
-    
+
     html += `<div class="p-3 rounded-lg border ${statusClass} flex flex-col sm:flex-row sm:items-center gap-2">
       <div class="flex-1 min-w-0">
         <div class="flex items-center gap-2 mb-1">
@@ -2627,10 +2637,11 @@ function showBulkMatchPreview(items) {
           <span class="text-xs text-stone-500">Planilha:</span>
           <span class="text-sm font-medium text-stone-800 truncate">${m.original}</span>
           <span class="text-xs font-bold text-stone-600">×${m.qty}</span>
+          ${m.fromAlias ? '<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">🔒 vínculo salvo</span>' : ''}
         </div>
         <div class="flex items-center gap-2">
           <span class="text-xs text-stone-400 ml-5">→ Sistema:</span>
-          <select class="bulk-match-select input-field text-xs py-1 px-2 flex-1" data-idx="${i}" data-qty="${m.qty}">
+          <select class="bulk-match-select input-field text-xs py-1 px-2 flex-1" data-idx="${i}" data-qty="${m.qty}" data-original="${m.original.replace(/"/g,'&quot;')}">
             <option value="">— Ignorar —</option>
             ${allSystemNames.sort().map(n => `<option value="${n}" ${n === m.match ? 'selected' : ''}>${n}</option>`).join('')}
           </select>
@@ -2638,60 +2649,48 @@ function showBulkMatchPreview(items) {
       </div>
     </div>`;
   }
-  
+
   html += `</div>
   <div class="flex gap-2">
-    <button onclick="confirmBulkMatch()" class="btn-success px-4 py-2.5 rounded-lg text-sm font-medium flex items-center gap-1.5 flex-1"><i data-lucide="check" class="w-4 h-4"></i>Confirmar Vendas</button>
+    <button onclick="confirmBulkMatch()" class="px-4 py-2.5 rounded-lg text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 transition-colors flex items-center gap-1.5 flex-1"><i data-lucide="check" class="w-4 h-4"></i>Confirmar Vendas</button>
     <button onclick="cancelBulkMatch()" class="btn-ghost px-4 py-2.5 rounded-lg text-sm font-medium flex-1">Cancelar</button>
   </div>`;
-  
-  document.getElementById('bulk-sales-textarea').classList.add('hidden');
-  document.getElementById('bulk-drop-zone').classList.add('hidden');
-  document.getElementById('bulk-manual-actions').classList.add('hidden');
-  document.querySelector('#sales-bulk-section > p:nth-of-type(2)').classList.add('hidden');
-  
-  let preview = document.getElementById('bulk-match-preview');
-  if (!preview) {
-    preview = document.createElement('div');
-    preview.id = 'bulk-match-preview';
-    document.getElementById('bulk-sales-textarea').insertAdjacentElement('beforebegin', preview);
-  }
+
+  document.getElementById('bulk-upload-form').classList.add('hidden');
+  const preview = document.getElementById('bulk-match-preview');
   preview.innerHTML = html;
   preview.classList.remove('hidden');
   lucide.createIcons();
 }
 
 function cancelBulkMatch() {
-  const preview = document.getElementById('bulk-match-preview');
-  if (preview) preview.classList.add('hidden');
-  document.getElementById('bulk-sales-textarea').classList.remove('hidden');
-  document.getElementById('bulk-drop-zone').classList.remove('hidden');
-  document.getElementById('bulk-manual-actions').classList.remove('hidden');
-  document.querySelector('#sales-bulk-section > p:nth-of-type(2)').classList.remove('hidden');
+  document.getElementById('bulk-match-preview').classList.add('hidden');
+  document.getElementById('bulk-match-preview').innerHTML = '';
+  document.getElementById('bulk-upload-form').classList.remove('hidden');
   clearBulkSalesForm();
 }
 
+// Confirma as vendas em lote E memoriza os vínculos planilha↔sistema usados, pra da próxima vez
+// não precisar corrigir de novo (mesmo os que já vieram certos automaticamente).
 async function confirmBulkMatch() {
   const selects = document.querySelectorAll('.bulk-match-select');
   const salesText = [];
+  const aliasesToSave = [];
   for (const sel of selects) {
     if (sel.value) {
       salesText.push(sel.value + '\t' + sel.dataset.qty);
+      aliasesToSave.push({ original: sel.dataset.original, systemName: sel.value });
     }
   }
   if (salesText.length === 0) { showToast('Nenhum item selecionado', true); return; }
-  
+
   document.getElementById('bulk-sales-textarea').value = salesText.join('\n');
-  document.getElementById('bulk-sales-textarea').classList.remove('hidden');
-  
-  const preview = document.getElementById('bulk-match-preview');
-  if (preview) preview.classList.add('hidden');
-  
+  document.getElementById('bulk-match-preview').classList.add('hidden');
+  document.getElementById('bulk-match-preview').innerHTML = '';
+  document.getElementById('bulk-upload-form').classList.remove('hidden');
+
+  await saveSaleAliases(aliasesToSave);
   await processBulkSales();
-  
-  document.getElementById('bulk-drop-zone').classList.remove('hidden');
-  document.getElementById('bulk-manual-actions').classList.remove('hidden');
-  document.querySelector('#sales-bulk-section > p:nth-of-type(2)').classList.remove('hidden');
 }
 
 function clearBulkSalesForm() { document.getElementById('bulk-sales-textarea').value=''; document.getElementById('bulk-sales-feedback').classList.add('hidden'); document.getElementById('bulk-file-input').value=''; document.getElementById('bulk-file-name').classList.add('hidden'); }
@@ -3481,7 +3480,9 @@ document.addEventListener('click', (e) => {
   document.querySelectorAll('.finance-tab-btn').forEach(b => b.classList.toggle('finance-tab-active', b.dataset.ftab===activeFinanceTab));
   document.getElementById('fpanel-custos').classList.toggle('hidden', activeFinanceTab!=='custos');
   document.getElementById('fpanel-cmv').classList.toggle('hidden', activeFinanceTab!=='cmv');
+  document.getElementById('fpanel-vendas').classList.toggle('hidden', activeFinanceTab!=='vendas');
   if (activeFinanceTab === 'cmv') renderFinanceCMV();
+  if (activeFinanceTab === 'vendas') { renderSalesSelect(); renderSalesToday(); }
 });
 
 function fmtCurrency(v) {
@@ -3497,6 +3498,25 @@ async function financeApiCall(action, data = {}) {
   if (json.error) throw new Error(json.error);
   return json;
 }
+// Vínculos memorizados entre nome-da-planilha e nome-no-sistema (aprendidos a partir de correções).
+function getSaleAlias(spreadsheetName) {
+  const rec = financeData.find(r => r.type==='sale_alias' && r.spreadsheet_name === spreadsheetName);
+  return rec ? rec.system_name : null;
+}
+async function saveSaleAliases(pairs) {
+  for (const { original, systemName } of pairs) {
+    if (!original || !systemName) continue;
+    const existing = financeData.find(r => r.type==='sale_alias' && r.spreadsheet_name === original);
+    if (existing && existing.system_name === systemName) continue; // já está certo, não precisa regravar
+    if (existing) {
+      await financeApiCall('update', { data: { ...existing, system_name: systemName, updated_at: new Date().toISOString() } });
+      existing.system_name = systemName;
+    } else {
+      const r = await financeApiCall('create', { data: { type:'sale_alias', spreadsheet_name: original, system_name: systemName, updated_at: new Date().toISOString() } });
+      financeData.push({ id: r.id, type:'sale_alias', spreadsheet_name: original, system_name: systemName, updated_at: new Date().toISOString() });
+    }
+  }
+}
 function renderFinanceiro() {
   const lockScreen = document.getElementById('finance-lock-screen');
   const nav = document.getElementById('finance-nav');
@@ -3504,7 +3524,12 @@ function renderFinanceiro() {
   nav.classList.toggle('hidden', !financeUnlocked);
   document.getElementById('fpanel-custos').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='custos');
   document.getElementById('fpanel-cmv').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='cmv');
-  if (financeUnlocked) { renderFinancePending(); renderFinanceCMV(); lucide.createIcons(); }
+  document.getElementById('fpanel-vendas').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='vendas');
+  if (financeUnlocked) {
+    renderFinancePending(); renderFinanceCMV();
+    if (activeFinanceTab === 'vendas') { renderSalesSelect(); renderSalesToday(); }
+    lucide.createIcons();
+  }
 }
 async function unlockFinanceiro() {
   const pwd = document.getElementById('finance-password-input').value;
