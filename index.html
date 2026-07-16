@@ -477,6 +477,7 @@
   <!-- HISTÓRICO -->
   <section id="panel-historico" class="hidden fade-in">
     <h2 class="text-lg font-bold text-stone-800 mb-4 flex items-center gap-2"><i data-lucide="history" class="w-5 h-5 text-stone-600"></i>Histórico de Movimentações</h2>
+    <div id="suspect-undo-banner" class="hidden mb-4"></div>
     <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 mb-4 space-y-3">
       <div class="relative">
         <i data-lucide="search" class="absolute left-3 top-3 w-4 h-4 text-stone-400"></i>
@@ -753,6 +754,18 @@
         <div class="grid sm:grid-cols-2 gap-4">
           <div class="space-y-3">
             <div><label class="text-xs font-semibold text-stone-600 uppercase block mb-1">Quantidade Atual</label><input id="edit-levels-current-qty" type="text" readonly class="w-full input-field text-sm bg-stone-50 text-stone-600"></div>
+            <div>
+              <button type="button" onclick="toggleStockBalanceForm()" class="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"><i data-lucide="search-check" class="w-3.5 h-3.5"></i>Conferir saldo pelo histórico</button>
+              <div id="stock-balance-form" class="hidden mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-2">
+                <p class="text-xs text-stone-600">Informe uma data/hora em que você tem certeza da quantidade (ex: logo antes de uma produção) — o sistema soma tudo que foi registrado desde então e calcula o saldo esperado hoje, pra comparar com o que está gravado.</p>
+                <div class="grid grid-cols-2 gap-2">
+                  <input id="balance-check-date" type="datetime-local" class="input-field text-xs">
+                  <input id="balance-check-qty" type="number" step="any" min="0" placeholder="Qtd nessa data" class="input-field text-xs">
+                </div>
+                <button type="button" onclick="checkStockBalance()" class="w-full btn-primary px-3 py-1.5 rounded-lg text-xs font-medium">Calcular saldo esperado</button>
+                <div id="stock-balance-result" class="hidden text-xs space-y-1"></div>
+              </div>
+            </div>
             <div>
               <label class="text-xs font-semibold text-stone-600 uppercase block mb-1">Nova Quantidade *</label>
               <div class="flex gap-2 items-center"><button type="button" onclick="decrementEditQty()" class="w-9 h-9 rounded-lg bg-stone-200 hover:bg-stone-300 flex items-center justify-center font-bold text-stone-700 text-sm flex-shrink-0">−</button><input id="edit-levels-new-qty" type="number" placeholder="Digite a quantidade" min="0" step="any" class="flex-1 input-field text-sm min-w-0" required><button type="button" onclick="incrementEditQty()" class="w-9 h-9 rounded-lg bg-stone-200 hover:bg-stone-300 flex items-center justify-center font-bold text-stone-700 text-sm flex-shrink-0">+</button></div>
@@ -1641,7 +1654,14 @@ async function handleAddProduct(e) {
   if (!name||!storageUnit||!category) { showToast('Preencha todos os campos obrigatórios', true); return; }
   if (getProducts().some(p => p.product_name.toLowerCase() === name.toLowerCase())) { showToast('Insumo já cadastrado', true); return; }
   const r = await dbCreate({ ...blankRecord(), type:'product', product_name:name, quantity:qty, unit:storageUnit, storage_unit:storageUnit, critical_stock:critical, min_stock:min, comfortable_stock:comfortable, category });
-  if (r.isOk) { showToast('Insumo cadastrado!'); hideAddProduct(); e.target.reset(); } else showToast('Erro ao cadastrar', true);
+  if (r.isOk) {
+    // Registra a quantidade inicial como uma entrada, pra ficar rastreável no histórico e a
+    // ferramenta de "Conferir saldo" ter de onde partir (sem isso, a auditoria não tem começo).
+    if (qty > 0) {
+      await dbCreate({ ...blankRecord(), type:'movement', movement_type:'entrada', movement_product:name, movement_quantity:1, movement_date:new Date().toISOString(), movement_note:`Estoque inicial ao cadastrar: ${fmtQty(qty,storageUnit)} ${storageUnit} ${name}`, batch_items:JSON.stringify([{name, unit:storageUnit, qty, storageQty:qty}]) });
+    }
+    showToast('Insumo cadastrado!'); hideAddProduct(); e.target.reset();
+  } else showToast('Erro ao cadastrar', true);
 }
 
 let editingCustomConversions = [];
@@ -1667,6 +1687,11 @@ function openEditLevels(id) {
   renderCustomConversionsList();
   renderQuickAddHelper();
   updateAdjustmentPreview();
+  document.getElementById('stock-balance-form').classList.add('hidden');
+  document.getElementById('stock-balance-result').classList.add('hidden');
+  document.getElementById('stock-balance-result').innerHTML = '';
+  document.getElementById('balance-check-date').value = '';
+  document.getElementById('balance-check-qty').value = '';
   document.getElementById('edit-levels-modal').classList.remove('hidden');
 }
 function closeEditLevels() { document.getElementById('edit-levels-modal').classList.add('hidden'); editingProductId = null; editingCustomConversions = []; }
@@ -2635,11 +2660,17 @@ async function confirmSales() {
         const id = s.value.replace('recipe_','');
         const recipe = allData.find(r => r.id === id);
         let ingredients=[]; try{ingredients=JSON.parse(recipe.recipe_ingredients);}catch(e){}
+        const deductedIngredients = [];
         for (const ing of ingredients) {
           const p = getProducts().find(x => x.product_name === ing.name);
-          const deduct = convertQuantity(ing.qty * s.qty, ing.unit, p.storage_unit||p.unit, getCustomConversions(p));
+          const storageUnit = p.storage_unit||p.unit;
+          const deduct = convertQuantity(ing.qty * s.qty, ing.unit, storageUnit, getCustomConversions(p));
           await dbUpdate({...p, quantity: Math.max(0, p.quantity - deduct)});
+          // Guarda o valor EXATO descontado (já na unidade de estoque) direto na venda, pra "desfazer"
+          // no futuro devolver certinho mesmo que a receita seja editada depois.
+          deductedIngredients.push({ name: ing.name, qty: deduct, unit: storageUnit });
         }
+        s.deductedIngredients = deductedIngredients;
         notesParts.push(`${s.qty} ${s.name}`);
       }
       done++;
@@ -2932,12 +2963,18 @@ async function processBulkSales(priceHints, prebuiltSalesData) {
         const id = s.value.replace('recipe_','');
         const recipe = allData.find(r => r.id === id);
         let ingredients=[]; try{ingredients=JSON.parse(recipe.recipe_ingredients);}catch(e){}
+        const deductedIngredients = [];
         for (const ing of ingredients) {
           const p = getProducts().find(x => x.product_name === ing.name);
           if (!p) { hideLoadingProgress(); salesSubmitInProgress=false; showToast(`Insumo ${ing.name} não encontrado`, true); return; }
-          const deduct = convertQuantity(ing.qty*s.qty, ing.unit, p.storage_unit||p.unit, getCustomConversions(p));
+          const storageUnit = p.storage_unit||p.unit;
+          const deduct = convertQuantity(ing.qty*s.qty, ing.unit, storageUnit, getCustomConversions(p));
           await dbUpdate({...p, quantity: Math.max(0, p.quantity - deduct)});
+          // Guarda o valor EXATO descontado (já na unidade de estoque) direto na venda, pra "desfazer"
+          // no futuro devolver certinho mesmo que a receita seja editada depois.
+          deductedIngredients.push({ name: ing.name, qty: deduct, unit: storageUnit });
         }
+        s.deductedIngredients = deductedIngredients;
         notesParts.push(`${s.qty} ${s.name}`);
       } else if (s.value.startsWith('uncontrolled_')) {
         // Item não controlado: não desconta nenhum estoque, só entra no registro da venda e no faturamento.
@@ -3251,6 +3288,149 @@ function movementTypeLabel(type) {
   const labels = {entrada:'Entrada',producao:'Produção',venda:'Venda',ajuste_manual:'Ajuste Manual',ajuste_manual_pronto:'Ajuste Pronto',perda:'Perda',saida_manual:'Saída Manual',estorno_producao:'Produção Cancelada',estorno:'Estorno'};
   return labels[type] || type;
 }
+// ============================================================
+// CONFERIR SALDO PELO HISTÓRICO — a partir de uma data/quantidade que você tenha certeza (ex:
+// "antes da produção, tinha 2L"), soma tudo que foi registrado pra esse insumo desde então
+// (entradas, saídas, perdas, ajustes, produções e vendas que ainda não foram desfeitas/canceladas)
+// e calcula o saldo esperado hoje. Serve como um raio-x pra achar onde um número saiu da linha —
+// não altera nada sozinho, só mostra a comparação.
+// ============================================================
+// ============================================================
+// VARREDURA AUTOMÁTICA — acha vendas desfeitas que passaram pelo caminho antigo (sem o registro
+// exato do que foi descontado) e por isso PODEM ter devolvido a quantidade errada ao estoque. Não
+// prova que deu errado (só dá errado se a receita foi editada entre a venda e o desfazer), mas
+// mostra exatamente o que merece conferência, pra não depender de ninguém lembrar de cabeça.
+// ============================================================
+function getSuspectUndoneSales() {
+  const suspects = [];
+  for (const m of getMovements()) {
+    if (m.movement_type !== 'venda' || !isMovementUndone(m)) continue;
+    let saleItems=[]; try{saleItems=JSON.parse(m.batch_items||'[]');}catch(e){}
+    const affectedProducts = new Set();
+    let flagged = false;
+    for (const it of saleItems) {
+      if (it.value && it.value.startsWith('recipe_') && !(it.deductedIngredients && it.deductedIngredients.length)) {
+        flagged = true;
+        const recipe = allData.find(r=>r.id===it.value.replace('recipe_',''));
+        if (recipe) {
+          let ingredients=[]; try{ingredients=JSON.parse(recipe.recipe_ingredients);}catch(e){}
+          ingredients.forEach(ing=>affectedProducts.add(ing.name));
+        }
+      }
+    }
+    if (flagged) suspects.push({ id: m.id, date: new Date(m.movement_date), label: m.movement_product, affectedProducts: Array.from(affectedProducts) });
+  }
+  return suspects.sort((a,b)=>b.date-a.date);
+}
+function renderSuspectUndoBanner() {
+  const el = document.getElementById('suspect-undo-banner');
+  const suspects = getSuspectUndoneSales();
+  if (suspects.length === 0) { el.classList.add('hidden'); el.innerHTML=''; return; }
+  el.classList.remove('hidden');
+  const allAffected = [...new Set(suspects.flatMap(s=>s.affectedProducts))];
+  el.innerHTML = `<div class="bg-amber-50 border border-amber-300 rounded-xl p-4">
+    <p class="font-bold text-amber-900 mb-1 flex items-center gap-2">⚠️ ${suspects.length} venda(s) desfeita(s) que podem ter devolvido a quantidade errada</p>
+    <p class="text-xs text-amber-800 mb-3">Essas vendas foram canceladas usando o cálculo antigo (antes da correção) — só deu errado de verdade se a receita foi editada entre a venda e o cancelamento, mas vale conferir. Insumos possivelmente afetados: <strong>${allAffected.join(', ')}</strong>.</p>
+    <div class="space-y-1.5 max-h-48 overflow-y-auto mb-2">
+      ${suspects.map(s => `<div class="text-xs bg-white rounded-lg px-2.5 py-1.5 border border-amber-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+        <span><strong>${s.date.toLocaleDateString('pt-BR')} ${s.date.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</strong> — ${s.label}</span>
+        <span class="text-amber-700">Conferir: ${s.affectedProducts.join(', ') || '—'}</span>
+      </div>`).join('')}
+    </div>
+    <p class="text-xs text-stone-500">Pra cada insumo listado: vai em Estoque → abre ele → "Conferir saldo pelo histórico".</p>
+  </div>`;
+}
+function toggleStockBalanceForm() {
+  document.getElementById('stock-balance-form').classList.toggle('hidden');
+}
+function computeCalculatedBalance(product, anchorDate, anchorQty) {
+  const storageUnit = product.storage_unit || product.unit;
+  const movements = getMovements().slice()
+    .filter(m => new Date(m.movement_date) > anchorDate)
+    .sort((a,b)=>new Date(a.movement_date)-new Date(b.movement_date));
+  let balance = anchorQty;
+  let estimatedCount = 0;
+  for (const m of movements) {
+    if (m.movement_type === 'entrada' || m.movement_type === 'saida_manual') {
+      let items=[]; try{items=JSON.parse(m.batch_items||'[]');}catch(e){}
+      for (const it of items) {
+        if (it.name !== product.product_name) continue;
+        // Usa o storageQty já calculado na hora do lançamento quando existir (mais preciso que
+        // reconverter agora, caso a conversão personalizada do insumo tenha mudado depois).
+        const qty = (it.storageQty!=null) ? it.storageQty : convertQuantity(it.qty, it.unit, storageUnit, getCustomConversions(product));
+        balance += (m.movement_type === 'entrada') ? qty : -qty;
+      }
+    } else if (m.movement_type === 'perda') {
+      let items=[]; try{items=JSON.parse(m.batch_items||'[]');}catch(e){}
+      for (const it of items) {
+        if (it.name !== product.product_name) continue;
+        balance -= convertQuantity(it.qty, it.unit, storageUnit, getCustomConversions(product));
+      }
+    } else if (m.movement_type === 'ajuste_manual') {
+      let items=[]; try{items=JSON.parse(m.batch_items||'[]');}catch(e){}
+      for (const it of items) {
+        if (it.name !== product.product_name) continue;
+        balance += it.qty; // já é a diferença assinada, na unidade do produto na hora do ajuste
+      }
+    } else if (m.movement_type === 'producao' && !isMovementUndone(m)) {
+      if (m.movement_product === product.product_name) {
+        balance += parseFloat(m.production_real_yield || m.movement_quantity) || 0;
+      }
+      let ingredients=[]; try{ingredients=JSON.parse(m.batch_items||'[]');}catch(e){}
+      for (const ing of ingredients) {
+        if (ing.name !== product.product_name) continue;
+        balance -= convertQuantity(ing.qty, ing.unit, storageUnit, getCustomConversions(product));
+      }
+    } else if (m.movement_type === 'venda' && !isMovementUndone(m)) {
+      let saleItems=[]; try{saleItems=JSON.parse(m.batch_items||'[]');}catch(e){}
+      for (const it of saleItems) {
+        if (it.value && it.value.startsWith('finished_')) {
+          if (it.name === product.product_name) balance -= it.qty;
+        } else if (it.deductedIngredients && Array.isArray(it.deductedIngredients)) {
+          for (const d of it.deductedIngredients) {
+            if (d.name !== product.product_name) continue;
+            balance -= convertQuantity(d.qty, d.unit, storageUnit, getCustomConversions(product));
+          }
+        } else if (it.value && it.value.startsWith('recipe_')) {
+          // Venda antiga, sem o registro exato — estima pela receita atual (pode ter uma margem
+          // de erro se a receita foi editada depois dessa venda).
+          const recipe = allData.find(r=>r.id===it.value.replace('recipe_',''));
+          if (recipe) {
+            let ingredients=[]; try{ingredients=JSON.parse(recipe.recipe_ingredients);}catch(e){}
+            if (ingredients.some(ing=>ing.name===product.product_name)) estimatedCount++;
+            for (const ing of ingredients) {
+              if (ing.name !== product.product_name) continue;
+              balance -= convertQuantity(ing.qty*it.qty, ing.unit, storageUnit, getCustomConversions(product));
+            }
+          }
+        }
+      }
+    }
+    // 'estorno' e 'estorno_producao' são só registro informativo — a movimentação original que
+    // eles se referem já foi marcada como desfeita/cancelada e ignorada acima (!isMovementUndone),
+    // então não entram de novo aqui.
+  }
+  return { calculated: parseFloat(balance.toFixed(4)), actual: product.quantity, diff: parseFloat((product.quantity-balance).toFixed(4)), estimatedCount, unit: storageUnit };
+}
+function checkStockBalance() {
+  const p = allData.find(r => r.id === editingProductId); if (!p) return;
+  const dateVal = document.getElementById('balance-check-date').value;
+  const qtyVal = parseFloat(document.getElementById('balance-check-qty').value);
+  if (!dateVal || isNaN(qtyVal) || qtyVal < 0) { showToast('Preencha a data/hora e a quantidade de referência', true); return; }
+  const anchorDate = new Date(dateVal);
+  const result = computeCalculatedBalance(p, anchorDate, qtyVal);
+  const el = document.getElementById('stock-balance-result');
+  el.classList.remove('hidden');
+  const hasDiff = Math.abs(result.diff) > 0.001;
+  el.className = `text-xs space-y-1 p-2 rounded-lg ${hasDiff ? 'bg-red-50 border border-red-200 text-red-800' : 'bg-emerald-50 border border-emerald-200 text-emerald-800'}`;
+  el.innerHTML = `
+    <p><strong>Saldo esperado hoje:</strong> ${fmtQty(result.calculated, result.unit)} ${result.unit}</p>
+    <p><strong>Registrado no estoque:</strong> ${fmtQty(result.actual, result.unit)} ${result.unit}</p>
+    <p><strong>Diferença:</strong> ${result.diff > 0 ? '+' : ''}${fmtQty(result.diff, result.unit)} ${result.unit}</p>
+    ${hasDiff ? '<p class="pt-1">⚠️ Tem diferença. Se confiar na data/quantidade que você informou, digite o "Saldo esperado hoje" em "Nova Quantidade" acima e salve pra corrigir.</p>' : '<p class="pt-1">✓ Bate certinho com o histórico registrado.</p>'}
+    ${result.estimatedCount > 0 ? `<p class="pt-1 italic">${result.estimatedCount} venda(s) neste período não tinham o registro exato do que foi descontado (vendas de antes da correção desse bug) — foram estimadas pela receita atual, então pode ter uma pequena margem de erro.</p>` : ''}
+  `;
+}
 function isMovementUndone(m) {
   return (m.movement_note||'').startsWith('↩️ DESFEITA') || (m.movement_note||'').startsWith('🚫 CANCELADA');
 }
@@ -3279,10 +3459,18 @@ function getUndoPreview(m) {
   if (m.movement_type === 'venda') {
     let saleItems = []; try { saleItems = JSON.parse(m.batch_items||'[]'); } catch(e) {}
     const returnItems = [];
+    let usedFallback = false;
     for (const it of saleItems) {
       if (it.value && it.value.startsWith('finished_')) {
         returnItems.push({name: it.name, qty: it.qty, unit: ''});
+      } else if (it.deductedIngredients && Array.isArray(it.deductedIngredients)) {
+        // Snapshot exato do que foi descontado nessa venda específica (guardado desde a correção
+        // do bug de desfazer venda) — não recalcula pela receita atual, que pode ter mudado depois.
+        for (const d of it.deductedIngredients) returnItems.push({name: d.name, qty: d.qty, unit: d.unit});
       } else if (it.value && it.value.startsWith('recipe_')) {
+        // Fallback só pra vendas registradas ANTES dessa correção, que não têm o snapshot salvo.
+        // Recalcula pela receita atual — pode não bater se a receita foi editada depois da venda.
+        usedFallback = true;
         const recipe = allData.find(r=>r.id===it.value.replace('recipe_',''));
         if (recipe) {
           let ingredients=[]; try{ingredients=JSON.parse(recipe.recipe_ingredients);}catch(e){}
@@ -3290,7 +3478,10 @@ function getUndoPreview(m) {
         }
       }
     }
-    return { verb:'add', items: returnItems, note:'Vai devolver ao estoque os insumos usados nesta venda:' };
+    const note = usedFallback
+      ? 'Vai devolver ao estoque os insumos usados nesta venda (⚠️ venda antiga, sem registro exato — recalculado pela receita atual, confira o resultado):'
+      : 'Vai devolver ao estoque os insumos usados nesta venda:';
+    return { verb:'add', items: returnItems, note };
   }
   return null;
 }
@@ -3321,6 +3512,7 @@ async function confirmUndoMovement() {
   showLoadingProgress('Desfazendo...');
   try {
     let done = 0;
+    const notFoundItems = [];
     for (const it of preview.items) {
       updateLoadingProgress(`Ajustando ${done+1}/${preview.items.length}: ${it.name}`);
       const p = getProducts().find(x => x.product_name === it.name) || getFinishedProducts().find(x => x.product_name === it.name);
@@ -3329,6 +3521,10 @@ async function confirmUndoMovement() {
         const qtyInStorageUnit = it.unit ? convertQuantity(it.qty, it.unit, storageUnit, getCustomConversions(p)) : it.qty;
         const newQty = preview.verb === 'add' ? p.quantity + qtyInStorageUnit : Math.max(0, p.quantity - qtyInStorageUnit);
         await dbUpdate({...p, quantity: newQty});
+      } else {
+        // Não silencia mais: se o insumo não existe mais (renomeado/excluído), avisa no final em
+        // vez de simplesmente não devolver a quantidade sem ninguém perceber.
+        notFoundItems.push(`${fmtQty(it.qty,it.unit)} ${it.unit} ${it.name}`);
       }
       done++;
     }
@@ -3337,10 +3533,14 @@ async function confirmUndoMovement() {
     await dbUpdate({...m, movement_note: `↩️ DESFEITA — ${m.movement_note||''}`});
     // Cria um registro de estorno, pra ficar rastreável no histórico
     const itemsNote = preview.items.map(it=>`${fmtQty(it.qty,it.unit)} ${it.unit} ${it.name}`).join(', ') || 'sem detalhamento';
-    await dbCreate({ ...blankRecord(), type:'movement', movement_type:'estorno', movement_product:m.movement_product, movement_quantity:m.movement_quantity, movement_date:new Date().toISOString(), movement_note:`Desfeito: ${movementTypeLabel(m.movement_type)} de "${m.movement_product}". ${preview.note} ${itemsNote}` });
+    await dbCreate({ ...blankRecord(), type:'movement', movement_type:'estorno', movement_product:m.movement_product, movement_quantity:m.movement_quantity, movement_date:new Date().toISOString(), movement_note:`Desfeito: ${movementTypeLabel(m.movement_type)} de "${m.movement_product}". ${preview.note} ${itemsNote}${notFoundItems.length ? ` ⚠️ NÃO devolvido (insumo não encontrado): ${notFoundItems.join(', ')}` : ''}` });
     hideLoadingProgress();
     renderAll();
-    showToast('Movimentação desfeita!');
+    if (notFoundItems.length) {
+      showToast(`Desfeito, mas ⚠️ ${notFoundItems.length} insumo(s) não encontrado(s) — NÃO foram devolvidos ao estoque: ${notFoundItems.join(', ')}`, true);
+    } else {
+      showToast('Movimentação desfeita!');
+    }
   } catch (err) {
     hideLoadingProgress();
     console.error('Erro ao desfazer movimentação:', err);
@@ -3348,6 +3548,7 @@ async function confirmUndoMovement() {
   }
 }
 function renderHistory() {
+  renderSuspectUndoBanner();
   const customDates = document.getElementById('history-custom-dates');
   const period = document.getElementById('filter-history-period')?.value || 'all';
   if (customDates) customDates.classList.toggle('hidden', period !== 'custom');
