@@ -236,18 +236,23 @@
     <div class="bg-white rounded-xl p-5 shadow-sm border border-stone-100 mb-5">
       <h3 class="font-semibold mb-4 text-stone-800 text-sm">Registrar Saída Manual</h3>
       <div id="manual-exit-container" class="space-y-4 mb-4">
-        <div class="manual-exit-item bg-stone-50 border border-stone-200 rounded-lg p-4 space-y-2">
-          <label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block">Insumo</label>
+        <div class="manual-exit-item bg-stone-50 border border-stone-200 rounded-lg p-4 space-y-2" data-item-type="insumo">
+          <div class="flex gap-1.5">
+            <button type="button" class="manual-exit-type-btn flex-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-stone-800 text-white" data-type="insumo" onclick="setManualExitItemType(this,'insumo')">Insumo</button>
+            <button type="button" class="manual-exit-type-btn flex-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-type="venda_direta" onclick="setManualExitItemType(this,'venda_direta')">🍽️ Item de Venda Direta</button>
+          </div>
+          <label class="manual-exit-label text-xs font-semibold text-stone-600 uppercase tracking-wide block">Insumo</label>
           <div class="relative"><i data-lucide="search" class="absolute left-3 top-3 w-4 h-4 text-stone-400"></i><input type="text" class="manual-exit-search input-field text-sm w-full pl-9 pr-4" placeholder="Pesquisar insumo..."><div class="manual-exit-dropdown hidden absolute top-full left-0 right-0 mt-1 bg-white border border-stone-200 rounded-lg shadow-lg z-10 max-h-40 overflow-y-auto"></div></div>
           <select class="manual-exit-product input-field text-sm w-full" required><option value="">Selecione o insumo</option></select>
           <div class="grid sm:grid-cols-[1fr_110px_auto] gap-2 items-end">
             <div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Quantidade</label><input type="number" class="manual-exit-qty input-field text-sm w-full" placeholder="Quantidade" min="0.001" step="any" required></div>
-            <div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Medida</label><select class="manual-exit-unit input-field text-sm w-full"></select></div>
+            <div class="manual-exit-unit-wrap"><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Medida</label><select class="manual-exit-unit input-field text-sm w-full"></select></div>
             <button type="button" onclick="removeManualExitItem(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button>
           </div>
         </div>
       </div>
-      <button type="button" onclick="addManualExitItem()" class="text-sm font-medium flex items-center gap-1 mb-4 btn-ghost px-3 py-1.5 rounded-lg"><i data-lucide="plus" class="w-4 h-4"></i>Adicionar outro insumo</button>
+      <button type="button" onclick="addManualExitItem()" class="text-sm font-medium flex items-center gap-1 mb-4 btn-ghost px-3 py-1.5 rounded-lg"><i data-lucide="plus" class="w-4 h-4"></i>Adicionar outro item</button>
+      <p class="text-xs text-stone-500 -mt-3 mb-4">Use "Item de Venda Direta" pra retirar algo já pronto de uma receita (ex: um prato ou suco servido num evento) — desconta os insumos da receita, sem entrar no faturamento.</p>
       <div class="flex gap-2 items-center mb-4"><input id="manual-exit-reason" type="text" placeholder="Motivo da saída (opcional)" class="flex-1 input-field text-sm"></div>
       <div class="flex gap-2 items-center">
         <button onclick="confirmManualExit()" class="btn-success px-4 py-2.5 rounded-lg text-sm font-medium flex items-center gap-1.5"><i data-lucide="check" class="w-4 h-4"></i>Confirmar Saída</button>
@@ -1980,28 +1985,71 @@ function addManualExitItem() {
   const container = document.getElementById('manual-exit-container');
   const div = document.createElement('div');
   div.className = 'manual-exit-item bg-stone-50 border border-stone-200 rounded-lg p-4 space-y-2';
-  div.innerHTML = `<label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block">Insumo</label><div class="relative"><i data-lucide="search" class="absolute left-3 top-3 w-4 h-4 text-stone-400"></i><input type="text" class="manual-exit-search input-field text-sm w-full pl-9 pr-4" placeholder="Pesquisar insumo..."><div class="manual-exit-dropdown hidden absolute top-full left-0 right-0 mt-1 bg-white border border-stone-200 rounded-lg shadow-lg z-10 max-h-40 overflow-y-auto"></div></div><select class="manual-exit-product input-field text-sm w-full" required><option value="">Selecione o insumo</option>${products.map(p=>`<option value="${p.id}" data-name="${p.product_name}" data-unit="${p.unit}">${p.product_name} (${p.unit})</option>`).join('')}</select><div class="grid sm:grid-cols-[1fr_110px_auto] gap-2 items-end"><div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Quantidade</label><input type="number" class="manual-exit-qty input-field text-sm w-full" placeholder="Quantidade" min="0.001" step="any" required></div><div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Medida</label><select class="manual-exit-unit input-field text-sm w-full"></select></div><button type="button" onclick="removeManualExitItem(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button></div>`;
+  div.dataset.itemType = 'insumo';
+  div.innerHTML = `<div class="flex gap-1.5"><button type="button" class="manual-exit-type-btn flex-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-stone-800 text-white" data-type="insumo" onclick="setManualExitItemType(this,'insumo')">Insumo</button><button type="button" class="manual-exit-type-btn flex-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-type="venda_direta" onclick="setManualExitItemType(this,'venda_direta')">🍽️ Item de Venda Direta</button></div><label class="manual-exit-label text-xs font-semibold text-stone-600 uppercase tracking-wide block">Insumo</label><div class="relative"><i data-lucide="search" class="absolute left-3 top-3 w-4 h-4 text-stone-400"></i><input type="text" class="manual-exit-search input-field text-sm w-full pl-9 pr-4" placeholder="Pesquisar insumo..."><div class="manual-exit-dropdown hidden absolute top-full left-0 right-0 mt-1 bg-white border border-stone-200 rounded-lg shadow-lg z-10 max-h-40 overflow-y-auto"></div></div><select class="manual-exit-product input-field text-sm w-full" required><option value="">Selecione o insumo</option>${products.map(p=>`<option value="${p.id}" data-name="${p.product_name}" data-unit="${p.unit}">${p.product_name} (${p.unit})</option>`).join('')}</select><div class="grid sm:grid-cols-[1fr_110px_auto] gap-2 items-end"><div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Quantidade</label><input type="number" class="manual-exit-qty input-field text-sm w-full" placeholder="Quantidade" min="0.001" step="any" required></div><div class="manual-exit-unit-wrap"><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Medida</label><select class="manual-exit-unit input-field text-sm w-full"></select></div><button type="button" onclick="removeManualExitItem(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button></div>`;
   container.appendChild(div);
   attachManualExitSearchListeners(div);
   lucide.createIcons();
 }
 function removeManualExitItem(btn) { const parent = btn.closest('.manual-exit-item'); if (parent.parentElement.children.length > 1) parent.remove(); }
 function initManualExitSearchListeners() { document.querySelectorAll('#manual-exit-container .manual-exit-item').forEach(item => { if (item.querySelector('.manual-exit-search')) attachManualExitSearchListeners(item); }); }
+// Alterna cada linha da Saída Manual entre "Insumo" (retira direto do estoque) e "Item de Venda
+// Direta" (retira uma receita pronta — ex: um prato servido num evento — descontando os insumos
+// dela, mas sem gerar faturamento, já que em evento o valor é cobrado à parte por pessoa).
+function setManualExitItemType(btn, type) {
+  const container = btn.closest('.manual-exit-item');
+  container.dataset.itemType = type;
+  container.querySelectorAll('.manual-exit-type-btn').forEach(b => {
+    const active = b.dataset.type === type;
+    b.className = `manual-exit-type-btn flex-1 px-2 py-1.5 rounded-lg text-xs font-medium ${active ? 'bg-stone-800 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`;
+  });
+  const label = container.querySelector('.manual-exit-label');
+  const search = container.querySelector('.manual-exit-search');
+  const select = container.querySelector('.manual-exit-product');
+  const unitWrap = container.querySelector('.manual-exit-unit-wrap');
+  search.value = '';
+  container.querySelector('.manual-exit-dropdown').classList.add('hidden');
+  if (type === 'venda_direta') {
+    label.textContent = 'Item de Venda Direta';
+    search.placeholder = 'Pesquisar item de venda direta...';
+    const vd = getRecipes().filter(r => r.recipe_type === 'Venda Direta').sort((a,b)=>a.recipe_name.localeCompare(b.recipe_name));
+    select.innerHTML = '<option value="">Selecione o item</option>' + vd.map(r=>`<option value="${r.id}" data-name="${r.recipe_name}">${r.recipe_name}</option>`).join('');
+    unitWrap.classList.add('hidden');
+  } else {
+    label.textContent = 'Insumo';
+    search.placeholder = 'Pesquisar insumo...';
+    const products = getProducts().sort((a,b)=>a.product_name.localeCompare(b.product_name));
+    select.innerHTML = '<option value="">Selecione o insumo</option>' + products.map(p=>`<option value="${p.id}" data-name="${p.product_name}" data-unit="${p.unit}">${p.product_name} (${p.unit})</option>`).join('');
+    unitWrap.classList.remove('hidden');
+    populateUnitSelect(container.querySelector('.manual-exit-unit'), '');
+  }
+}
 function attachManualExitSearchListeners(container) {
   const searchInput = container.querySelector('.manual-exit-search');
   const dropdown = container.querySelector('.manual-exit-dropdown');
   const selectEl = container.querySelector('.manual-exit-product');
   if (!searchInput) return;
-  const products = getProducts().sort((a,b) => a.product_name.localeCompare(b.product_name));
   searchInput.addEventListener('input', (e) => {
     const query = e.target.value.trim().toLowerCase();
     if (!query) { dropdown.classList.add('hidden'); return; }
-    const filtered = products.filter(p => p.product_name.toLowerCase().includes(query));
-    if (filtered.length === 0) { dropdown.classList.add('hidden'); return; }
-    dropdown.innerHTML = filtered.map(p => `<div class="px-3 py-2 hover:bg-stone-100 cursor-pointer text-sm text-stone-700 border-b border-stone-100 last:border-b-0" onclick="selectManualExitProduct(this,'${p.id}','${p.product_name.replace(/'/g,"\\'")}','${p.unit}')">${p.product_name} <span class="text-stone-400">(${p.unit})</span></div>`).join('');
-    dropdown.classList.remove('hidden');
+    if (container.dataset.itemType === 'venda_direta') {
+      const vd = getRecipes().filter(r => r.recipe_type === 'Venda Direta').sort((a,b)=>a.recipe_name.localeCompare(b.recipe_name));
+      const filtered = vd.filter(r => r.recipe_name.toLowerCase().includes(query));
+      if (filtered.length === 0) { dropdown.classList.add('hidden'); return; }
+      dropdown.innerHTML = filtered.map(r => `<div class="px-3 py-2 hover:bg-stone-100 cursor-pointer text-sm text-stone-700 border-b border-stone-100 last:border-b-0" onclick="selectManualExitRecipe(this,'${r.id}','${r.recipe_name.replace(/'/g,"\\'")}')">${r.recipe_name}</div>`).join('');
+      dropdown.classList.remove('hidden');
+    } else {
+      const products = getProducts().sort((a,b) => a.product_name.localeCompare(b.product_name));
+      const filtered = products.filter(p => p.product_name.toLowerCase().includes(query));
+      if (filtered.length === 0) { dropdown.classList.add('hidden'); return; }
+      dropdown.innerHTML = filtered.map(p => `<div class="px-3 py-2 hover:bg-stone-100 cursor-pointer text-sm text-stone-700 border-b border-stone-100 last:border-b-0" onclick="selectManualExitProduct(this,'${p.id}','${p.product_name.replace(/'/g,"\\'")}','${p.unit}')">${p.product_name} <span class="text-stone-400">(${p.unit})</span></div>`).join('');
+      dropdown.classList.remove('hidden');
+    }
   });
-  selectEl.addEventListener('change', () => { dropdown.classList.add('hidden'); searchInput.value = ''; populateUnitSelect(container.querySelector('.manual-exit-unit'), selectEl.value); });
+  selectEl.addEventListener('change', () => {
+    dropdown.classList.add('hidden'); searchInput.value = '';
+    if (container.dataset.itemType !== 'venda_direta') populateUnitSelect(container.querySelector('.manual-exit-unit'), selectEl.value);
+  });
   document.addEventListener('click', (e) => { if (!container.contains(e.target)) dropdown.classList.add('hidden'); });
 }
 function selectManualExitProduct(el, productId, productName, unit) {
@@ -2011,40 +2059,93 @@ function selectManualExitProduct(el, productId, productName, unit) {
   container.querySelector('.manual-exit-dropdown').classList.add('hidden');
   populateUnitSelect(container.querySelector('.manual-exit-unit'), productId);
 }
+function selectManualExitRecipe(el, recipeId, recipeName) {
+  const container = el.closest('.manual-exit-item');
+  container.querySelector('.manual-exit-product').value = recipeId;
+  container.querySelector('.manual-exit-search').value = recipeName;
+  container.querySelector('.manual-exit-dropdown').classList.add('hidden');
+}
 function renderManualExitSelect() {
-  const products = getProducts().sort((a,b) => a.product_name.localeCompare(b.product_name));
-  document.querySelectorAll('#manual-exit-container .manual-exit-product').forEach(sel => { const val = sel.value; sel.innerHTML = '<option value="">Selecione o insumo</option>' + products.map(p=>`<option value="${p.id}" data-name="${p.product_name}" data-unit="${p.unit}">${p.product_name} (${p.unit})</option>`).join(''); sel.value = val; });
+  document.querySelectorAll('#manual-exit-container .manual-exit-item').forEach(container => {
+    const sel = container.querySelector('.manual-exit-product');
+    const val = sel.value;
+    if (container.dataset.itemType === 'venda_direta') {
+      const vd = getRecipes().filter(r => r.recipe_type === 'Venda Direta').sort((a,b)=>a.recipe_name.localeCompare(b.recipe_name));
+      sel.innerHTML = '<option value="">Selecione o item</option>' + vd.map(r=>`<option value="${r.id}" data-name="${r.recipe_name}">${r.recipe_name}</option>`).join('');
+    } else {
+      const products = getProducts().sort((a,b) => a.product_name.localeCompare(b.product_name));
+      sel.innerHTML = '<option value="">Selecione o insumo</option>' + products.map(p=>`<option value="${p.id}" data-name="${p.product_name}" data-unit="${p.unit}">${p.product_name} (${p.unit})</option>`).join('');
+    }
+    sel.value = val;
+  });
 }
 async function confirmManualExit() {
-  const items = document.querySelectorAll('#manual-exit-container .manual-exit-item');
-  const exitData = [];
-  for (const item of items) {
+  const itemEls = document.querySelectorAll('#manual-exit-container .manual-exit-item');
+  const insumoEntries = []; // {id, name, unit, qty, storageQty}
+  const vendaDiretaEntries = []; // {recipeId, name, qty}
+  for (const item of itemEls) {
     const sel = item.querySelector('.manual-exit-product');
-    const unitSel = item.querySelector('.manual-exit-unit');
     const qty = parseFloat(item.querySelector('.manual-exit-qty').value);
     if (!sel.value||!qty||qty<=0) { showToast('Preencha todos os campos', true); return; }
-    const p = allData.find(r => r.id === sel.value);
-    const chosenUnit = unitSel.value || sel.selectedOptions[0]?.dataset.unit || '';
-    const baseUnit = p ? (p.storage_unit||p.unit) : chosenUnit;
-    const storageQty = p ? convertQuantity(qty, chosenUnit, baseUnit, getCustomConversions(p)) : qty;
-    exitData.push({ id:sel.value, name:sel.selectedOptions[0]?.dataset.name||'', unit:chosenUnit, qty, storageQty });
+    if (item.dataset.itemType === 'venda_direta') {
+      vendaDiretaEntries.push({ recipeId: sel.value, name: sel.selectedOptions[0]?.dataset.name||'', qty });
+    } else {
+      const unitSel = item.querySelector('.manual-exit-unit');
+      const p = allData.find(r => r.id === sel.value);
+      const chosenUnit = unitSel.value || sel.selectedOptions[0]?.dataset.unit || '';
+      const baseUnit = p ? (p.storage_unit||p.unit) : chosenUnit;
+      const storageQty = p ? convertQuantity(qty, chosenUnit, baseUnit, getCustomConversions(p)) : qty;
+      insumoEntries.push({ id:sel.value, name:sel.selectedOptions[0]?.dataset.name||'', unit:chosenUnit, qty, storageQty });
+    }
   }
-  for (const e of exitData) {
+  for (const e of insumoEntries) {
     const prod = allData.find(r => r.id === e.id); if (!prod) { showToast(`Insumo ${e.name} não encontrado`, true); return; }
     if (prod.quantity < e.storageQty) { showToast(`Estoque insuficiente de ${e.name}`, true); return; }
+  }
+  // Confere estoque suficiente pros itens de Venda Direta também, antes de começar a descontar
+  for (const vd of vendaDiretaEntries) {
+    const recipe = allData.find(r => r.id === vd.recipeId); if (!recipe) { showToast(`Item ${vd.name} não encontrado`, true); return; }
+    let ingredients=[]; try{ingredients=JSON.parse(recipe.recipe_ingredients);}catch(e){}
+    for (const ing of ingredients) {
+      const p = getProducts().find(x => x.product_name === ing.name);
+      if (!p) { showToast(`Insumo ${ing.name} (usado em ${vd.name}) não encontrado`, true); return; }
+      const storageUnit = p.storage_unit||p.unit;
+      const needed = convertQuantity(ing.qty*vd.qty, ing.unit, storageUnit, getCustomConversions(p));
+      if (p.quantity < needed) { showToast(`Estoque insuficiente de ${ing.name} pra retirar ${vd.name}`, true); return; }
+    }
   }
   const reason = document.getElementById('manual-exit-reason').value.trim();
   showLoadingProgress('Confirmando saída...');
   try {
     let done = 0;
-    for (const e of exitData) {
-      updateLoadingProgress(`Retirando ${done+1}/${exitData.length}: ${e.name}`);
+    const totalSteps = insumoEntries.length + vendaDiretaEntries.length;
+    for (const e of insumoEntries) {
+      updateLoadingProgress(`Retirando ${done+1}/${totalSteps}: ${e.name}`);
       const prod = allData.find(r => r.id === e.id);
       await dbUpdate({...prod, quantity: Math.max(0, prod.quantity - e.storageQty)});
       done++;
     }
-    const itemList = exitData.map(e=>`${fmtQty(e.qty,e.unit)} ${e.unit} ${e.name}`).join('; ');
-    await dbCreate({ ...blankRecord(), type:'movement', movement_type:'saida_manual', movement_product:itemList, movement_quantity:exitData.length, movement_date:new Date().toISOString(), movement_note:reason?`Saída Manual: ${itemList} (${reason})`:`Saída Manual: ${itemList}`, batch_items:JSON.stringify(exitData) });
+    const vendaDiretaExitData = [];
+    for (const vd of vendaDiretaEntries) {
+      updateLoadingProgress(`Retirando ${done+1}/${totalSteps}: ${vd.name}`);
+      const recipe = allData.find(r => r.id === vd.recipeId);
+      let ingredients=[]; try{ingredients=JSON.parse(recipe.recipe_ingredients);}catch(e){}
+      const deductedIngredients = [];
+      for (const ing of ingredients) {
+        const p = getProducts().find(x => x.product_name === ing.name);
+        const storageUnit = p.storage_unit||p.unit;
+        const deduct = convertQuantity(ing.qty*vd.qty, ing.unit, storageUnit, getCustomConversions(p));
+        await dbUpdate({...p, quantity: Math.max(0, p.quantity - deduct)});
+        deductedIngredients.push({ name: ing.name, qty: deduct, unit: storageUnit });
+      }
+      // Guarda no mesmo formato usado nas vendas (value:'recipe_<id>' + deductedIngredients), pra
+      // reaproveitar toda a lógica que já sabe ler isso: desfazer, saldo calculado, saídas recentes.
+      vendaDiretaExitData.push({ value:`recipe_${vd.recipeId}`, name: vd.name, unit: recipe.recipe_yield_unit, type:'venda_direta', qty: vd.qty, deductedIngredients });
+      done++;
+    }
+    const allExitData = [...insumoEntries, ...vendaDiretaExitData];
+    const itemList = allExitData.map(e => e.value ? `${fmtQty(e.qty,'')} ${e.name} (venda direta)` : `${fmtQty(e.qty,e.unit)} ${e.unit} ${e.name}`).join('; ');
+    await dbCreate({ ...blankRecord(), type:'movement', movement_type:'saida_manual', movement_product:itemList, movement_quantity:allExitData.length, movement_date:new Date().toISOString(), movement_note:reason?`Saída Manual: ${itemList} (${reason})`:`Saída Manual: ${itemList}`, batch_items:JSON.stringify(allExitData) });
     hideLoadingProgress();
     showToast('Saída confirmada!'); resetManualExitForm();
   } catch (err) {
@@ -2056,9 +2157,10 @@ async function confirmManualExit() {
 function cancelManualExit() { resetManualExitForm(); }
 function resetManualExitForm() {
   const products = getProducts().sort((a,b) => a.product_name.localeCompare(b.product_name));
-  document.getElementById('manual-exit-container').innerHTML = `<div class="manual-exit-item bg-stone-50 border border-stone-200 rounded-lg p-4 space-y-2"><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block">Insumo</label><div class="relative"><i data-lucide="search" class="absolute left-3 top-3 w-4 h-4 text-stone-400"></i><input type="text" class="manual-exit-search input-field text-sm w-full pl-9 pr-4" placeholder="Pesquisar insumo..."><div class="manual-exit-dropdown hidden absolute top-full left-0 right-0 mt-1 bg-white border border-stone-200 rounded-lg shadow-lg z-10 max-h-40 overflow-y-auto"></div></div><select class="manual-exit-product input-field text-sm w-full" required><option value="">Selecione o insumo</option>${products.map(p=>`<option value="${p.id}" data-name="${p.product_name}" data-unit="${p.unit}">${p.product_name} (${p.unit})</option>`).join('')}</select><div class="grid sm:grid-cols-[1fr_110px_auto] gap-2 items-end"><div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Quantidade</label><input type="number" class="manual-exit-qty input-field text-sm w-full" placeholder="Quantidade" min="0.001" step="any" required></div><div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Medida</label><select class="manual-exit-unit input-field text-sm w-full"></select></div><button type="button" onclick="removeManualExitItem(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button></div></div>`;
+  document.getElementById('manual-exit-container').innerHTML = `<div class="manual-exit-item bg-stone-50 border border-stone-200 rounded-lg p-4 space-y-2" data-item-type="insumo"><div class="flex gap-1.5"><button type="button" class="manual-exit-type-btn flex-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-stone-800 text-white" data-type="insumo" onclick="setManualExitItemType(this,'insumo')">Insumo</button><button type="button" class="manual-exit-type-btn flex-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-type="venda_direta" onclick="setManualExitItemType(this,'venda_direta')">🍽️ Item de Venda Direta</button></div><label class="manual-exit-label text-xs font-semibold text-stone-600 uppercase tracking-wide block">Insumo</label><div class="relative"><i data-lucide="search" class="absolute left-3 top-3 w-4 h-4 text-stone-400"></i><input type="text" class="manual-exit-search input-field text-sm w-full pl-9 pr-4" placeholder="Pesquisar insumo..."><div class="manual-exit-dropdown hidden absolute top-full left-0 right-0 mt-1 bg-white border border-stone-200 rounded-lg shadow-lg z-10 max-h-40 overflow-y-auto"></div></div><select class="manual-exit-product input-field text-sm w-full" required><option value="">Selecione o insumo</option>${products.map(p=>`<option value="${p.id}" data-name="${p.product_name}" data-unit="${p.unit}">${p.product_name} (${p.unit})</option>`).join('')}</select><div class="grid sm:grid-cols-[1fr_110px_auto] gap-2 items-end"><div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Quantidade</label><input type="number" class="manual-exit-qty input-field text-sm w-full" placeholder="Quantidade" min="0.001" step="any" required></div><div class="manual-exit-unit-wrap"><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Medida</label><select class="manual-exit-unit input-field text-sm w-full"></select></div><button type="button" onclick="removeManualExitItem(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button></div></div>`;
   document.getElementById('manual-exit-reason').value = '';
   initManualExitSearchListeners();
+  lucide.createIcons();
 }
 function renderManualExitsList() {
   const exits = getMovements().filter(m=>m.movement_type==='saida_manual').sort((a,b)=>new Date(b.movement_date)-new Date(a.movement_date));
@@ -3311,6 +3413,13 @@ function getRecentProductExits(product, limit) {
     if (m.movement_type === 'saida_manual') {
       let items=[]; try{items=JSON.parse(m.batch_items||'[]');}catch(e){}
       for (const it of items) {
+        if (it.value && it.value.startsWith('recipe_') && it.deductedIngredients && Array.isArray(it.deductedIngredients)) {
+          for (const d of it.deductedIngredients) {
+            if (d.name !== product.product_name) continue;
+            exits.push({ date:new Date(m.movement_date), qty:d.qty, source:`🍽️ Saída (Venda Direta): ${it.name}`, undone:isMovementUndone(m) });
+          }
+          continue;
+        }
         if (it.name !== product.product_name) continue;
         const qty = (it.storageQty!=null) ? it.storageQty : convertQuantity(it.qty, it.unit, storageUnit, getCustomConversions(product));
         exits.push({ date:new Date(m.movement_date), qty, source:'📤 Saída manual', undone:isMovementUndone(m) });
@@ -3379,14 +3488,30 @@ function computeCalculatedBalance(product, anchorDate, anchorQty) {
   let balance = anchorQty;
   let estimatedCount = 0;
   for (const m of movements) {
-    if (m.movement_type === 'entrada' || m.movement_type === 'saida_manual') {
+    if (m.movement_type === 'entrada') {
       let items=[]; try{items=JSON.parse(m.batch_items||'[]');}catch(e){}
       for (const it of items) {
         if (it.name !== product.product_name) continue;
         // Usa o storageQty já calculado na hora do lançamento quando existir (mais preciso que
         // reconverter agora, caso a conversão personalizada do insumo tenha mudado depois).
         const qty = (it.storageQty!=null) ? it.storageQty : convertQuantity(it.qty, it.unit, storageUnit, getCustomConversions(product));
-        balance += (m.movement_type === 'entrada') ? qty : -qty;
+        balance += qty;
+      }
+    } else if (m.movement_type === 'saida_manual') {
+      let items=[]; try{items=JSON.parse(m.batch_items||'[]');}catch(e){}
+      for (const it of items) {
+        if (it.value && it.value.startsWith('recipe_') && it.deductedIngredients && Array.isArray(it.deductedIngredients)) {
+          // Item de Venda Direta retirado manualmente (ex: prato de evento) — desconta pelos
+          // insumos exatos, não pelo "N x nome do prato".
+          for (const d of it.deductedIngredients) {
+            if (d.name !== product.product_name) continue;
+            balance -= d.qty;
+          }
+          continue;
+        }
+        if (it.name !== product.product_name) continue;
+        const qty = (it.storageQty!=null) ? it.storageQty : convertQuantity(it.qty, it.unit, storageUnit, getCustomConversions(product));
+        balance -= qty;
       }
     } else if (m.movement_type === 'perda') {
       let items=[]; try{items=JSON.parse(m.batch_items||'[]');}catch(e){}
@@ -3470,8 +3595,18 @@ function getUndoPreview(m) {
     return { verb:'remove', items, note:'Vai remover do estoque o que foi adicionado nesta entrada:' };
   }
   if (m.movement_type === 'saida_manual') {
-    const items = getMovementDetailItems(m);
-    return { verb:'add', items, note:'Vai devolver ao estoque o que foi retirado nesta saída:' };
+    let exitItems = []; try { exitItems = JSON.parse(m.batch_items||'[]'); } catch(e) {}
+    const returnItems = [];
+    for (const it of exitItems) {
+      if (it.value && it.value.startsWith('recipe_') && it.deductedIngredients && Array.isArray(it.deductedIngredients)) {
+        // Item de Venda Direta retirado manualmente (ex: prato de evento) — devolve pelos insumos
+        // exatos que foram descontados, não pelo "N x nome do prato".
+        for (const d of it.deductedIngredients) returnItems.push({name: d.name, qty: d.qty, unit: d.unit});
+      } else {
+        returnItems.push({ name: it.name, qty: it.qty, unit: it.unit || '' });
+      }
+    }
+    return { verb:'add', items: returnItems, note:'Vai devolver ao estoque o que foi retirado nesta saída:' };
   }
   if (m.movement_type === 'perda') {
     const items = getMovementDetailItems(m);
@@ -3787,7 +3922,7 @@ function computeConsumptionForRange(startDate, endDate, weekdaysSet) {
     // Movimentações desfeitas/canceladas (venda desfeita ou produção cancelada) não contam:
     // o estoque já foi devolvido, então não houve consumo de verdade. Movimentações anteriores
     // a um reset de consumo (se houver) também ficam de fora — só da tela, o estoque é o mesmo.
-    return (m.movement_type==='venda'||m.movement_type==='producao') && !isMovementUndone(m)
+    return (m.movement_type==='venda'||m.movement_type==='producao'||m.movement_type==='saida_manual') && !isMovementUndone(m)
       && moveDate>=startDate && moveDate<=endDate && weekdaysSet.has(moveDate.getDay())
       && (!resetDate || moveDate > resetDate);
   });
@@ -3830,6 +3965,17 @@ function computeConsumptionForRange(startDate, endDate, weekdaysSet) {
         // m.recipe_name não existe em movimentações (é campo de receita) — o nome certo do que
         // foi produzido fica em movement_product.
         addConsumption(ing.name, totalQty, finalUnit, prod?prod.category:'', dateStr, `👩‍🍳 Produção: ${m.movement_product||'—'}`);
+      }
+    } else if (m.movement_type==='saida_manual') {
+      // Só os itens de "Venda Direta" retirados manualmente (ex: prato de evento) contam como
+      // consumo — uma saída manual de insumo puro (ex: deu/perdeu insumo direto) não entra aqui.
+      let exitItems=[]; try{exitItems=JSON.parse(m.batch_items||'[]');}catch(e){}
+      for (const it of exitItems) {
+        if (!(it.value && it.value.startsWith('recipe_') && it.deductedIngredients && Array.isArray(it.deductedIngredients))) continue;
+        for (const d of it.deductedIngredients) {
+          const prod = getProducts().find(p=>p.product_name===d.name);
+          addConsumption(d.name, d.qty, d.unit, prod?prod.category:'', dateStr, `🍽️ Saída (Venda Direta): ${it.name}`);
+        }
       }
     }
   }
