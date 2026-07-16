@@ -604,25 +604,6 @@
           </div>
         </div>
 
-        <!-- Itens não controlados: coisas como chá de ervas, taxa de rolha — não descontam estoque,
-             mas entram no faturamento. Lista fixa, editável direto aqui. -->
-        <div class="bg-stone-50 rounded-lg p-3 border border-stone-200 mb-4">
-          <button type="button" onclick="toggleUncontrolledPanel()" class="w-full flex items-center justify-between text-xs font-semibold text-stone-600">
-            <span>🏷️ Itens não controlados (não desconta estoque, entra no faturamento)</span>
-            <i data-lucide="chevron-down" class="w-4 h-4" id="uncontrolled-panel-chevron"></i>
-          </button>
-          <div id="uncontrolled-panel-body" class="hidden mt-3">
-            <div id="uncontrolled-items-list" class="space-y-1.5 mb-3"></div>
-            <div class="flex gap-2 flex-wrap">
-              <input id="uncontrolled-new-name" type="text" placeholder="Nome (ex: Chá de Ervas)" class="flex-1 input-field text-xs min-w-[140px]">
-              <select id="uncontrolled-new-unit" class="input-field text-xs w-24">
-                <option value="unidade">unidade</option><option value="kg">kg</option><option value="g">g</option><option value="L">L</option><option value="ml">ml</option><option value="fatia">fatia</option><option value="pacote">pacote</option><option value="caixa">caixa</option>
-              </select>
-              <button type="button" onclick="addUncontrolledItem()" class="btn-primary px-3 py-1.5 rounded-lg text-xs font-medium">Adicionar</button>
-            </div>
-          </div>
-        </div>
-
         <!-- Formulário de upload/colagem — some inteiro quando o preview de conferência aparece -->
         <div id="bulk-upload-form">
           <div class="mb-4 p-4 border-2 border-dashed border-stone-300 rounded-xl text-center hover:border-emerald-500 transition-colors cursor-pointer" onclick="document.getElementById('bulk-file-input').click()" id="bulk-drop-zone">
@@ -1164,7 +1145,6 @@ function getRecipes() { return allData.filter(r => r.type === 'recipe'); }
 function getMovements() { return allData.filter(r => r.type === 'movement'); }
 function getProductions() { return allData.filter(r => r.type === 'production'); }
 function getFinishedProducts() { return allData.filter(r => r.type === 'finished_product'); }
-function getUncontrolledItems() { return allData.filter(r => r.type === 'uncontrolled_item'); }
 
 // ============================================================
 // UTILITÁRIOS DE DATA (usados nas Vendas em Lote e no Faturamento)
@@ -1183,44 +1163,6 @@ function parseLocalDate(str) {
 function weekdayLabel(d) {
   const w = WEEKDAY_NAMES[d.getDay()];
   return w.charAt(0).toUpperCase() + w.slice(1);
-}
-
-// ============================================================
-// ITENS NÃO CONTROLADOS (Vendas em Lote)
-// Lista fixa e simples (nome + unidade), gerenciada direto na tela de Vendas
-// em Lote. Ao serem vendidos, NÃO descontam nenhum insumo/produto do estoque,
-// mas entram normalmente no faturamento (aba Faturamento).
-// ============================================================
-function renderUncontrolledItemsList() {
-  const el = document.getElementById('uncontrolled-items-list'); if (!el) return;
-  const items = getUncontrolledItems();
-  el.innerHTML = items.length === 0
-    ? '<p class="text-xs text-stone-400">Nenhum item cadastrado ainda.</p>'
-    : items.map(it => `<div class="flex items-center justify-between bg-white rounded-lg px-2.5 py-1.5 border border-stone-200"><span class="text-xs text-stone-700">${it.product_name} <span class="text-stone-400">(${it.unit})</span></span><button type="button" onclick="removeUncontrolledItem('${it.id}')" class="text-red-500 hover:text-red-700 text-xs">🗑</button></div>`).join('');
-}
-function toggleUncontrolledPanel() {
-  document.getElementById('uncontrolled-panel-body').classList.toggle('hidden');
-  document.getElementById('uncontrolled-panel-chevron').classList.toggle('rotate-180');
-}
-async function addUncontrolledItem() {
-  const nameInput = document.getElementById('uncontrolled-new-name');
-  const unitSelect = document.getElementById('uncontrolled-new-unit');
-  const name = nameInput.value.trim();
-  if (!name) { showToast('Digite o nome do item', true); return; }
-  if (getUncontrolledItems().some(it => it.product_name.toLowerCase() === name.toLowerCase())) { showToast('Esse item já está cadastrado', true); return; }
-  const result = await dbCreate({ ...blankRecord(), type:'uncontrolled_item', product_name:name, unit:unitSelect.value });
-  if (result.isOk) {
-    nameInput.value = '';
-    renderUncontrolledItemsList();
-    showToast('Item adicionado!');
-  } else {
-    showToast('Erro ao adicionar: ' + (result.error||''), true);
-  }
-}
-async function removeUncontrolledItem(id) {
-  const result = await dbDelete({ id });
-  if (result.isOk) { renderUncontrolledItemsList(); showToast('Item removido'); }
-  else { showToast('Erro ao remover: ' + (result.error||''), true); }
 }
 
 // ============================================================
@@ -2617,7 +2559,7 @@ document.addEventListener('click', (e) => {
   document.querySelectorAll('.sales-mode-btn').forEach(b => { b.className = `sales-mode-btn px-4 py-2 rounded-lg text-sm font-medium ${b.dataset.mode===currentSalesMode?'bg-emerald-700 text-white':'bg-stone-100 text-stone-600 hover:bg-stone-200'}`; });
   document.getElementById('sales-manual-section').classList.toggle('hidden', currentSalesMode !== 'manual');
   document.getElementById('sales-bulk-section').classList.toggle('hidden', currentSalesMode !== 'bulk');
-  if (currentSalesMode === 'bulk') { initBulkSalesDate(); renderUncontrolledItemsList(); }
+  if (currentSalesMode === 'bulk') { initBulkSalesDate(); }
 });
 function renderSalesSelect() {
   const finished = getFinishedProducts();
@@ -2809,40 +2751,46 @@ function findBestMatch(importedName, systemNames) {
 function showBulkMatchPreview(items) {
   const finished = getFinishedProducts();
   const vendaDireta = getRecipes().filter(r => r.recipe_type === 'Venda Direta');
-  const uncontrolled = getUncontrolledItems();
   const controlledNames = [...finished.map(f => f.product_name), ...vendaDireta.map(r => r.recipe_name)];
-  const uncontrolledNames = uncontrolled.map(u => u.product_name);
-  const allSystemNames = [...controlledNames, ...uncontrolledNames];
 
   // Primeiro checa se já existe um vínculo salvo (memorizado de uma correção anterior) pra esse
-  // nome exato vindo da planilha. Se existir, usa direto — não tenta "adivinhar" de novo.
+  // nome exato vindo da planilha. Pode apontar pra um produto/receita OU pra "não controlado"
+  // (marcador especial __uncontrolled__) — nesse caso não tenta adivinhar de novo.
+  // Sem vínculo salvo e sem um match confiável contra produtos/receitas, o item cai
+  // automaticamente como "não controlado": não precisa cadastrar nada antes, não desconta
+  // estoque, e o próprio nome da planilha já entra direto no faturamento.
   const matched = items.map(item => {
     const alias = getSaleAlias(item.original);
-    if (alias && allSystemNames.includes(alias)) {
+    if (alias === '__uncontrolled__') {
+      return { ...item, match: '__uncontrolled__', score: 100, fromAlias: true };
+    }
+    if (alias && controlledNames.includes(alias)) {
       return { ...item, match: alias, score: 100, fromAlias: true };
     }
-    const match = findBestMatch(item.original, allSystemNames);
-    return { ...item, match: match ? match.name : '', score: match ? match.score : 0, fromAlias: false };
+    const match = findBestMatch(item.original, controlledNames);
+    if (match) return { ...item, match: match.name, score: match.score, fromAlias: false };
+    return { ...item, match: '__uncontrolled__', score: 0, fromAlias: false };
   });
 
-  const foundCount = matched.filter(m => m.match).length;
-  const notFoundCount = matched.filter(m => !m.match).length;
+  const foundCount = matched.filter(m => m.match !== '__uncontrolled__').length;
+  const uncontrolledCount = matched.filter(m => m.match === '__uncontrolled__').length;
 
-  let html = `<div class="mb-3 flex gap-2 text-xs">
+  let html = `<div class="mb-3 flex gap-2 text-xs flex-wrap">
     <span class="px-2 py-1 rounded-full bg-emerald-100 text-emerald-800 font-medium">${foundCount} encontrados</span>
-    ${notFoundCount > 0 ? `<span class="px-2 py-1 rounded-full bg-red-100 text-red-800 font-medium">${notFoundCount} não encontrados</span>` : ''}
+    ${uncontrolledCount > 0 ? `<span class="px-2 py-1 rounded-full bg-amber-100 text-amber-800 font-medium">🏷️ ${uncontrolledCount} não controlado(s)</span>` : ''}
   </div>
   <div class="space-y-2 max-h-[400px] overflow-y-auto mb-4">`;
 
   for (let i = 0; i < matched.length; i++) {
     const m = matched[i];
-    const statusClass = m.match ? 'border-emerald-200 bg-emerald-50' : 'border-red-200 bg-red-50';
-    const statusIcon = m.match ? '✓' : '✗';
+    const isUncontrolled = m.match === '__uncontrolled__';
+    const statusClass = isUncontrolled ? 'border-amber-200 bg-amber-50' : 'border-emerald-200 bg-emerald-50';
+    const statusIcon = isUncontrolled ? '🏷️' : '✓';
 
     html += `<div class="p-3 rounded-lg border ${statusClass} flex flex-col sm:flex-row sm:items-center gap-2">
       <div class="flex-1 min-w-0">
         <div class="flex items-center gap-2 mb-1 flex-wrap">
-          <span class="text-xs font-bold ${m.match ? 'text-emerald-700' : 'text-red-700'}">${statusIcon}</span>
+          <span class="text-xs font-bold ${isUncontrolled ? 'text-amber-700' : 'text-emerald-700'}">${statusIcon}</span>
           <span class="text-xs text-stone-500">Planilha:</span>
           <span class="text-sm font-medium text-stone-800 truncate">${m.original}</span>
           <span class="text-xs font-bold text-stone-600">×${m.qty}</span>
@@ -2853,8 +2801,8 @@ function showBulkMatchPreview(items) {
           <span class="text-xs text-stone-400 ml-5">→ Sistema:</span>
           <select class="bulk-match-select input-field text-xs py-1 px-2 flex-1" data-idx="${i}" data-qty="${m.qty}" data-original="${m.original.replace(/"/g,'&quot;')}" data-total-value="${m.totalValue||''}">
             <option value="">— Ignorar —</option>
+            <option value="__uncontrolled__" ${isUncontrolled ? 'selected' : ''}>🏷️ Não controlado (${m.original}) — não desconta estoque</option>
             <optgroup label="Produtos / Receitas">${controlledNames.sort().map(n => `<option value="${n}" ${n === m.match ? 'selected' : ''}>${n}</option>`).join('')}</optgroup>
-            ${uncontrolledNames.length ? `<optgroup label="🏷️ Não controlados (não desconta estoque)">${uncontrolledNames.sort().map(n => `<option value="${n}" ${n === m.match ? 'selected' : ''}>${n}</option>`).join('')}</optgroup>` : ''}
           </select>
         </div>
       </div>
@@ -2882,55 +2830,75 @@ function cancelBulkMatch() {
 }
 
 // Confirma as vendas em lote E memoriza os vínculos planilha↔sistema usados, pra da próxima vez
-// não precisar corrigir de novo (mesmo os que já vieram certos automaticamente).
+// não precisar corrigir de novo (mesmo os que já vieram certos automaticamente, incluindo os
+// marcados como "não controlado").
 async function confirmBulkMatch() {
   const selects = document.querySelectorAll('.bulk-match-select');
-  const salesText = [];
+  const salesData = [];
   const aliasesToSave = [];
   const priceHints = [];
+  const finished = getFinishedProducts();
+  const vendaDireta = getRecipes().filter(r => r.recipe_type === 'Venda Direta');
+  let uncontrolledIdx = 0;
   for (const sel of selects) {
-    if (sel.value) {
-      salesText.push(sel.value + '\t' + sel.dataset.qty);
-      aliasesToSave.push({ original: sel.dataset.original, systemName: sel.value });
-      const totalValue = parseFloat(sel.dataset.totalValue);
-      if (!isNaN(totalValue) && totalValue > 0) {
-        priceHints.push({ systemName: sel.value, qty: parseFloat(sel.dataset.qty), totalValue });
-      }
+    if (!sel.value) continue; // "— Ignorar —"
+    const qty = parseFloat(sel.dataset.qty);
+    const totalValue = parseFloat(sel.dataset.totalValue);
+    const original = sel.dataset.original;
+    let entry = null;
+    if (sel.value === '__uncontrolled__') {
+      entry = { value:`uncontrolled_${uncontrolledIdx++}`, name: original, unit:'unidade', type:'uncontrolled', qty };
+      aliasesToSave.push({ original, systemName: '__uncontrolled__' });
+    } else {
+      const finishedMatch = finished.find(f => f.product_name === sel.value);
+      const recipeMatch = vendaDireta.find(r => r.recipe_name === sel.value);
+      if (finishedMatch) entry = { value:`finished_${finishedMatch.id}`, name:finishedMatch.product_name, unit:finishedMatch.unit, type:'finished', qty };
+      else if (recipeMatch) entry = { value:`recipe_${recipeMatch.id}`, name:recipeMatch.recipe_name, unit:recipeMatch.recipe_yield_unit, type:'venda_direta', qty };
+      if (entry) aliasesToSave.push({ original, systemName: sel.value });
+    }
+    if (!entry) continue;
+    salesData.push(entry);
+    if (!isNaN(totalValue) && totalValue > 0) {
+      priceHints.push({ systemName: entry.name, qty, totalValue });
     }
   }
-  if (salesText.length === 0) { showToast('Nenhum item selecionado', true); return; }
+  if (salesData.length === 0) { showToast('Nenhum item selecionado', true); return; }
 
-  document.getElementById('bulk-sales-textarea').value = salesText.join('\n');
   document.getElementById('bulk-match-preview').classList.add('hidden');
   document.getElementById('bulk-match-preview').innerHTML = '';
   document.getElementById('bulk-upload-form').classList.remove('hidden');
+  document.getElementById('bulk-sales-textarea').value = '';
 
   showLoadingProgress('Salvando vínculos...');
   try { await saveSaleAliases(aliasesToSave); } catch (e) { console.error('Erro ao salvar vínculos:', e); }
   hideLoadingProgress();
-  await processBulkSales(priceHints);
+  await processBulkSales(priceHints, salesData);
 }
 
 function clearBulkSalesForm() { document.getElementById('bulk-sales-textarea').value=''; document.getElementById('bulk-sales-feedback').classList.add('hidden'); document.getElementById('bulk-file-input').value=''; document.getElementById('bulk-file-name').classList.add('hidden'); }
-async function processBulkSales(priceHints) {
+async function processBulkSales(priceHints, prebuiltSalesData) {
   if (salesSubmitInProgress) { showToast('Já tem uma venda sendo processada, aguarde...', true); return; }
-  const text = document.getElementById('bulk-sales-textarea').value.trim();
-  if (!text) { showToast('Cole os dados das vendas', true); return; }
-  const parsed = text.split('\n').map(parseBulkSalesLine).filter(Boolean);
-  if (parsed.length === 0) { showToast('Nenhuma venda válida encontrada', true); return; }
-  const finished = getFinishedProducts();
-  const vendaDireta = getRecipes().filter(r => r.recipe_type === 'Venda Direta');
-  const uncontrolled = getUncontrolledItems();
   const saleDate = getBulkSalesDate();
-  const salesData = [], notFound = [];
-  for (const item of parsed) {
-    const finishedMatch = finished.find(f=>f.product_name.toLowerCase()===item.name.toLowerCase());
-    const recipeMatch = vendaDireta.find(r=>r.recipe_name.toLowerCase()===item.name.toLowerCase());
-    const uncontrolledMatch = uncontrolled.find(u=>u.product_name.toLowerCase()===item.name.toLowerCase());
-    if (finishedMatch) salesData.push({ value:`finished_${finishedMatch.id}`, name:finishedMatch.product_name, unit:finishedMatch.unit, type:'finished', qty:item.qty });
-    else if (recipeMatch) salesData.push({ value:`recipe_${recipeMatch.id}`, name:recipeMatch.recipe_name, unit:recipeMatch.recipe_yield_unit, type:'venda_direta', qty:item.qty });
-    else if (uncontrolledMatch) salesData.push({ value:`uncontrolled_${uncontrolledMatch.id}`, name:uncontrolledMatch.product_name, unit:uncontrolledMatch.unit, type:'uncontrolled', qty:item.qty });
-    else notFound.push(item.name);
+  let salesData, notFound = [];
+  if (prebuiltSalesData) {
+    // Veio da conferência da planilha (showBulkMatchPreview/confirmBulkMatch) — já está
+    // resolvido, inclusive os itens "não controlados", sem precisar re-casar por nome.
+    salesData = prebuiltSalesData;
+  } else {
+    const text = document.getElementById('bulk-sales-textarea').value.trim();
+    if (!text) { showToast('Cole os dados das vendas', true); return; }
+    const parsed = text.split('\n').map(parseBulkSalesLine).filter(Boolean);
+    if (parsed.length === 0) { showToast('Nenhuma venda válida encontrada', true); return; }
+    const finished = getFinishedProducts();
+    const vendaDireta = getRecipes().filter(r => r.recipe_type === 'Venda Direta');
+    salesData = [];
+    for (const item of parsed) {
+      const finishedMatch = finished.find(f=>f.product_name.toLowerCase()===item.name.toLowerCase());
+      const recipeMatch = vendaDireta.find(r=>r.recipe_name.toLowerCase()===item.name.toLowerCase());
+      if (finishedMatch) salesData.push({ value:`finished_${finishedMatch.id}`, name:finishedMatch.product_name, unit:finishedMatch.unit, type:'finished', qty:item.qty });
+      else if (recipeMatch) salesData.push({ value:`recipe_${recipeMatch.id}`, name:recipeMatch.recipe_name, unit:recipeMatch.recipe_yield_unit, type:'venda_direta', qty:item.qty });
+      else notFound.push(item.name);
+    }
   }
   if (salesData.length === 0) { showToast('Nenhum produto encontrado', true); return; }
   showLoadingProgress('Processando vendas...');
@@ -2969,7 +2937,7 @@ async function processBulkSales(priceHints) {
     // (pra alimentar o faturamento e a margem no CMV), sem precisar digitar preço manualmente.
     if (priceHints && priceHints.length && financeUnlocked) {
       updateLoadingProgress('Salvando valores de venda...');
-      const uncontrolledNameSet = new Set(uncontrolled.map(u=>u.product_name));
+      const uncontrolledNameSet = new Set(salesData.filter(s=>s.type==='uncontrolled').map(s=>s.name));
       const controlledHints = priceHints.filter(h => !uncontrolledNameSet.has(h.systemName));
       try { await saveSalePrices(controlledHints); } catch (e) { console.error('Erro ao salvar preços de venda:', e); }
       const hintsWithUnit = priceHints.map(h => {
@@ -3847,7 +3815,7 @@ document.addEventListener('click', (e) => {
   document.getElementById('fpanel-vendas').classList.toggle('hidden', activeFinanceTab!=='vendas');
   document.getElementById('fpanel-faturamento').classList.toggle('hidden', activeFinanceTab!=='faturamento');
   if (activeFinanceTab === 'cmv') renderFinanceCMV();
-  if (activeFinanceTab === 'vendas') { renderSalesSelect(); renderSalesToday(); if (currentSalesMode==='bulk') { initBulkSalesDate(); renderUncontrolledItemsList(); } }
+  if (activeFinanceTab === 'vendas') { renderSalesSelect(); renderSalesToday(); if (currentSalesMode==='bulk') { initBulkSalesDate(); } }
   if (activeFinanceTab === 'faturamento') renderFaturamento();
 });
 
@@ -4190,7 +4158,7 @@ function renderFinanceiro() {
   document.getElementById('fpanel-faturamento').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='faturamento');
   if (financeUnlocked) {
     renderFinancePending(); renderFinanceCMV();
-    if (activeFinanceTab === 'vendas') { renderSalesSelect(); renderSalesToday(); if (currentSalesMode==='bulk') { initBulkSalesDate(); renderUncontrolledItemsList(); } }
+    if (activeFinanceTab === 'vendas') { renderSalesSelect(); renderSalesToday(); if (currentSalesMode==='bulk') { initBulkSalesDate(); } }
     if (activeFinanceTab === 'faturamento') renderFaturamento();
     lucide.createIcons();
   }
