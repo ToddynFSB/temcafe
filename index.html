@@ -536,6 +536,7 @@
       <button class="finance-tab-btn finance-tab-active px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="custos"><i data-lucide="banknote" class="w-5 h-5"></i>Custos Pendentes</button>
       <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="cmv"><i data-lucide="percent" class="w-5 h-5"></i>CMV</button>
       <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="vendas"><i data-lucide="credit-card" class="w-5 h-5"></i>Vendas</button>
+      <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="faturamento"><i data-lucide="trending-up" class="w-5 h-5"></i>Faturamento</button>
     </div>
   </nav>
 
@@ -592,6 +593,36 @@
       <div class="bg-white rounded-xl p-5 shadow-sm border border-stone-100 mb-5 hidden" id="sales-bulk-section">
         <h3 class="font-semibold mb-4 text-stone-800 text-sm">Registrar Vendas em Lote</h3>
 
+        <!-- Data da venda: por padrão hoje, mas dá pra registrar um lote de um dia anterior -->
+        <div class="mb-4 p-3 bg-stone-50 rounded-lg border border-stone-200">
+          <p class="text-xs font-semibold text-stone-600 mb-2">Data da venda</p>
+          <div class="flex items-center gap-2 flex-wrap">
+            <input id="bulk-sales-date" type="date" class="input-field text-sm" onchange="updateBulkSalesDateLabel()">
+            <button type="button" onclick="setBulkSalesDate(0)" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200">Hoje</button>
+            <button type="button" onclick="setBulkSalesDate(-1)" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200">Ontem</button>
+            <span id="bulk-sales-date-label" class="text-xs text-emerald-700 font-medium"></span>
+          </div>
+        </div>
+
+        <!-- Itens não controlados: coisas como chá de ervas, taxa de rolha — não descontam estoque,
+             mas entram no faturamento. Lista fixa, editável direto aqui. -->
+        <div class="bg-stone-50 rounded-lg p-3 border border-stone-200 mb-4">
+          <button type="button" onclick="toggleUncontrolledPanel()" class="w-full flex items-center justify-between text-xs font-semibold text-stone-600">
+            <span>🏷️ Itens não controlados (não desconta estoque, entra no faturamento)</span>
+            <i data-lucide="chevron-down" class="w-4 h-4" id="uncontrolled-panel-chevron"></i>
+          </button>
+          <div id="uncontrolled-panel-body" class="hidden mt-3">
+            <div id="uncontrolled-items-list" class="space-y-1.5 mb-3"></div>
+            <div class="flex gap-2 flex-wrap">
+              <input id="uncontrolled-new-name" type="text" placeholder="Nome (ex: Chá de Ervas)" class="flex-1 input-field text-xs min-w-[140px]">
+              <select id="uncontrolled-new-unit" class="input-field text-xs w-24">
+                <option value="unidade">unidade</option><option value="kg">kg</option><option value="g">g</option><option value="L">L</option><option value="ml">ml</option><option value="fatia">fatia</option><option value="pacote">pacote</option><option value="caixa">caixa</option>
+              </select>
+              <button type="button" onclick="addUncontrolledItem()" class="btn-primary px-3 py-1.5 rounded-lg text-xs font-medium">Adicionar</button>
+            </div>
+          </div>
+        </div>
+
         <!-- Formulário de upload/colagem — some inteiro quando o preview de conferência aparece -->
         <div id="bulk-upload-form">
           <div class="mb-4 p-4 border-2 border-dashed border-stone-300 rounded-xl text-center hover:border-emerald-500 transition-colors cursor-pointer" onclick="document.getElementById('bulk-file-input').click()" id="bulk-drop-zone">
@@ -614,6 +645,28 @@
       </div>
       <h3 class="font-semibold mb-3 text-stone-800 text-sm">Vendas Registradas Hoje</h3>
       <div id="sales-today-list" class="space-y-2"></div>
+    </section>
+
+    <!-- Sub-aba: Faturamento -->
+    <section id="fpanel-faturamento" class="hidden fade-in">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-bold text-stone-800 flex items-center gap-2"><i data-lucide="trending-up" class="w-5 h-5 text-emerald-600"></i>Faturamento</h2>
+        <button onclick="lockFinanceiro()" class="text-xs text-stone-400 hover:text-stone-600 flex items-center gap-1"><i data-lucide="lock" class="w-3.5 h-3.5"></i>Bloquear</button>
+      </div>
+      <div class="flex flex-wrap gap-1.5 mb-4">
+        <button class="faturamento-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-800 text-white" data-filter="7days">7 dias</button>
+        <button class="faturamento-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-filter="30days">30 dias</button>
+        <button class="faturamento-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-filter="month">Este mês</button>
+      </div>
+      <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 mb-4">
+        <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-1">Faturamento no período</p>
+        <p class="text-xl font-bold text-emerald-800 mb-3" id="fat-period-total">R$ 0,00</p>
+        <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-2">Por dia (toque numa barra pra ver o detalhe)</p>
+        <div id="fat-chart"></div>
+      </div>
+      <div id="fat-day-detail">
+        <p class="text-stone-400 text-center py-8 text-sm">Toque num dia no gráfico acima pra ver o detalhe.</p>
+      </div>
     </section>
   </main>
 </div>
@@ -1075,6 +1128,90 @@ function getRecipes() { return allData.filter(r => r.type === 'recipe'); }
 function getMovements() { return allData.filter(r => r.type === 'movement'); }
 function getProductions() { return allData.filter(r => r.type === 'production'); }
 function getFinishedProducts() { return allData.filter(r => r.type === 'finished_product'); }
+function getUncontrolledItems() { return allData.filter(r => r.type === 'uncontrolled_item'); }
+
+// ============================================================
+// UTILITÁRIOS DE DATA (usados nas Vendas em Lote e no Faturamento)
+// Sempre trabalha com horário local ao meio-dia pra nunca "vazar" pro dia
+// anterior/seguinte por causa de fuso horário (Brasil é UTC-3).
+// ============================================================
+const WEEKDAY_NAMES = ['domingo','segunda-feira','terça-feira','quarta-feira','quinta-feira','sexta-feira','sábado'];
+function localDateStr(d) {
+  const y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,'0'), day = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+function parseLocalDate(str) {
+  const [y, m, d] = str.split('-').map(Number);
+  return new Date(y, m-1, d, 12, 0, 0);
+}
+function weekdayLabel(d) {
+  const w = WEEKDAY_NAMES[d.getDay()];
+  return w.charAt(0).toUpperCase() + w.slice(1);
+}
+
+// ============================================================
+// ITENS NÃO CONTROLADOS (Vendas em Lote)
+// Lista fixa e simples (nome + unidade), gerenciada direto na tela de Vendas
+// em Lote. Ao serem vendidos, NÃO descontam nenhum insumo/produto do estoque,
+// mas entram normalmente no faturamento (aba Faturamento).
+// ============================================================
+function renderUncontrolledItemsList() {
+  const el = document.getElementById('uncontrolled-items-list'); if (!el) return;
+  const items = getUncontrolledItems();
+  el.innerHTML = items.length === 0
+    ? '<p class="text-xs text-stone-400">Nenhum item cadastrado ainda.</p>'
+    : items.map(it => `<div class="flex items-center justify-between bg-white rounded-lg px-2.5 py-1.5 border border-stone-200"><span class="text-xs text-stone-700">${it.product_name} <span class="text-stone-400">(${it.unit})</span></span><button type="button" onclick="removeUncontrolledItem('${it.id}')" class="text-red-500 hover:text-red-700 text-xs">🗑</button></div>`).join('');
+}
+function toggleUncontrolledPanel() {
+  document.getElementById('uncontrolled-panel-body').classList.toggle('hidden');
+  document.getElementById('uncontrolled-panel-chevron').classList.toggle('rotate-180');
+}
+async function addUncontrolledItem() {
+  const nameInput = document.getElementById('uncontrolled-new-name');
+  const unitSelect = document.getElementById('uncontrolled-new-unit');
+  const name = nameInput.value.trim();
+  if (!name) { showToast('Digite o nome do item', true); return; }
+  if (getUncontrolledItems().some(it => it.product_name.toLowerCase() === name.toLowerCase())) { showToast('Esse item já está cadastrado', true); return; }
+  const result = await dbCreate({ ...blankRecord(), type:'uncontrolled_item', product_name:name, unit:unitSelect.value });
+  if (result.isOk) {
+    nameInput.value = '';
+    renderUncontrolledItemsList();
+    showToast('Item adicionado!');
+  } else {
+    showToast('Erro ao adicionar: ' + (result.error||''), true);
+  }
+}
+async function removeUncontrolledItem(id) {
+  const result = await dbDelete({ id });
+  if (result.isOk) { renderUncontrolledItemsList(); showToast('Item removido'); }
+  else { showToast('Erro ao remover: ' + (result.error||''), true); }
+}
+
+// ============================================================
+// DATA DA VENDA EM LOTE
+// ============================================================
+function initBulkSalesDate() {
+  const input = document.getElementById('bulk-sales-date');
+  if (input && !input.value) input.value = localDateStr(new Date());
+  updateBulkSalesDateLabel();
+}
+function setBulkSalesDate(offsetDays) {
+  const d = new Date(); d.setDate(d.getDate() + offsetDays);
+  document.getElementById('bulk-sales-date').value = localDateStr(d);
+  updateBulkSalesDateLabel();
+}
+function updateBulkSalesDateLabel() {
+  const input = document.getElementById('bulk-sales-date');
+  const label = document.getElementById('bulk-sales-date-label');
+  if (!input || !label) return;
+  if (!input.value) { label.textContent = ''; return; }
+  const d = parseLocalDate(input.value);
+  label.textContent = weekdayLabel(d) + ', ' + d.toLocaleDateString('pt-BR');
+}
+function getBulkSalesDate() {
+  const input = document.getElementById('bulk-sales-date');
+  return input && input.value ? parseLocalDate(input.value) : new Date();
+}
 
 function blankRecord() {
   return { product_name:'', quantity:0, unit:'', storage_unit:'', critical_stock:0, min_stock:0,
@@ -2444,6 +2581,7 @@ document.addEventListener('click', (e) => {
   document.querySelectorAll('.sales-mode-btn').forEach(b => { b.className = `sales-mode-btn px-4 py-2 rounded-lg text-sm font-medium ${b.dataset.mode===currentSalesMode?'bg-emerald-700 text-white':'bg-stone-100 text-stone-600 hover:bg-stone-200'}`; });
   document.getElementById('sales-manual-section').classList.toggle('hidden', currentSalesMode !== 'manual');
   document.getElementById('sales-bulk-section').classList.toggle('hidden', currentSalesMode !== 'bulk');
+  if (currentSalesMode === 'bulk') { initBulkSalesDate(); renderUncontrolledItemsList(); }
 });
 function renderSalesSelect() {
   const finished = getFinishedProducts();
@@ -2635,10 +2773,10 @@ function findBestMatch(importedName, systemNames) {
 function showBulkMatchPreview(items) {
   const finished = getFinishedProducts();
   const vendaDireta = getRecipes().filter(r => r.recipe_type === 'Venda Direta');
-  const allSystemNames = [
-    ...finished.map(f => f.product_name),
-    ...vendaDireta.map(r => r.recipe_name)
-  ];
+  const uncontrolled = getUncontrolledItems();
+  const controlledNames = [...finished.map(f => f.product_name), ...vendaDireta.map(r => r.recipe_name)];
+  const uncontrolledNames = uncontrolled.map(u => u.product_name);
+  const allSystemNames = [...controlledNames, ...uncontrolledNames];
 
   // Primeiro checa se já existe um vínculo salvo (memorizado de uma correção anterior) pra esse
   // nome exato vindo da planilha. Se existir, usa direto — não tenta "adivinhar" de novo.
@@ -2679,7 +2817,8 @@ function showBulkMatchPreview(items) {
           <span class="text-xs text-stone-400 ml-5">→ Sistema:</span>
           <select class="bulk-match-select input-field text-xs py-1 px-2 flex-1" data-idx="${i}" data-qty="${m.qty}" data-original="${m.original.replace(/"/g,'&quot;')}" data-total-value="${m.totalValue||''}">
             <option value="">— Ignorar —</option>
-            ${allSystemNames.sort().map(n => `<option value="${n}" ${n === m.match ? 'selected' : ''}>${n}</option>`).join('')}
+            <optgroup label="Produtos / Receitas">${controlledNames.sort().map(n => `<option value="${n}" ${n === m.match ? 'selected' : ''}>${n}</option>`).join('')}</optgroup>
+            ${uncontrolledNames.length ? `<optgroup label="🏷️ Não controlados (não desconta estoque)">${uncontrolledNames.sort().map(n => `<option value="${n}" ${n === m.match ? 'selected' : ''}>${n}</option>`).join('')}</optgroup>` : ''}
           </select>
         </div>
       </div>
@@ -2745,12 +2884,16 @@ async function processBulkSales(priceHints) {
   if (parsed.length === 0) { showToast('Nenhuma venda válida encontrada', true); return; }
   const finished = getFinishedProducts();
   const vendaDireta = getRecipes().filter(r => r.recipe_type === 'Venda Direta');
+  const uncontrolled = getUncontrolledItems();
+  const saleDate = getBulkSalesDate();
   const salesData = [], notFound = [];
   for (const item of parsed) {
     const finishedMatch = finished.find(f=>f.product_name.toLowerCase()===item.name.toLowerCase());
     const recipeMatch = vendaDireta.find(r=>r.recipe_name.toLowerCase()===item.name.toLowerCase());
+    const uncontrolledMatch = uncontrolled.find(u=>u.product_name.toLowerCase()===item.name.toLowerCase());
     if (finishedMatch) salesData.push({ value:`finished_${finishedMatch.id}`, name:finishedMatch.product_name, unit:finishedMatch.unit, type:'finished', qty:item.qty });
     else if (recipeMatch) salesData.push({ value:`recipe_${recipeMatch.id}`, name:recipeMatch.recipe_name, unit:recipeMatch.recipe_yield_unit, type:'venda_direta', qty:item.qty });
+    else if (uncontrolledMatch) salesData.push({ value:`uncontrolled_${uncontrolledMatch.id}`, name:uncontrolledMatch.product_name, unit:uncontrolledMatch.unit, type:'uncontrolled', qty:item.qty });
     else notFound.push(item.name);
   }
   if (salesData.length === 0) { showToast('Nenhum produto encontrado', true); return; }
@@ -2778,16 +2921,26 @@ async function processBulkSales(priceHints) {
           await dbUpdate({...p, quantity: Math.max(0, p.quantity - deduct)});
         }
         notesParts.push(`${s.qty} ${s.name}`);
+      } else if (s.value.startsWith('uncontrolled_')) {
+        // Item não controlado: não desconta nenhum estoque, só entra no registro da venda e no faturamento.
+        notesParts.push(`${s.qty} ${s.name} (não controlado)`);
       }
       done++;
     }
     updateLoadingProgress('Salvando registro da venda...');
-    await dbCreate({ ...blankRecord(), type:'movement', movement_type:'venda', movement_product:notesParts.join('; '), movement_quantity:salesData.reduce((a,s)=>a+s.qty,0), movement_date:new Date().toISOString(), movement_note:`Venda em lote: ${notesParts.join('; ')}`, batch_items:JSON.stringify(salesData) });
+    await dbCreate({ ...blankRecord(), type:'movement', movement_type:'venda', movement_product:notesParts.join('; '), movement_quantity:salesData.reduce((a,s)=>a+s.qty,0), movement_date:saleDate.toISOString(), movement_note:`Venda em lote: ${notesParts.join('; ')}`, batch_items:JSON.stringify(salesData) });
     // Se veio da importação de planilha com "Valor Total", aproveita e já registra o valor de venda
     // (pra alimentar o faturamento e a margem no CMV), sem precisar digitar preço manualmente.
     if (priceHints && priceHints.length && financeUnlocked) {
       updateLoadingProgress('Salvando valores de venda...');
-      try { await saveSalePrices(priceHints); } catch (e) { console.error('Erro ao salvar preços de venda:', e); }
+      const uncontrolledNameSet = new Set(uncontrolled.map(u=>u.product_name));
+      const controlledHints = priceHints.filter(h => !uncontrolledNameSet.has(h.systemName));
+      try { await saveSalePrices(controlledHints); } catch (e) { console.error('Erro ao salvar preços de venda:', e); }
+      const hintsWithUnit = priceHints.map(h => {
+        const s = salesData.find(sd => sd.name === h.systemName);
+        return { ...h, unit: s ? s.unit : '' };
+      });
+      try { await saveSaleRevenue(hintsWithUnit, saleDate); } catch (e) { console.error('Erro ao salvar faturamento diário:', e); }
     }
     const feedbackEl = document.getElementById('bulk-sales-feedback');
     document.getElementById('bulk-feedback-title').textContent = `✓ ${salesData.length} venda(s) registrada(s)${notFound.length>0?` (${notFound.length} não encontrado(s))`:''}`;
@@ -3656,8 +3809,10 @@ document.addEventListener('click', (e) => {
   document.getElementById('fpanel-custos').classList.toggle('hidden', activeFinanceTab!=='custos');
   document.getElementById('fpanel-cmv').classList.toggle('hidden', activeFinanceTab!=='cmv');
   document.getElementById('fpanel-vendas').classList.toggle('hidden', activeFinanceTab!=='vendas');
+  document.getElementById('fpanel-faturamento').classList.toggle('hidden', activeFinanceTab!=='faturamento');
   if (activeFinanceTab === 'cmv') renderFinanceCMV();
-  if (activeFinanceTab === 'vendas') { renderSalesSelect(); renderSalesToday(); }
+  if (activeFinanceTab === 'vendas') { renderSalesSelect(); renderSalesToday(); if (currentSalesMode==='bulk') { initBulkSalesDate(); renderUncontrolledItemsList(); } }
+  if (activeFinanceTab === 'faturamento') renderFaturamento();
 });
 
 function fmtCurrency(v) {
@@ -3715,6 +3870,111 @@ async function saveSalePrices(items) {
     }
   }
 }
+// Registra o faturamento do dia, item a item (inclusive itens não controlados), pra alimentar o
+// gráfico e o detalhamento da aba Faturamento. Reaproveita as colunas já existentes da aba
+// Financeiro (mesmo padrão de "type" diferenciando o que cada linha representa):
+//   type='sale_revenue' -> {id, product_name, cost_unit (=unidade), sale_price (=preço unitário
+//   dessa venda), total_qty_sold (=qtd vendida NESSA entrada, não acumulado), total_revenue (=valor
+//   total dessa entrada), sale_price_updated_at (=data da venda, formato YYYY-MM-DD)}
+function getSaleRevenueEntries() { return financeData.filter(r => r.type === 'sale_revenue'); }
+async function saveSaleRevenue(items, saleDate) {
+  const dateStr = localDateStr(saleDate);
+  for (const it of items) {
+    if (!it.totalValue || it.totalValue <= 0 || !it.qty) continue;
+    const unitPrice = it.totalValue / it.qty;
+    const payload = { type:'sale_revenue', product_name:it.systemName, cost_unit:it.unit||'', sale_price:unitPrice, total_qty_sold:it.qty, total_revenue:it.totalValue, sale_price_updated_at:dateStr };
+    const r = await financeApiCall('create', { data: payload });
+    financeData.push({ id:r.id, ...payload });
+  }
+}
+// ============================================================
+// ABA FATURAMENTO — gráfico por dia + detalhe do dia selecionado
+// ============================================================
+let faturamentoFilter = '7days';
+let faturamentoSelectedDay = null;
+function faturamentoRangeForFilter(filter) {
+  const end = new Date(); end.setHours(12,0,0,0);
+  let start = new Date(end);
+  if (filter === '30days') start.setDate(end.getDate() - 29);
+  else if (filter === 'month') start = new Date(end.getFullYear(), end.getMonth(), 1, 12, 0, 0);
+  else start.setDate(end.getDate() - 6); // 7days (padrão)
+  return { start, end };
+}
+function buildFaturamentoChartSVG(dailyMap, startDate, endDate) {
+  const days = [];
+  const d = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+  const end = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+  while (d <= end) {
+    days.push({ date:new Date(d), key: localDateStr(d), value: dailyMap[localDateStr(d)]||0 });
+    d.setDate(d.getDate()+1);
+  }
+  if (days.length===0) return '<p class="text-xs text-stone-400">Sem dados suficientes pra gráfico.</p>';
+  const max = Math.max(...days.map(x=>x.value), 0.0001);
+  const barW = 26, gap = 6, chartH = 100;
+  const width = days.length*(barW+gap)+gap;
+  const bars = days.map((x,i)=>{
+    const h = Math.max(2, Math.round((x.value/max)*chartH));
+    const xPos = gap + i*(barW+gap);
+    const label = `${x.date.getDate()}/${x.date.getMonth()+1}`;
+    const isSelected = faturamentoSelectedDay === x.key;
+    const color = x.value>0 ? (isSelected ? '#047857' : '#10b981') : '#e7e5e4';
+    return `<g style="cursor:pointer" onclick="selectFaturamentoDay('${x.key}')"><title>${label}: ${fmtCurrency(x.value)}</title><rect x="${xPos}" y="${chartH-h+16}" width="${barW}" height="${h}" rx="3" fill="${color}"></rect><text x="${xPos+barW/2}" y="${chartH+30}" font-size="8" fill="#78716c" text-anchor="middle">${label}</text></g>`;
+  }).join('');
+  return `<div class="overflow-x-auto -mx-1 px-1"><svg width="${width}" height="140" viewBox="0 0 ${width} 140" xmlns="http://www.w3.org/2000/svg" style="min-width:${width}px">${bars}</svg></div>`;
+}
+function renderFaturamento() {
+  document.querySelectorAll('.faturamento-filter').forEach(b => { b.className = `faturamento-filter px-3 py-1.5 rounded-lg text-xs font-medium ${b.dataset.filter===faturamentoFilter?'bg-stone-800 text-white':'bg-stone-100 text-stone-600 hover:bg-stone-200'}`; });
+
+  const { start, end } = faturamentoRangeForFilter(faturamentoFilter);
+  const startKey = localDateStr(start), endKey = localDateStr(end);
+  const entries = getSaleRevenueEntries().filter(e => e.sale_price_updated_at >= startKey && e.sale_price_updated_at <= endKey);
+
+  const dailyMap = {};
+  entries.forEach(e => { dailyMap[e.sale_price_updated_at] = (dailyMap[e.sale_price_updated_at]||0) + (e.total_revenue||0); });
+
+  const periodTotal = entries.reduce((s,e)=>s+(e.total_revenue||0), 0);
+  document.getElementById('fat-period-total').textContent = fmtCurrency(periodTotal);
+  document.getElementById('fat-chart').innerHTML = buildFaturamentoChartSVG(dailyMap, start, end);
+
+  if (faturamentoSelectedDay && (faturamentoSelectedDay < startKey || faturamentoSelectedDay > endKey)) faturamentoSelectedDay = null;
+  renderFaturamentoDayDetail();
+}
+function selectFaturamentoDay(dateKey) {
+  faturamentoSelectedDay = faturamentoSelectedDay === dateKey ? null : dateKey;
+  renderFaturamento();
+}
+function renderFaturamentoDayDetail() {
+  const el = document.getElementById('fat-day-detail'); if (!el) return;
+  if (!faturamentoSelectedDay) {
+    el.innerHTML = '<p class="text-stone-400 text-center py-8 text-sm">Toque num dia no gráfico acima pra ver o detalhe.</p>';
+    return;
+  }
+  const items = getSaleRevenueEntries().filter(e => e.sale_price_updated_at === faturamentoSelectedDay);
+  const label = weekdayLabel(parseLocalDate(faturamentoSelectedDay)) + ', ' + parseLocalDate(faturamentoSelectedDay).toLocaleDateString('pt-BR');
+  const dayTotal = items.reduce((s,it)=>s+(it.total_revenue||0),0);
+  if (items.length === 0) {
+    el.innerHTML = `<h3 class="font-bold text-stone-800 mb-3">${label}</h3><p class="text-stone-400 text-center py-6 text-sm">Nenhuma venda com valor registrado nesse dia</p>`;
+    return;
+  }
+  el.innerHTML = `
+    <div class="flex items-center justify-between mb-3">
+      <h3 class="font-bold text-stone-800">${label}</h3>
+      <span class="text-sm font-bold text-emerald-800">${fmtCurrency(dayTotal)}</span>
+    </div>
+    <div class="space-y-2">
+      ${items.map(it => `<div class="p-3 bg-white rounded-xl shadow-sm border border-stone-100 flex justify-between items-center">
+        <div><p class="text-sm font-medium text-stone-800">${it.product_name}</p><p class="text-xs text-stone-400">${fmtQty(it.total_qty_sold, it.cost_unit)} ${it.cost_unit||''} · ${fmtCurrency(it.sale_price)}/${it.cost_unit||'un'}</p></div>
+        <span class="text-sm font-bold text-emerald-700">${fmtCurrency(it.total_revenue)}</span>
+      </div>`).join('')}
+    </div>`;
+}
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.faturamento-filter'); if (!btn) return;
+  faturamentoFilter = btn.dataset.filter;
+  faturamentoSelectedDay = null;
+  renderFaturamento();
+});
+
 function renderFinanceiro() {
   const lockScreen = document.getElementById('finance-lock-screen');
   const nav = document.getElementById('finance-nav');
@@ -3723,9 +3983,11 @@ function renderFinanceiro() {
   document.getElementById('fpanel-custos').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='custos');
   document.getElementById('fpanel-cmv').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='cmv');
   document.getElementById('fpanel-vendas').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='vendas');
+  document.getElementById('fpanel-faturamento').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='faturamento');
   if (financeUnlocked) {
     renderFinancePending(); renderFinanceCMV();
-    if (activeFinanceTab === 'vendas') { renderSalesSelect(); renderSalesToday(); }
+    if (activeFinanceTab === 'vendas') { renderSalesSelect(); renderSalesToday(); if (currentSalesMode==='bulk') { initBulkSalesDate(); renderUncontrolledItemsList(); } }
+    if (activeFinanceTab === 'faturamento') renderFaturamento();
     lucide.createIcons();
   }
 }
