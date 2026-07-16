@@ -829,12 +829,7 @@
         </div>
       </div>
       <div class="bg-stone-50 rounded-lg p-4 mb-5 border border-stone-200">
-        <p class="text-xs font-bold text-stone-600 uppercase tracking-wide mb-2">Receita vinculada (opcional)</p>
-        <select id="edit-levels-linked-recipe" class="w-full input-field text-sm"><option value="">Nenhuma receita vinculada</option></select>
-        <p class="text-xs text-stone-500 italic mt-2">Receita tipo "Insumo" que produz este item.</p>
-      </div>
-      <div class="bg-stone-50 rounded-lg p-4 mb-5 border border-stone-200">
-        <p class="text-xs font-bold text-stone-600 uppercase tracking-wide mb-2">Saídas recentes</p>
+        <p class="text-xs font-bold text-stone-600 uppercase tracking-wide mb-2">Movimentações recentes</p>
         <div id="edit-levels-recent-exits" class="space-y-1.5 max-h-52 overflow-y-auto"></div>
       </div>
       <div class="flex gap-2"><button onclick="saveEditedLevels()" class="flex-1 btn-primary px-4 py-2.5 rounded-lg text-sm font-medium">Salvar</button><button onclick="closeEditLevels()" class="flex-1 btn-ghost px-4 py-2.5 rounded-lg text-sm font-medium">Cancelar</button></div>
@@ -3402,52 +3397,63 @@ function movementTypeLabel(type) {
 // não altera nada sozinho, só mostra a comparação.
 // ============================================================
 // ============================================================
-// SAÍDAS RECENTES — lista curta (não o histórico todo) do que saiu de um insumo mais recentemente,
-// já juntando venda em lote, venda manual, produção, saída manual e perda num só lugar. Serve pra
-// bater o olho rápido e ver se saiu o que devia, sem precisar ir atrás no Histórico completo.
+// MOVIMENTAÇÕES RECENTES — lista curta (não o histórico todo) das últimas entradas E saídas de um
+// insumo, juntando entrada, venda em lote, venda manual, produção, saída manual e perda num só
+// lugar. Serve pra bater o olho rápido e ver se saiu/entrou o que devia, sem ir no Histórico completo.
 // ============================================================
-function getRecentProductExits(product, limit) {
+function getRecentProductMovements(product, limit) {
   const storageUnit = product.storage_unit || product.unit;
-  const exits = [];
+  const moves = [];
   for (const m of getMovements()) {
-    if (m.movement_type === 'saida_manual') {
+    if (m.movement_type === 'entrada') {
+      let items=[]; try{items=JSON.parse(m.batch_items||'[]');}catch(e){}
+      for (const it of items) {
+        if (it.name !== product.product_name) continue;
+        const qty = (it.storageQty!=null) ? it.storageQty : convertQuantity(it.qty, it.unit, storageUnit, getCustomConversions(product));
+        moves.push({ date:new Date(m.movement_date), qty, sign:1, source:'📥 Entrada', undone:isMovementUndone(m) });
+      }
+    } else if (m.movement_type === 'saida_manual') {
       let items=[]; try{items=JSON.parse(m.batch_items||'[]');}catch(e){}
       for (const it of items) {
         if (it.value && it.value.startsWith('recipe_') && it.deductedIngredients && Array.isArray(it.deductedIngredients)) {
           for (const d of it.deductedIngredients) {
             if (d.name !== product.product_name) continue;
-            exits.push({ date:new Date(m.movement_date), qty:d.qty, source:`🍽️ Saída (Venda Direta): ${it.name}`, undone:isMovementUndone(m) });
+            moves.push({ date:new Date(m.movement_date), qty:d.qty, sign:-1, source:`🍽️ Saída (Venda Direta): ${it.name}`, undone:isMovementUndone(m) });
           }
           continue;
         }
         if (it.name !== product.product_name) continue;
         const qty = (it.storageQty!=null) ? it.storageQty : convertQuantity(it.qty, it.unit, storageUnit, getCustomConversions(product));
-        exits.push({ date:new Date(m.movement_date), qty, source:'📤 Saída manual', undone:isMovementUndone(m) });
+        moves.push({ date:new Date(m.movement_date), qty, sign:-1, source:'📤 Saída manual', undone:isMovementUndone(m) });
       }
     } else if (m.movement_type === 'perda') {
       let items=[]; try{items=JSON.parse(m.batch_items||'[]');}catch(e){}
       for (const it of items) {
         if (it.name !== product.product_name) continue;
         const qty = convertQuantity(it.qty, it.unit, storageUnit, getCustomConversions(product));
-        exits.push({ date:new Date(m.movement_date), qty, source:'💔 Perda'+(m.loss_reason?` (${m.loss_reason})`:''), undone:isMovementUndone(m) });
+        moves.push({ date:new Date(m.movement_date), qty, sign:-1, source:'💔 Perda'+(m.loss_reason?` (${m.loss_reason})`:''), undone:isMovementUndone(m) });
       }
     } else if (m.movement_type === 'producao') {
+      if (m.movement_product === product.product_name) {
+        const qty = parseFloat(m.production_real_yield || m.movement_quantity) || 0;
+        moves.push({ date:new Date(m.movement_date), qty, sign:1, source:'👩\u200d🍳 Produção (produzido)', undone:isMovementUndone(m) });
+      }
       let ingredients=[]; try{ingredients=JSON.parse(m.batch_items||'[]');}catch(e){}
       for (const ing of ingredients) {
         if (ing.name !== product.product_name) continue;
         const qty = convertQuantity(ing.qty, ing.unit, storageUnit, getCustomConversions(product));
-        exits.push({ date:new Date(m.movement_date), qty, source:`👩‍🍳 Produção: ${m.movement_product||'—'}`, undone:isMovementUndone(m) });
+        moves.push({ date:new Date(m.movement_date), qty, sign:-1, source:`👩‍🍳 Produção: ${m.movement_product||'—'}`, undone:isMovementUndone(m) });
       }
     } else if (m.movement_type === 'venda') {
       let saleItems=[]; try{saleItems=JSON.parse(m.batch_items||'[]');}catch(e){}
       for (const it of saleItems) {
         if (it.value && it.value.startsWith('finished_')) {
-          if (it.name === product.product_name) exits.push({ date:new Date(m.movement_date), qty:it.qty, source:'🛒 Venda (produto pronto)', undone:isMovementUndone(m) });
+          if (it.name === product.product_name) moves.push({ date:new Date(m.movement_date), qty:it.qty, sign:-1, source:'🛒 Venda (produto pronto)', undone:isMovementUndone(m) });
         } else if (it.deductedIngredients && Array.isArray(it.deductedIngredients)) {
           for (const d of it.deductedIngredients) {
             if (d.name !== product.product_name) continue;
             const qty = convertQuantity(d.qty, d.unit, storageUnit, getCustomConversions(product));
-            exits.push({ date:new Date(m.movement_date), qty, source:`🛒 Venda: ${it.name}`, undone:isMovementUndone(m) });
+            moves.push({ date:new Date(m.movement_date), qty, sign:-1, source:`🛒 Venda: ${it.name}`, undone:isMovementUndone(m) });
           }
         } else if (it.value && it.value.startsWith('recipe_')) {
           const recipe = allData.find(r=>r.id===it.value.replace('recipe_',''));
@@ -3456,25 +3462,25 @@ function getRecentProductExits(product, limit) {
             for (const ing of ingredients) {
               if (ing.name !== product.product_name) continue;
               const qty = convertQuantity(ing.qty*it.qty, ing.unit, storageUnit, getCustomConversions(product));
-              exits.push({ date:new Date(m.movement_date), qty, source:`🛒 Venda: ${it.name} (estimado)`, undone:isMovementUndone(m) });
+              moves.push({ date:new Date(m.movement_date), qty, sign:-1, source:`🛒 Venda: ${it.name} (estimado)`, undone:isMovementUndone(m) });
             }
           }
         }
       }
     }
   }
-  exits.sort((a,b)=>b.date-a.date);
-  return exits.slice(0, limit);
+  moves.sort((a,b)=>b.date-a.date);
+  return moves.slice(0, limit);
 }
 function renderRecentExits(product) {
   const el = document.getElementById('edit-levels-recent-exits'); if (!el) return;
   const unit = product.storage_unit || product.unit;
-  const exits = getRecentProductExits(product, 15);
-  el.innerHTML = exits.length === 0
-    ? '<p class="text-xs text-stone-400">Nenhuma saída registrada ainda.</p>'
-    : exits.map(e => `<div class="flex items-center justify-between text-xs px-2.5 py-1.5 rounded-lg border ${e.undone ? 'bg-stone-50 border-stone-200 text-stone-400 line-through' : 'bg-white border-stone-200 text-stone-700'}">
+  const moves = getRecentProductMovements(product, 6);
+  el.innerHTML = moves.length === 0
+    ? '<p class="text-xs text-stone-400">Nenhuma movimentação registrada ainda.</p>'
+    : moves.map(e => `<div class="flex items-center justify-between text-xs px-2.5 py-1.5 rounded-lg border ${e.undone ? 'bg-stone-50 border-stone-200 text-stone-400 line-through' : 'bg-white border-stone-200 text-stone-700'}">
         <span>${e.date.toLocaleDateString('pt-BR')} ${e.date.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})} — ${e.source}${e.undone?' (desfeita)':''}</span>
-        <span class="font-semibold">-${fmtQty(e.qty, unit)} ${unit}</span>
+        <span class="font-semibold ${e.sign>0 ? 'text-emerald-700' : 'text-red-700'}">${e.sign>0?'+':'-'}${fmtQty(e.qty, unit)} ${unit}</span>
       </div>`).join('');
 }
 function toggleStockBalanceForm() {
