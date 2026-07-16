@@ -658,12 +658,48 @@
         <button class="faturamento-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-filter="30days">30 dias</button>
         <button class="faturamento-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-filter="month">Este mês</button>
       </div>
+
+      <!-- Total do período + comparação com período anterior + gráfico por dia -->
       <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 mb-4">
         <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-1">Faturamento no período</p>
-        <p class="text-xl font-bold text-emerald-800 mb-3" id="fat-period-total">R$ 0,00</p>
+        <p class="text-xl font-bold text-emerald-800 mb-1" id="fat-period-total">R$ 0,00</p>
+        <p class="text-xs font-medium mb-3 h-4" id="fat-period-comparison"></p>
         <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-2">Por dia (toque numa barra pra ver o detalhe)</p>
         <div id="fat-chart"></div>
       </div>
+
+      <!-- Lucro e CMV estimados (reaproveita o custo de receita já calculado na aba CMV) -->
+      <div class="grid grid-cols-2 gap-3 mb-4">
+        <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100">
+          <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-1">Lucro estimado</p>
+          <p class="text-lg font-bold text-stone-800" id="fat-profit-total">R$ 0,00</p>
+          <p class="text-[11px] text-stone-400 mt-1" id="fat-profit-note"></p>
+        </div>
+        <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100">
+          <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-1">CMV estimado</p>
+          <p class="text-lg font-bold text-stone-800" id="fat-cmv-total">R$ 0,00</p>
+          <p class="text-[11px] text-stone-400 mt-1" id="fat-cmv-note"></p>
+        </div>
+      </div>
+
+      <!-- Ranking de produtos por faturamento -->
+      <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 mb-4">
+        <h3 class="font-semibold text-sm mb-3 text-stone-800 flex items-center gap-2"><i data-lucide="bar-chart-2" class="w-4 h-4 text-emerald-600"></i>Produtos que mais faturam</h3>
+        <div id="fat-ranking-list" class="space-y-2.5"></div>
+      </div>
+
+      <!-- Margem por produto -->
+      <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 mb-4">
+        <h3 class="font-semibold text-sm mb-3 text-stone-800 flex items-center gap-2"><i data-lucide="percent" class="w-4 h-4 text-emerald-600"></i>Margem por produto</h3>
+        <div id="fat-margin-content"></div>
+      </div>
+
+      <!-- Faturamento por dia da semana -->
+      <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 mb-4">
+        <h3 class="font-semibold text-sm mb-3 text-stone-800 flex items-center gap-2"><i data-lucide="calendar" class="w-4 h-4 text-emerald-600"></i>Por dia da semana</h3>
+        <div id="fat-weekday-content"></div>
+      </div>
+
       <div id="fat-day-detail">
         <p class="text-stone-400 text-center py-8 text-sm">Toque num dia no gráfico acima pra ver o detalhe.</p>
       </div>
@@ -3900,6 +3936,72 @@ function faturamentoRangeForFilter(filter) {
   else start.setDate(end.getDate() - 6); // 7days (padrão)
   return { start, end };
 }
+function getSaleRevenueEntriesInRange(start, end) {
+  const startKey = localDateStr(start), endKey = localDateStr(end);
+  return getSaleRevenueEntries().filter(e => e.sale_price_updated_at >= startKey && e.sale_price_updated_at <= endKey);
+}
+// Período anterior de comparação: mesmo número de dias do período atual, imediatamente antes dele.
+// Funciona igual pros 3 filtros (7 dias, 30 dias, mês) sem precisar de uma regra por filtro.
+function faturamentoPreviousRange(start, end) {
+  const days = Math.round((end - start) / 86400000) + 1;
+  const prevEnd = new Date(start); prevEnd.setDate(prevEnd.getDate() - 1); prevEnd.setHours(12,0,0,0);
+  const prevStart = new Date(prevEnd); prevStart.setDate(prevStart.getDate() - (days - 1)); prevStart.setHours(12,0,0,0);
+  return { start: prevStart, end: prevEnd };
+}
+// Lucro/CMV estimados: soma custo (getProductCMV) só dos itens vendidos que têm receita com custo
+// completo. "profit" e "coveragePct" deixam claro que o lucro é baseado só na fatia do faturamento
+// com custo conhecido — não assume custo zero pro resto.
+function computeFaturamentoResumo(entries) {
+  const totalRevenue = entries.reduce((s,e)=>s+(e.total_revenue||0), 0);
+  let knownCost = 0, knownRevenue = 0;
+  entries.forEach(e => {
+    const cmv = getProductCMV(e.product_name);
+    if (cmv) { knownCost += cmv.costPerUnit * (e.total_qty_sold||0); knownRevenue += (e.total_revenue||0); }
+  });
+  const profit = knownRevenue - knownCost;
+  const coveragePct = totalRevenue > 0 ? (knownRevenue/totalRevenue)*100 : 0;
+  return { totalRevenue, knownCost, knownRevenue, profit, coveragePct };
+}
+function computeProductRevenueRanking(entries) {
+  const map = {};
+  entries.forEach(e => {
+    if (!map[e.product_name]) map[e.product_name] = { name: e.product_name, revenue: 0, qty: 0, unit: e.cost_unit||'' };
+    map[e.product_name].revenue += (e.total_revenue||0);
+    map[e.product_name].qty += (e.total_qty_sold||0);
+  });
+  const total = entries.reduce((s,e)=>s+(e.total_revenue||0), 0);
+  return Object.values(map).sort((a,b)=>b.revenue-a.revenue).map(r => ({ ...r, pct: total>0?(r.revenue/total)*100:0 }));
+}
+// Margem = preço médio de venda NO PERÍODO (receita/qtd) menos custo da receita (getProductCMV).
+// Produtos sem receita/custo conhecido ficam separados em "withoutCost", não entram no ranking.
+function computeMarginRanking(entries) {
+  const rows = computeProductRevenueRanking(entries);
+  const withCost = [], withoutCost = [];
+  rows.forEach(r => {
+    if (r.qty <= 0) { withoutCost.push(r); return; }
+    const cmv = getProductCMV(r.name);
+    if (!cmv) { withoutCost.push(r); return; }
+    const avgPrice = r.revenue / r.qty;
+    const margin = avgPrice - cmv.costPerUnit;
+    const marginPct = avgPrice > 0 ? (margin/avgPrice)*100 : 0;
+    withCost.push({ ...r, avgPrice, cost: cmv.costPerUnit, margin, marginPct });
+  });
+  withCost.sort((a,b)=>b.marginPct-a.marginPct);
+  return { withCost, withoutCost };
+}
+const WEEKDAY_SHORT = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+// Faturamento médio por dia da semana, dentro do período já filtrado na tela (não é o histórico
+// inteiro) — cada dia entra pela data real da venda (sale_price_updated_at).
+function computeWeekdaySeasonality(entries) {
+  const buckets = Array.from({length:7}, (_, i) => ({ weekday:i, revenue:0, days:new Set() }));
+  entries.forEach(e => {
+    if (!e.sale_price_updated_at) return;
+    const b = buckets[parseLocalDate(e.sale_price_updated_at).getDay()];
+    b.revenue += (e.total_revenue||0);
+    b.days.add(e.sale_price_updated_at);
+  });
+  return buckets.map(b => ({ weekday:b.weekday, revenue:b.revenue, days:b.days.size, avg: b.days.size>0 ? b.revenue/b.days.size : 0 }));
+}
 function buildFaturamentoChartSVG(dailyMap, startDate, endDate) {
   const days = [];
   const d = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
@@ -3927,7 +4029,7 @@ function renderFaturamento() {
 
   const { start, end } = faturamentoRangeForFilter(faturamentoFilter);
   const startKey = localDateStr(start), endKey = localDateStr(end);
-  const entries = getSaleRevenueEntries().filter(e => e.sale_price_updated_at >= startKey && e.sale_price_updated_at <= endKey);
+  const entries = getSaleRevenueEntriesInRange(start, end);
 
   const dailyMap = {};
   entries.forEach(e => { dailyMap[e.sale_price_updated_at] = (dailyMap[e.sale_price_updated_at]||0) + (e.total_revenue||0); });
@@ -3936,8 +4038,110 @@ function renderFaturamento() {
   document.getElementById('fat-period-total').textContent = fmtCurrency(periodTotal);
   document.getElementById('fat-chart').innerHTML = buildFaturamentoChartSVG(dailyMap, start, end);
 
+  // Comparação com o período anterior (mesmo número de dias, imediatamente antes)
+  const prevRange = faturamentoPreviousRange(start, end);
+  const prevTotal = getSaleRevenueEntriesInRange(prevRange.start, prevRange.end).reduce((s,e)=>s+(e.total_revenue||0), 0);
+  const cmpEl = document.getElementById('fat-period-comparison');
+  if (prevTotal > 0) {
+    const diffPct = ((periodTotal - prevTotal) / prevTotal) * 100;
+    const up = diffPct >= 0;
+    cmpEl.className = `text-xs font-medium mb-3 h-4 ${up ? 'text-emerald-700' : 'text-red-600'}`;
+    cmpEl.textContent = `${up ? '▲' : '▼'} ${Math.abs(diffPct).toFixed(1)}% vs período anterior (${fmtCurrency(prevTotal)})`;
+  } else if (periodTotal > 0) {
+    cmpEl.className = 'text-xs font-medium mb-3 h-4 text-stone-400';
+    cmpEl.textContent = 'Sem faturamento registrado no período anterior pra comparar';
+  } else {
+    cmpEl.className = 'text-xs font-medium mb-3 h-4 text-stone-400';
+    cmpEl.textContent = '';
+  }
+
+  // Lucro / CMV estimados (reaproveita o custo de receita da aba CMV)
+  const resumo = computeFaturamentoResumo(entries);
+  const profitEl = document.getElementById('fat-profit-total');
+  profitEl.textContent = fmtCurrency(resumo.profit);
+  profitEl.className = `text-lg font-bold ${resumo.profit >= 0 ? 'text-emerald-700' : 'text-red-600'}`;
+  document.getElementById('fat-profit-note').textContent = resumo.knownRevenue > 0
+    ? `Margem de ${((resumo.profit/resumo.knownRevenue)*100).toFixed(0)}% · baseado em ${resumo.coveragePct.toFixed(0)}% do faturamento com custo lançado`
+    : 'Nenhum produto vendido no período tem custo de receita lançado ainda';
+  document.getElementById('fat-cmv-total').textContent = fmtCurrency(resumo.knownCost);
+  document.getElementById('fat-cmv-note').textContent = resumo.knownRevenue > 0
+    ? `${((resumo.knownCost/resumo.knownRevenue)*100).toFixed(0)}% do faturamento com custo conhecido`
+    : '—';
+
+  renderFaturamentoRanking(entries, periodTotal);
+  renderFaturamentoMargin(entries);
+  renderFaturamentoWeekday(entries);
+
   if (faturamentoSelectedDay && (faturamentoSelectedDay < startKey || faturamentoSelectedDay > endKey)) faturamentoSelectedDay = null;
   renderFaturamentoDayDetail();
+}
+function renderFaturamentoRanking(entries, periodTotal) {
+  const el = document.getElementById('fat-ranking-list'); if (!el) return;
+  if (entries.length === 0) { el.innerHTML = '<p class="text-stone-400 text-center py-4 text-sm">Sem vendas no período</p>'; return; }
+  const rows = computeProductRevenueRanking(entries);
+  const top = rows.slice(0, 8);
+  const rest = rows.slice(8);
+  const restTotal = rest.reduce((s,r)=>s+r.revenue, 0);
+  const restPct = periodTotal > 0 ? (restTotal/periodTotal)*100 : 0;
+  const rowHtml = (r) => `<div>
+    <div class="flex justify-between items-center mb-1 gap-2">
+      <span class="text-sm text-stone-700 truncate">${r.name}</span>
+      <span class="text-sm font-semibold text-stone-800 whitespace-nowrap">${fmtCurrency(r.revenue)} <span class="text-stone-400 font-normal">(${r.pct.toFixed(0)}%)</span></span>
+    </div>
+    <div class="h-1.5 bg-stone-100 rounded-full overflow-hidden"><div class="h-full bg-emerald-500 rounded-full" style="width:${Math.max(2,r.pct)}%"></div></div>
+  </div>`;
+  el.innerHTML = top.map(rowHtml).join('') + (rest.length > 0 ? `<div class="pt-2 border-t border-stone-100 flex justify-between items-center text-xs text-stone-400"><span>Outros ${rest.length} produto(s)</span><span>${fmtCurrency(restTotal)} (${restPct.toFixed(0)}%)</span></div>` : '');
+}
+function renderFaturamentoMargin(entries) {
+  const el = document.getElementById('fat-margin-content'); if (!el) return;
+  if (entries.length === 0) { el.innerHTML = '<p class="text-stone-400 text-center py-4 text-sm">Sem vendas no período</p>'; return; }
+  const { withCost, withoutCost } = computeMarginRanking(entries);
+  if (withCost.length === 0) {
+    el.innerHTML = '<p class="text-stone-400 text-center py-4 text-sm">Nenhum produto vendido no período tem custo de receita lançado ainda pra calcular margem</p>';
+    return;
+  }
+  const rowHtml = (r) => {
+    const color = r.marginPct >= 50 ? 'text-emerald-700' : r.marginPct >= 25 ? 'text-amber-600' : 'text-red-600';
+    return `<div class="flex justify-between items-center py-1.5 gap-2">
+      <div class="min-w-0"><p class="text-sm text-stone-700 truncate">${r.name}</p><p class="text-[11px] text-stone-400">${fmtCurrency(r.avgPrice)} venda · ${fmtCurrency(r.cost)} custo</p></div>
+      <span class="text-sm font-bold ${color} whitespace-nowrap">${r.marginPct.toFixed(0)}%</span>
+    </div>`;
+  };
+  let html = '';
+  if (withCost.length <= 6) {
+    html += withCost.map(rowHtml).join('');
+  } else {
+    const best = withCost.slice(0, 5);
+    const worst = withCost.slice(-5).reverse();
+    html += `<p class="text-[11px] font-bold text-stone-500 uppercase tracking-wide mb-1">Melhores margens</p><div class="mb-3">${best.map(rowHtml).join('')}</div>`;
+    html += `<p class="text-[11px] font-bold text-stone-500 uppercase tracking-wide mb-1">Piores margens — atenção</p><div>${worst.map(rowHtml).join('')}</div>`;
+  }
+  if (withoutCost.length > 0) {
+    html += `<p class="text-[11px] text-stone-400 mt-3 pt-3 border-t border-stone-100">Sem custo de receita lançado ainda: ${withoutCost.map(r=>r.name).join(', ')}</p>`;
+  }
+  el.innerHTML = html;
+}
+function renderFaturamentoWeekday(entries) {
+  const el = document.getElementById('fat-weekday-content'); if (!el) return;
+  if (entries.length === 0) { el.innerHTML = '<p class="text-stone-400 text-center py-4 text-sm">Sem vendas no período</p>'; return; }
+  const buckets = computeWeekdaySeasonality(entries);
+  const withData = buckets.filter(b=>b.days>0);
+  if (withData.length === 0) { el.innerHTML = '<p class="text-stone-400 text-center py-4 text-sm">Sem dados suficientes</p>'; return; }
+  const max = Math.max(...buckets.map(b=>b.avg), 0.0001);
+  const bestIdx = withData.reduce((best,b)=> b.avg > best.avg ? b : best, withData[0]).weekday;
+  const barsHtml = buckets.map(b => {
+    const h = b.days > 0 ? Math.max(3, Math.round((b.avg/max)*70)) : 2;
+    const isBest = b.weekday === bestIdx && b.days > 0;
+    return `<div class="flex flex-col items-center gap-1 flex-1 min-w-0">
+      <span class="text-[9px] text-stone-500 font-medium truncate">${b.days>0?fmtCurrency(b.avg):''}</span>
+      <div class="w-full rounded-t" style="height:${h}px; background:${isBest?'#047857':'#a7f3d0'}"></div>
+      <span class="text-[10px] font-semibold ${isBest?'text-emerald-700':'text-stone-500'}">${WEEKDAY_SHORT[b.weekday]}</span>
+    </div>`;
+  }).join('');
+  const note = Math.min(...withData.map(b=>b.days)) < 2
+    ? '<p class="text-[11px] text-stone-400 mt-2">Média de faturamento por dia, calculada só com os dias do período selecionado — com poucos dias, a tendência pode mudar conforme mais vendas forem registradas.</p>'
+    : '<p class="text-[11px] text-stone-400 mt-2">Média de faturamento por dia (só dias com venda registrada), no período selecionado.</p>';
+  el.innerHTML = `<div class="flex items-end gap-1.5 h-24">${barsHtml}</div>${note}`;
 }
 function selectFaturamentoDay(dateKey) {
   faturamentoSelectedDay = faturamentoSelectedDay === dateKey ? null : dateKey;
@@ -4141,24 +4345,46 @@ async function saveFinanceCosts(movementId) {
     showToast('Erro ao salvar custos: ' + err.message, true);
   }
 }
+// Custo estimado de uma receita a partir do custo médio já lançado dos insumos (aba Custos
+// Pendentes). Extraído da aba CMV pra poder ser reaproveitado também no Faturamento (margem
+// por produto), sem duplicar a conta.
+function computeRecipeCost(recipe) {
+  let ingredients=[]; try{ingredients=JSON.parse(recipe.recipe_ingredients);}catch(e){}
+  let totalCost = 0; const missing = [];
+  for (const ing of ingredients) {
+    const costRec = getFinanceCostPrice(ing.name);
+    if (!costRec) { missing.push(ing.name); continue; }
+    const product = getProducts().find(p=>p.product_name===ing.name);
+    const storageUnit = product ? (product.storage_unit||product.unit) : costRec.unit;
+    const qtyInStorageUnit = product ? convertQuantity(ing.qty, ing.unit, storageUnit, getCustomConversions(product)) : ing.qty;
+    totalCost += qtyInStorageUnit * costRec.price;
+  }
+  const yieldQty = parseFloat(recipe.recipe_yield) || 1;
+  const costPerUnit = totalCost / yieldQty;
+  const hasAllCosts = missing.length===0 && ingredients.length>0;
+  return { totalCost, costPerUnit, missing, hasAllCosts, yieldUnit: recipe.recipe_yield_unit };
+}
+// Resolve o nome de um item vendido (sale_revenue.product_name) pra uma receita com custo
+// conhecido: ou é o nome de uma receita diretamente (ex: Venda Direta), ou é um produto pronto
+// (finished_product) com receita vinculada (linked_recipe_id). Se não achar receita ou faltar
+// custo de algum insumo, devolve null — não inventa custo.
+function getProductCMV(productName) {
+  let recipe = getRecipes().find(r => r.recipe_name === productName);
+  if (!recipe) {
+    const fp = getFinishedProducts().find(f => f.product_name === productName);
+    if (fp && fp.linked_recipe_id) recipe = getRecipes().find(r => r.id === fp.linked_recipe_id);
+  }
+  if (!recipe) return null;
+  const cost = computeRecipeCost(recipe);
+  if (!cost.hasAllCosts) return null;
+  return { costPerUnit: cost.costPerUnit, unit: cost.yieldUnit, recipeName: recipe.recipe_name };
+}
 function renderFinanceCMV() {
   const el = document.getElementById('finance-cmv-list');
   const rows = getRecipes().sort((a,b)=>a.recipe_name.localeCompare(b.recipe_name)).map(r => {
-    let ingredients=[]; try{ingredients=JSON.parse(r.recipe_ingredients);}catch(e){}
-    let totalCost = 0; const missing = [];
-    for (const ing of ingredients) {
-      const costRec = getFinanceCostPrice(ing.name);
-      if (!costRec) { missing.push(ing.name); continue; }
-      const product = getProducts().find(p=>p.product_name===ing.name);
-      const storageUnit = product ? (product.storage_unit||product.unit) : costRec.unit;
-      const qtyInStorageUnit = product ? convertQuantity(ing.qty, ing.unit, storageUnit, getCustomConversions(product)) : ing.qty;
-      totalCost += qtyInStorageUnit * costRec.price;
-    }
-    const yieldQty = parseFloat(r.recipe_yield) || 1;
-    const costPerUnit = totalCost / yieldQty;
-    const hasAllCosts = missing.length===0 && ingredients.length>0;
+    const cost = computeRecipeCost(r);
     const saleRec = getFinanceSalePrice(r.recipe_name);
-    return { recipe: r, totalCost, costPerUnit, missing, hasAllCosts, saleRec };
+    return { recipe: r, totalCost: cost.totalCost, costPerUnit: cost.costPerUnit, missing: cost.missing, hasAllCosts: cost.hasAllCosts, saleRec };
   });
   // Resumo geral do faturamento capturado (soma de todas as receitas que já têm venda registrada)
   const totalFaturamento = rows.reduce((s,row)=>s+(row.saleRec?row.saleRec.totalRevenue:0),0);
