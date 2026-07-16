@@ -386,9 +386,13 @@
 
   <!-- CONSUMO -->
   <section id="panel-consumo" class="hidden fade-in">
-    <h2 class="text-lg font-bold text-stone-800 mb-4 flex items-center gap-2">📊 Consumo</h2>
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-lg font-bold text-stone-800 flex items-center gap-2">📊 Consumo</h2>
+      <button onclick="openResetConsumptionModal()" class="text-xs text-stone-400 hover:text-red-600 flex items-center gap-1"><i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>Resetar Consumo</button>
+    </div>
 
     <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 mb-4 space-y-3">
+      <p id="consumption-reset-notice" class="hidden text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 -mt-1"></p>
       <div>
         <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-1.5">Período</p>
         <div class="flex flex-wrap gap-1.5">
@@ -723,6 +727,16 @@
       <h3 class="font-bold text-stone-800 mb-1">Apagar Histórico</h3>
       <p id="clear-history-message" class="text-sm text-stone-500 mb-5"></p>
       <div class="flex gap-2"><button id="clear-history-confirm-btn" onclick="clearHistory()" class="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-60">Apagar</button><button id="clear-history-cancel-btn" onclick="document.getElementById('clear-history-modal').classList.add('hidden')" class="flex-1 btn-ghost px-4 py-2.5 rounded-lg text-sm font-medium disabled:opacity-60">Cancelar</button></div>
+    </div>
+  </div>
+
+  <!-- MODAL: Confirmar Resetar Consumo -->
+  <div id="reset-consumption-modal" class="hidden fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl p-6 w-full max-w-xs shadow-2xl text-center">
+      <div class="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center mx-auto mb-3"><i data-lucide="rotate-ccw" class="w-5 h-5 text-amber-600"></i></div>
+      <h3 class="font-bold text-stone-800 mb-1">Resetar Consumo</h3>
+      <p class="text-sm text-stone-500 mb-5">Isso zera só a <strong>tela</strong> de Consumo a partir de agora — vendas e produções anteriores a este momento param de aparecer aqui. O estoque não muda em nada.</p>
+      <div class="flex gap-2"><button onclick="confirmResetConsumption()" class="flex-1 px-4 py-2.5 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700">Resetar</button><button onclick="closeResetConsumptionModal()" class="flex-1 btn-ghost px-4 py-2.5 rounded-lg text-sm font-medium">Cancelar</button></div>
     </div>
   </div>
 
@@ -3503,11 +3517,51 @@ function applyCustomDateRange() {
 }
 // Agrega o consumo (venda + produção) num intervalo de datas, respeitando os dias de funcionamento marcados.
 // Retorna um mapa {chave: {name, qty, unit, category, daily:{data:qtd}, sources:{label:qtd}}}
+// ============================================================
+// RESETAR CONSUMO — zera só a TELA de consumo a partir de agora (marca uma data de corte,
+// guardada como um registro type='consumption_reset' na própria planilha Estoque, reaproveitando
+// a coluna 'movement_date' que já existe). Não mexe em estoque, produtos, receitas ou movimentações
+// reais — é só um filtro de visualização a partir dali.
+// ============================================================
+function getConsumptionResetRecord() { return allData.find(r => r.type === 'consumption_reset') || null; }
+function getConsumptionResetDate() {
+  const r = getConsumptionResetRecord();
+  return r && r.movement_date ? new Date(r.movement_date) : null;
+}
+function openResetConsumptionModal() {
+  document.getElementById('reset-consumption-modal').classList.remove('hidden');
+}
+function closeResetConsumptionModal() {
+  document.getElementById('reset-consumption-modal').classList.add('hidden');
+}
+async function confirmResetConsumption() {
+  closeResetConsumptionModal();
+  showLoadingProgress('Resetando consumo...');
+  try {
+    const existing = getConsumptionResetRecord();
+    const now = new Date().toISOString();
+    if (existing) await dbUpdate({ ...existing, movement_date: now });
+    else await dbCreate({ ...blankRecord(), type:'consumption_reset', movement_date: now });
+    hideLoadingProgress();
+    renderConsumption();
+    showToast('Consumo resetado! O estoque não foi alterado.');
+  } catch (err) {
+    hideLoadingProgress();
+    console.error('Erro ao resetar consumo:', err);
+    showToast('Erro ao resetar consumo: ' + err.message, true);
+  }
+}
 function computeConsumptionForRange(startDate, endDate, weekdaysSet) {
   if (!startDate || !endDate) return {};
+  const resetDate = getConsumptionResetDate();
   let relevantMovements = getMovements().filter(m=>{
     const moveDate=new Date(m.movement_date);
-    return (m.movement_type==='venda'||m.movement_type==='producao') && moveDate>=startDate && moveDate<=endDate && weekdaysSet.has(moveDate.getDay());
+    // Movimentações desfeitas/canceladas (venda desfeita ou produção cancelada) não contam:
+    // o estoque já foi devolvido, então não houve consumo de verdade. Movimentações anteriores
+    // a um reset de consumo (se houver) também ficam de fora — só da tela, o estoque é o mesmo.
+    return (m.movement_type==='venda'||m.movement_type==='producao') && !isMovementUndone(m)
+      && moveDate>=startDate && moveDate<=endDate && weekdaysSet.has(moveDate.getDay())
+      && (!resetDate || moveDate > resetDate);
   });
   const consumptionMap = {};
   function addConsumption(name, qty, unit, category, dateStr, sourceLabel) {
@@ -3529,7 +3583,10 @@ function computeConsumptionForRange(startDate, endDate, weekdaysSet) {
             let ingredients=[]; try{ingredients=JSON.parse(recipe.recipe_ingredients);}catch(e){}
             for (const ing of ingredients) {
               const prod = getProducts().find(p=>p.product_name===ing.name);
-              const finalUnit = ing.storage_unit||ing.unit;
+              // Sempre converte pra unidade de armazenamento REAL do insumo (a mesma usada no
+              // estoque), não a unidade que a receita por acaso usa — senão o mesmo insumo usado
+              // em unidades diferentes em receitas diferentes vira entradas separadas no Consumo.
+              const finalUnit = prod ? (prod.storage_unit || prod.unit) : ing.unit;
               const totalQty = convertQuantity(ing.qty*(item.qty||1), ing.unit, finalUnit, getCustomConversions(prod));
               addConsumption(ing.name, totalQty, finalUnit, prod?prod.category:'', dateStr, `🛒 Venda: ${recipe.recipe_name}`);
             }
@@ -3540,15 +3597,25 @@ function computeConsumptionForRange(startDate, endDate, weekdaysSet) {
       let ingredients=[]; try{ingredients=JSON.parse(m.batch_items||'[]');}catch(e){}
       for (const ing of ingredients) {
         const prod = getProducts().find(p=>p.product_name===ing.name);
-        const finalUnit = ing.storage_unit||ing.unit;
+        const finalUnit = prod ? (prod.storage_unit || prod.unit) : ing.unit;
         const totalQty = convertQuantity(ing.qty, ing.unit, finalUnit, getCustomConversions(prod));
-        addConsumption(ing.name, totalQty, finalUnit, prod?prod.category:'', dateStr, `👩‍🍳 Produção: ${m.recipe_name||'—'}`);
+        // m.recipe_name não existe em movimentações (é campo de receita) — o nome certo do que
+        // foi produzido fica em movement_product.
+        addConsumption(ing.name, totalQty, finalUnit, prod?prod.category:'', dateStr, `👩‍🍳 Produção: ${m.movement_product||'—'}`);
       }
     }
   }
   return consumptionMap;
 }
 function renderConsumption() {
+  const noticeEl = document.getElementById('consumption-reset-notice');
+  const resetDate = getConsumptionResetDate();
+  if (resetDate) {
+    noticeEl.textContent = `🔄 Consumo resetado em ${resetDate.toLocaleDateString('pt-BR')} às ${resetDate.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})} — só mostrando vendas/produções depois disso.`;
+    noticeEl.classList.remove('hidden');
+  } else {
+    noticeEl.classList.add('hidden');
+  }
   const now = new Date();
   let startDate = new Date(), endDate = now;
   if (activeConsumptionFilter==='today') { startDate.setHours(0,0,0,0); }
