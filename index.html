@@ -477,7 +477,6 @@
   <!-- HISTÓRICO -->
   <section id="panel-historico" class="hidden fade-in">
     <h2 class="text-lg font-bold text-stone-800 mb-4 flex items-center gap-2"><i data-lucide="history" class="w-5 h-5 text-stone-600"></i>Histórico de Movimentações</h2>
-    <div id="suspect-undo-banner" class="hidden mb-4"></div>
     <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 mb-4 space-y-3">
       <div class="relative">
         <i data-lucide="search" class="absolute left-3 top-3 w-4 h-4 text-stone-400"></i>
@@ -828,6 +827,10 @@
         <p class="text-xs font-bold text-stone-600 uppercase tracking-wide mb-2">Receita vinculada (opcional)</p>
         <select id="edit-levels-linked-recipe" class="w-full input-field text-sm"><option value="">Nenhuma receita vinculada</option></select>
         <p class="text-xs text-stone-500 italic mt-2">Receita tipo "Insumo" que produz este item.</p>
+      </div>
+      <div class="bg-stone-50 rounded-lg p-4 mb-5 border border-stone-200">
+        <p class="text-xs font-bold text-stone-600 uppercase tracking-wide mb-2">Saídas recentes</p>
+        <div id="edit-levels-recent-exits" class="space-y-1.5 max-h-52 overflow-y-auto"></div>
       </div>
       <div class="flex gap-2"><button onclick="saveEditedLevels()" class="flex-1 btn-primary px-4 py-2.5 rounded-lg text-sm font-medium">Salvar</button><button onclick="closeEditLevels()" class="flex-1 btn-ghost px-4 py-2.5 rounded-lg text-sm font-medium">Cancelar</button></div>
       <div class="mt-3 pt-3 border-t border-stone-100"><button onclick="deleteProduct()" class="w-full btn-danger px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-1.5"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i>Excluir Insumo</button></div>
@@ -1687,6 +1690,7 @@ function openEditLevels(id) {
   renderCustomConversionsList();
   renderQuickAddHelper();
   updateAdjustmentPreview();
+  renderRecentExits(p);
   document.getElementById('stock-balance-form').classList.add('hidden');
   document.getElementById('stock-balance-result').classList.add('hidden');
   document.getElementById('stock-balance-result').innerHTML = '';
@@ -3296,49 +3300,73 @@ function movementTypeLabel(type) {
 // não altera nada sozinho, só mostra a comparação.
 // ============================================================
 // ============================================================
-// VARREDURA AUTOMÁTICA — acha vendas desfeitas que passaram pelo caminho antigo (sem o registro
-// exato do que foi descontado) e por isso PODEM ter devolvido a quantidade errada ao estoque. Não
-// prova que deu errado (só dá errado se a receita foi editada entre a venda e o desfazer), mas
-// mostra exatamente o que merece conferência, pra não depender de ninguém lembrar de cabeça.
+// SAÍDAS RECENTES — lista curta (não o histórico todo) do que saiu de um insumo mais recentemente,
+// já juntando venda em lote, venda manual, produção, saída manual e perda num só lugar. Serve pra
+// bater o olho rápido e ver se saiu o que devia, sem precisar ir atrás no Histórico completo.
 // ============================================================
-function getSuspectUndoneSales() {
-  const suspects = [];
+function getRecentProductExits(product, limit) {
+  const storageUnit = product.storage_unit || product.unit;
+  const exits = [];
   for (const m of getMovements()) {
-    if (m.movement_type !== 'venda' || !isMovementUndone(m)) continue;
-    let saleItems=[]; try{saleItems=JSON.parse(m.batch_items||'[]');}catch(e){}
-    const affectedProducts = new Set();
-    let flagged = false;
-    for (const it of saleItems) {
-      if (it.value && it.value.startsWith('recipe_') && !(it.deductedIngredients && it.deductedIngredients.length)) {
-        flagged = true;
-        const recipe = allData.find(r=>r.id===it.value.replace('recipe_',''));
-        if (recipe) {
-          let ingredients=[]; try{ingredients=JSON.parse(recipe.recipe_ingredients);}catch(e){}
-          ingredients.forEach(ing=>affectedProducts.add(ing.name));
+    if (m.movement_type === 'saida_manual') {
+      let items=[]; try{items=JSON.parse(m.batch_items||'[]');}catch(e){}
+      for (const it of items) {
+        if (it.name !== product.product_name) continue;
+        const qty = (it.storageQty!=null) ? it.storageQty : convertQuantity(it.qty, it.unit, storageUnit, getCustomConversions(product));
+        exits.push({ date:new Date(m.movement_date), qty, source:'📤 Saída manual', undone:isMovementUndone(m) });
+      }
+    } else if (m.movement_type === 'perda') {
+      let items=[]; try{items=JSON.parse(m.batch_items||'[]');}catch(e){}
+      for (const it of items) {
+        if (it.name !== product.product_name) continue;
+        const qty = convertQuantity(it.qty, it.unit, storageUnit, getCustomConversions(product));
+        exits.push({ date:new Date(m.movement_date), qty, source:'💔 Perda'+(m.loss_reason?` (${m.loss_reason})`:''), undone:isMovementUndone(m) });
+      }
+    } else if (m.movement_type === 'producao') {
+      let ingredients=[]; try{ingredients=JSON.parse(m.batch_items||'[]');}catch(e){}
+      for (const ing of ingredients) {
+        if (ing.name !== product.product_name) continue;
+        const qty = convertQuantity(ing.qty, ing.unit, storageUnit, getCustomConversions(product));
+        exits.push({ date:new Date(m.movement_date), qty, source:`👩‍🍳 Produção: ${m.movement_product||'—'}`, undone:isMovementUndone(m) });
+      }
+    } else if (m.movement_type === 'venda') {
+      let saleItems=[]; try{saleItems=JSON.parse(m.batch_items||'[]');}catch(e){}
+      for (const it of saleItems) {
+        if (it.value && it.value.startsWith('finished_')) {
+          if (it.name === product.product_name) exits.push({ date:new Date(m.movement_date), qty:it.qty, source:'🛒 Venda (produto pronto)', undone:isMovementUndone(m) });
+        } else if (it.deductedIngredients && Array.isArray(it.deductedIngredients)) {
+          for (const d of it.deductedIngredients) {
+            if (d.name !== product.product_name) continue;
+            const qty = convertQuantity(d.qty, d.unit, storageUnit, getCustomConversions(product));
+            exits.push({ date:new Date(m.movement_date), qty, source:`🛒 Venda: ${it.name}`, undone:isMovementUndone(m) });
+          }
+        } else if (it.value && it.value.startsWith('recipe_')) {
+          const recipe = allData.find(r=>r.id===it.value.replace('recipe_',''));
+          if (recipe) {
+            let ingredients=[]; try{ingredients=JSON.parse(recipe.recipe_ingredients);}catch(e){}
+            for (const ing of ingredients) {
+              if (ing.name !== product.product_name) continue;
+              const qty = convertQuantity(ing.qty*it.qty, ing.unit, storageUnit, getCustomConversions(product));
+              exits.push({ date:new Date(m.movement_date), qty, source:`🛒 Venda: ${it.name} (estimado)`, undone:isMovementUndone(m) });
+            }
+          }
         }
       }
     }
-    if (flagged) suspects.push({ id: m.id, date: new Date(m.movement_date), label: m.movement_product, affectedProducts: Array.from(affectedProducts) });
   }
-  return suspects.sort((a,b)=>b.date-a.date);
+  exits.sort((a,b)=>b.date-a.date);
+  return exits.slice(0, limit);
 }
-function renderSuspectUndoBanner() {
-  const el = document.getElementById('suspect-undo-banner');
-  const suspects = getSuspectUndoneSales();
-  if (suspects.length === 0) { el.classList.add('hidden'); el.innerHTML=''; return; }
-  el.classList.remove('hidden');
-  const allAffected = [...new Set(suspects.flatMap(s=>s.affectedProducts))];
-  el.innerHTML = `<div class="bg-amber-50 border border-amber-300 rounded-xl p-4">
-    <p class="font-bold text-amber-900 mb-1 flex items-center gap-2">⚠️ ${suspects.length} venda(s) desfeita(s) que podem ter devolvido a quantidade errada</p>
-    <p class="text-xs text-amber-800 mb-3">Essas vendas foram canceladas usando o cálculo antigo (antes da correção) — só deu errado de verdade se a receita foi editada entre a venda e o cancelamento, mas vale conferir. Insumos possivelmente afetados: <strong>${allAffected.join(', ')}</strong>.</p>
-    <div class="space-y-1.5 max-h-48 overflow-y-auto mb-2">
-      ${suspects.map(s => `<div class="text-xs bg-white rounded-lg px-2.5 py-1.5 border border-amber-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
-        <span><strong>${s.date.toLocaleDateString('pt-BR')} ${s.date.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</strong> — ${s.label}</span>
-        <span class="text-amber-700">Conferir: ${s.affectedProducts.join(', ') || '—'}</span>
-      </div>`).join('')}
-    </div>
-    <p class="text-xs text-stone-500">Pra cada insumo listado: vai em Estoque → abre ele → "Conferir saldo pelo histórico".</p>
-  </div>`;
+function renderRecentExits(product) {
+  const el = document.getElementById('edit-levels-recent-exits'); if (!el) return;
+  const unit = product.storage_unit || product.unit;
+  const exits = getRecentProductExits(product, 15);
+  el.innerHTML = exits.length === 0
+    ? '<p class="text-xs text-stone-400">Nenhuma saída registrada ainda.</p>'
+    : exits.map(e => `<div class="flex items-center justify-between text-xs px-2.5 py-1.5 rounded-lg border ${e.undone ? 'bg-stone-50 border-stone-200 text-stone-400 line-through' : 'bg-white border-stone-200 text-stone-700'}">
+        <span>${e.date.toLocaleDateString('pt-BR')} ${e.date.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})} — ${e.source}${e.undone?' (desfeita)':''}</span>
+        <span class="font-semibold">-${fmtQty(e.qty, unit)} ${unit}</span>
+      </div>`).join('');
 }
 function toggleStockBalanceForm() {
   document.getElementById('stock-balance-form').classList.toggle('hidden');
@@ -3548,7 +3576,6 @@ async function confirmUndoMovement() {
   }
 }
 function renderHistory() {
-  renderSuspectUndoBanner();
   const customDates = document.getElementById('history-custom-dates');
   const period = document.getElementById('filter-history-period')?.value || 'all';
   if (customDates) customDates.classList.toggle('hidden', period !== 'custom');
