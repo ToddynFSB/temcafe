@@ -23,6 +23,9 @@
     .tab-btn { transition: all .2s; border-radius: 12px; color: #6b4423; background: #fff; border: 1.5px solid #e8ddd2; }
     .tab-btn:hover { background: #f5ebe0; border-color: #d4a574; }
     .tab-active.tab-btn { border: 2px solid #b8894e; }
+    .finance-tab-active { background: #059669 !important; color: #fff !important; border-radius: 12px; box-shadow: 0 3px 10px rgba(5,150,105,.35); border: 2px solid #047857 !important; }
+    .finance-tab-active i, .finance-tab-active span { color: #fff !important; }
+    #finance-nav .finance-tab-btn { background: #fff; color: #047857; border: 1px solid #d1fae5; }
     .nav-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
     @media (min-width: 640px) { .nav-grid { grid-template-columns: repeat(6, 1fr); } }
     @media (min-width: 1024px) { .nav-grid { grid-template-columns: repeat(12, 1fr); } }
@@ -75,22 +78,30 @@
   <p class="text-xs text-amber-700">Cole a URL do seu Apps Script na variável <code class="bg-amber-100 px-1 rounded">APPS_SCRIPT_URL</code> no início do código JavaScript deste arquivo.</p>
 </div>
 
-<header class="sticky top-0 z-50 shadow-md" style="background: linear-gradient(135deg, rgb(59,31,14), rgb(92,51,23));">
+<header id="app-header" class="sticky top-0 z-50 shadow-md" style="background: linear-gradient(135deg, rgb(59,31,14), rgb(92,51,23)); transition: background 0.3s;">
   <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
     <div class="flex items-center gap-3">
-      <div class="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center"><span class="text-xl">☕</span></div>
+      <div class="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center"><span class="text-xl" id="header-icon">☕</span></div>
       <div>
-        <h1 class="font-bold leading-tight text-white text-xl">Central Tem Café</h1>
-        <p class="text-xs text-white/70">Gestão Operacional</p>
+        <h1 class="font-bold leading-tight text-white text-xl" id="header-title">Central Tem Café</h1>
+        <p class="text-xs text-white/70" id="header-subtitle">Gestão Operacional</p>
       </div>
     </div>
-    <button onclick="syncData()" id="sync-btn" class="flex items-center gap-1.5 text-xs text-white/80 hover:text-white px-3 py-1.5 rounded-lg hover:bg-white/10 transition-all">
-      <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>Sincronizar
-    </button>
+    <div class="flex items-center gap-2">
+      <button onclick="syncData()" id="sync-btn" class="flex items-center gap-1.5 text-xs text-white/80 hover:text-white px-3 py-1.5 rounded-lg hover:bg-white/10 transition-all">
+        <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i><span class="hidden sm:inline">Sincronizar</span>
+      </button>
+      <button onclick="gotoFinanceiro()" id="btn-goto-financeiro" class="flex items-center gap-1.5 text-xs font-semibold text-white px-3 py-1.5 rounded-lg transition-all bg-white/15 hover:bg-white/25">
+        <i data-lucide="lock" class="w-3.5 h-3.5"></i><span class="hidden sm:inline">Central</span> Financeira
+      </button>
+      <button onclick="gotoEstoque()" id="btn-goto-estoque" class="hidden items-center gap-1.5 text-xs font-semibold text-white px-3 py-1.5 rounded-lg transition-all bg-white/15 hover:bg-white/25">
+        <i data-lucide="package" class="w-3.5 h-3.5"></i><span class="hidden sm:inline">Central do</span> Estoque
+      </button>
+    </div>
   </div>
 </header>
 
-<nav class="max-w-7xl mx-auto px-4 pt-3 pb-1">
+<nav id="main-nav" class="max-w-7xl mx-auto px-4 pt-3 pb-1">
   <div class="nav-grid" id="tab-nav">
     <button class="tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-tab="dashboard"><i data-lucide="layout-dashboard" class="w-5 h-5"></i>Central</button>
     <button class="tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-tab="compras"><i data-lucide="shopping-bag" class="w-5 h-5"></i>Compras</button>
@@ -104,11 +115,11 @@
     <button class="tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-tab="vendas"><i data-lucide="credit-card" class="w-5 h-5"></i>Vendas</button>
     <button class="tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-tab="consumo"><span class="text-lg leading-none">📊</span>Consumo</button>
     <button class="tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-tab="historico"><i data-lucide="history" class="w-5 h-5"></i>Histórico</button>
-    <button class="tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-tab="financeiro"><i data-lucide="lock" class="w-5 h-5"></i>Financeiro</button>
   </div>
 </nav>
 
-<main class="max-w-7xl mx-auto px-4 py-4">
+<main id="estoque-main" class="max-w-7xl mx-auto px-4 py-4">
+<div id="estoque-panels">
 
   <!-- DASHBOARD -->
   <section id="panel-dashboard" class="fade-in">
@@ -545,47 +556,57 @@
     <div id="history-list" class="space-y-2"></div>
   </section>
 
-  <!-- ============================================================ -->
-  <!-- FINANCEIRO — protegido por senha verificada no backend.       -->
-  <!-- Os dados de custo só chegam ao navegador depois da senha certa. -->
-  <!-- ============================================================ -->
-  <section id="panel-financeiro" class="hidden fade-in">
-    <h2 class="text-lg font-bold text-stone-800 mb-4 flex items-center gap-2"><i data-lucide="lock" class="w-5 h-5 text-stone-600"></i>Financeiro</h2>
+  <!-- fim dos painéis do estoque -->
 
+</div><!-- /estoque-panels -->
+</main>
+
+<!-- ============================================================ -->
+<!-- CENTRAL FINANCEIRA — área separada, tema verde, protegida por  -->
+<!-- senha verificada no backend. Só existe enquanto o usuário está -->
+<!-- "dentro" dela; pra voltar, usa o botão do cabeçalho.           -->
+<!-- ============================================================ -->
+<div id="financeiro-area" class="hidden">
+  <nav id="finance-nav" class="max-w-7xl mx-auto px-4 pt-3 pb-1 hidden">
+    <div class="nav-grid">
+      <button class="finance-tab-btn finance-tab-active px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="custos"><i data-lucide="banknote" class="w-5 h-5"></i>Custos Pendentes</button>
+      <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="cmv"><i data-lucide="percent" class="w-5 h-5"></i>CMV</button>
+    </div>
+  </nav>
+
+  <main class="max-w-7xl mx-auto px-4 py-4">
     <!-- Tela de senha -->
-    <div id="finance-lock-screen" class="bg-white rounded-xl p-6 shadow-sm border border-stone-100 max-w-sm mx-auto text-center">
-      <div class="w-14 h-14 rounded-full bg-stone-100 flex items-center justify-center mx-auto mb-4"><i data-lucide="lock" class="w-6 h-6 text-stone-500"></i></div>
-      <h3 class="font-bold text-stone-800 mb-1">Área restrita</h3>
-      <p class="text-xs text-stone-500 mb-4">Digite a senha do financeiro pra continuar.</p>
+    <div id="finance-lock-screen" class="bg-white rounded-2xl p-8 shadow-sm border border-emerald-100 max-w-sm mx-auto text-center mt-8">
+      <div class="w-16 h-16 rounded-full bg-emerald-50 flex items-center justify-center mx-auto mb-4"><i data-lucide="lock" class="w-7 h-7 text-emerald-600"></i></div>
+      <h3 class="font-bold text-stone-800 mb-1 text-lg">Central Financeira</h3>
+      <p class="text-xs text-stone-500 mb-5">Digite a senha pra continuar.</p>
       <input id="finance-password-input" type="password" placeholder="Senha" class="w-full input-field text-sm text-center mb-3" onkeydown="if(event.key==='Enter') unlockFinanceiro()">
       <p id="finance-password-error" class="hidden text-xs text-red-600 mb-3">Senha incorreta.</p>
-      <button onclick="unlockFinanceiro()" class="w-full btn-primary px-4 py-2.5 rounded-lg text-sm font-medium">Entrar</button>
+      <button onclick="unlockFinanceiro()" class="w-full px-4 py-2.5 rounded-lg text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 transition-colors">Entrar</button>
     </div>
 
-    <!-- Conteúdo (só aparece depois da senha certa) -->
-    <div id="finance-content" class="hidden">
+    <!-- Sub-aba: Custos Pendentes -->
+    <section id="fpanel-custos" class="hidden fade-in">
       <div class="flex items-center justify-between mb-4">
-        <div class="flex gap-1.5">
-          <button class="finance-subtab-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-800 text-white" data-subtab="custos">💵 Custos Pendentes</button>
-          <button class="finance-subtab-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-subtab="cmv">📊 CMV</button>
-        </div>
+        <h2 class="text-lg font-bold text-stone-800 flex items-center gap-2"><i data-lucide="banknote" class="w-5 h-5 text-emerald-600"></i>Custos Pendentes</h2>
         <button onclick="lockFinanceiro()" class="text-xs text-stone-400 hover:text-stone-600 flex items-center gap-1"><i data-lucide="lock" class="w-3.5 h-3.5"></i>Bloquear</button>
       </div>
+      <p class="text-xs text-stone-400 mb-4">Entradas de estoque recentes que ainda não têm o preço pago lançado. Preencha com base na nota fiscal — se você já lançou esse insumo antes, o valor já vem pré-preenchido com o último preço.</p>
+      <div id="finance-pending-list" class="space-y-4"></div>
+      <div id="finance-pending-empty" class="hidden text-stone-400 text-center py-10 text-sm">🎉 Nenhuma entrada pendente de custo</div>
+    </section>
 
-      <!-- Sub-aba: Custos Pendentes -->
-      <div id="finance-subtab-custos">
-        <p class="text-xs text-stone-400 mb-3 px-1">Entradas de estoque recentes que ainda não têm o preço pago lançado. Preencha com base na nota fiscal.</p>
-        <div id="finance-pending-list" class="space-y-3"></div>
-        <div id="finance-pending-empty" class="hidden text-stone-400 text-center py-8 text-sm">Nenhuma entrada pendente de custo 🎉</div>
+    <!-- Sub-aba: CMV -->
+    <section id="fpanel-cmv" class="hidden fade-in">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-bold text-stone-800 flex items-center gap-2"><i data-lucide="percent" class="w-5 h-5 text-emerald-600"></i>CMV por Receita</h2>
+        <button onclick="lockFinanceiro()" class="text-xs text-stone-400 hover:text-stone-600 flex items-center gap-1"><i data-lucide="lock" class="w-3.5 h-3.5"></i>Bloquear</button>
       </div>
-
-      <!-- Sub-aba: CMV -->
-      <div id="finance-subtab-cmv" class="hidden">
-        <p class="text-xs text-stone-400 mb-3 px-1">Custo estimado de cada receita, com base no custo médio já lançado dos insumos.</p>
-        <div id="finance-cmv-list" class="space-y-2"></div>
-      </div>
-    </div>
-  </section>
+      <p class="text-xs text-stone-400 mb-4">Custo estimado de cada receita, com base no custo médio já lançado dos insumos.</p>
+      <div id="finance-cmv-list" class="space-y-2"></div>
+    </section>
+  </main>
+</div>
 
   <!-- MODAL: Cancelar Produção (devolve insumos ao estoque) -->
   <div id="cancel-production-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -783,8 +804,6 @@
       <div class="flex gap-2"><button onclick="confirmDelete()" class="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700">Excluir</button><button onclick="closeDeleteConfirm()" class="flex-1 btn-ghost px-4 py-2.5 rounded-lg text-sm font-medium">Cancelar</button></div>
     </div>
   </div>
-
-</main>
 
 <div id="toast" class="fixed bottom-4 right-4 px-5 py-3 rounded-xl shadow-lg text-sm hidden z-50 text-white toast-anim font-medium"></div>
 
@@ -3420,7 +3439,50 @@ function closeDeleteConfirm() { document.getElementById('delete-confirm-modal').
 let financeUnlocked = false;
 let financePassword = '';
 let financeData = [];
-let activeFinanceSubtab = 'custos';
+let activeFinanceTab = 'custos';
+let currentArea = 'estoque'; // 'estoque' | 'financeiro'
+
+// ============================================================
+// TROCA DE ÁREA — Central do Estoque <-> Central Financeira
+// ============================================================
+function gotoFinanceiro() {
+  currentArea = 'financeiro';
+  document.getElementById('main-nav').classList.add('hidden');
+  document.getElementById('estoque-main').classList.add('hidden');
+  document.getElementById('financeiro-area').classList.remove('hidden');
+  document.getElementById('btn-goto-financeiro').classList.add('hidden');
+  document.getElementById('btn-goto-estoque').classList.remove('hidden');
+  document.getElementById('btn-goto-estoque').classList.add('flex');
+  // Tema verde no cabeçalho pra deixar claro que está em outra área
+  document.getElementById('app-header').style.background = 'linear-gradient(135deg, rgb(6,78,59), rgb(5,105,74))';
+  document.getElementById('header-icon').textContent = '💰';
+  document.getElementById('header-title').textContent = 'Central Financeira';
+  document.getElementById('header-subtitle').textContent = 'Custos e CMV';
+  renderFinanceiro();
+  lucide.createIcons();
+}
+function gotoEstoque() {
+  currentArea = 'estoque';
+  document.getElementById('main-nav').classList.remove('hidden');
+  document.getElementById('estoque-main').classList.remove('hidden');
+  document.getElementById('financeiro-area').classList.add('hidden');
+  document.getElementById('btn-goto-estoque').classList.add('hidden');
+  document.getElementById('btn-goto-estoque').classList.remove('flex');
+  document.getElementById('btn-goto-financeiro').classList.remove('hidden');
+  document.getElementById('app-header').style.background = 'linear-gradient(135deg, rgb(59,31,14), rgb(92,51,23))';
+  document.getElementById('header-icon').textContent = '☕';
+  document.getElementById('header-title').textContent = 'Central Tem Café';
+  document.getElementById('header-subtitle').textContent = 'Gestão Operacional';
+  lucide.createIcons();
+}
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.finance-tab-btn'); if (!btn) return;
+  activeFinanceTab = btn.dataset.ftab;
+  document.querySelectorAll('.finance-tab-btn').forEach(b => b.classList.toggle('finance-tab-active', b.dataset.ftab===activeFinanceTab));
+  document.getElementById('fpanel-custos').classList.toggle('hidden', activeFinanceTab!=='custos');
+  document.getElementById('fpanel-cmv').classList.toggle('hidden', activeFinanceTab!=='cmv');
+  if (activeFinanceTab === 'cmv') renderFinanceCMV();
+});
 
 function fmtCurrency(v) {
   return (v||0).toLocaleString('pt-BR', { style:'currency', currency:'BRL' });
@@ -3436,8 +3498,12 @@ async function financeApiCall(action, data = {}) {
   return json;
 }
 function renderFinanceiro() {
-  document.getElementById('finance-lock-screen').classList.toggle('hidden', financeUnlocked);
-  document.getElementById('finance-content').classList.toggle('hidden', !financeUnlocked);
+  const lockScreen = document.getElementById('finance-lock-screen');
+  const nav = document.getElementById('finance-nav');
+  lockScreen.classList.toggle('hidden', financeUnlocked);
+  nav.classList.toggle('hidden', !financeUnlocked);
+  document.getElementById('fpanel-custos').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='custos');
+  document.getElementById('fpanel-cmv').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='cmv');
   if (financeUnlocked) { renderFinancePending(); renderFinanceCMV(); lucide.createIcons(); }
 }
 async function unlockFinanceiro() {
@@ -3457,6 +3523,7 @@ async function unlockFinanceiro() {
     financeUnlocked = true;
     hideLoadingProgress();
     document.getElementById('finance-password-input').value = '';
+    activeFinanceTab = 'custos';
     renderFinanceiro();
   } catch (err) {
     hideLoadingProgress();
@@ -3470,13 +3537,6 @@ function lockFinanceiro() {
   financeData = [];
   renderFinanceiro();
 }
-document.addEventListener('click', (e) => {
-  const btn = e.target.closest('.finance-subtab-btn'); if (!btn) return;
-  activeFinanceSubtab = btn.dataset.subtab;
-  document.querySelectorAll('.finance-subtab-btn').forEach(b => { b.className = `finance-subtab-btn px-3 py-1.5 rounded-lg text-xs font-medium ${b.dataset.subtab===activeFinanceSubtab?'bg-stone-800 text-white':'bg-stone-100 text-stone-600 hover:bg-stone-200'}`; });
-  document.getElementById('finance-subtab-custos').classList.toggle('hidden', activeFinanceSubtab!=='custos');
-  document.getElementById('finance-subtab-cmv').classList.toggle('hidden', activeFinanceSubtab!=='cmv');
-});
 function getFinanceCostedEntryIds() {
   return new Set(financeData.filter(r=>r.type==='costed_entry').map(r=>r.movement_id));
 }
@@ -3494,17 +3554,54 @@ function renderFinancePending() {
   el.innerHTML = entradas.map(m => {
     const items = getMovementDetailItems(m);
     const d = new Date(m.movement_date);
-    return `<div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100">
-      <p class="text-xs text-stone-400 mb-2">${d.toLocaleDateString('pt-BR')} ${d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}${m.movement_user?` · por ${m.movement_user}`:''}</p>
-      <div class="space-y-2">
-        ${items.map((it,i) => `<div class="flex flex-wrap items-center gap-2 bg-stone-50 rounded-lg p-2.5">
-          <span class="text-sm text-stone-700 flex-1 min-w-[140px]">${fmtQty(it.qty,it.unit)} ${it.unit} <strong>${it.name}</strong></span>
-          <input type="number" min="0" step="any" placeholder="Custo total pago (R$)" class="finance-cost-input input-field text-sm w-44" data-movement="${m.id}" data-item-index="${i}">
-        </div>`).join('')}
+    return `<div class="bg-white rounded-2xl p-5 shadow-sm border border-stone-100">
+      <div class="flex items-center justify-between mb-3 pb-3 border-b border-stone-100">
+        <p class="text-xs text-stone-500 font-medium">📅 ${d.toLocaleDateString('pt-BR')} · ${d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}${m.movement_user?` · por ${m.movement_user}`:''}</p>
       </div>
-      <button onclick="saveFinanceCosts('${m.id}')" class="mt-3 w-full btn-primary px-4 py-2 rounded-lg text-xs font-medium">💾 Salvar Custos desta Entrada</button>
+      <div class="space-y-3">
+        ${items.map((it,i) => {
+          const existing = getFinanceCostPrice(it.name);
+          const product = getProducts().find(p => p.product_name === it.name);
+          const storageUnit = product ? (product.storage_unit || product.unit) : it.unit;
+          const qtyInStorageUnit = product ? convertQuantity(it.qty, it.unit, storageUnit, getCustomConversions(product)) : it.qty;
+          const suggested = existing ? (existing.price * qtyInStorageUnit) : null;
+          return `<div class="bg-stone-50 rounded-xl p-3">
+            <div class="flex justify-between items-center mb-2">
+              <span class="text-sm font-semibold text-stone-800">${it.name}</span>
+              <span class="text-xs text-stone-400">${fmtQty(it.qty,it.unit)} ${it.unit}</span>
+            </div>
+            ${existing ? `<p class="text-[11px] text-emerald-700 mb-1.5">💡 Última vez: ${fmtCurrency(existing.price)}/${existing.unit} — já pré-preenchido, só confirme ou ajuste</p>` : `<p class="text-[11px] text-stone-400 mb-1.5">Sem histórico de preço pra esse insumo ainda</p>`}
+            <div class="relative">
+              <span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-stone-400">R$</span>
+              <input type="number" min="0" step="any" placeholder="Custo total pago" class="finance-cost-input input-field text-sm w-full pl-9" data-movement="${m.id}" data-item-index="${i}" value="${suggested!==null ? suggested.toFixed(2) : ''}">
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+      <div class="flex gap-2 mt-4">
+        <button onclick="saveFinanceCosts('${m.id}')" class="flex-1 px-4 py-2.5 rounded-lg text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors flex items-center justify-center gap-1.5"><i data-lucide="check" class="w-3.5 h-3.5"></i>Salvar Custos</button>
+        <button onclick="skipFinanceEntry('${m.id}')" class="px-4 py-2.5 rounded-lg text-xs font-medium text-stone-500 bg-stone-100 hover:bg-stone-200 transition-colors">🚫 Não sei o preço, pular</button>
+      </div>
     </div>`;
   }).join('');
+  lucide.createIcons();
+}
+// Marca a entrada como "pulada" — some da lista sem exigir preço. Fica registrada como pulada
+// (não é um cancelamento silencioso); assim que você lançar um preço novo desse insumo em
+// qualquer entrada futura, ele passa a valer dali pra frente normalmente.
+async function skipFinanceEntry(movementId) {
+  showLoadingProgress('Marcando como pulada...');
+  try {
+    const r = await financeApiCall('create', { data: { type:'costed_entry', movement_id: movementId, total_cost: 0, costed_at: new Date().toISOString(), skipped: true } });
+    financeData.push({ id: r.id, type:'costed_entry', movement_id: movementId, total_cost: 0, costed_at: new Date().toISOString(), skipped: true });
+    hideLoadingProgress();
+    showToast('Entrada marcada como pulada');
+    renderFinancePending();
+  } catch (err) {
+    hideLoadingProgress();
+    console.error('Erro ao pular entrada:', err);
+    showToast('Erro ao pular: ' + err.message, true);
+  }
 }
 async function saveFinanceCosts(movementId) {
   const m = allData.find(r=>r.id===movementId); if (!m) return;
@@ -3517,7 +3614,7 @@ async function saveFinanceCosts(movementId) {
     if (isNaN(val) || val <= 0) allFilled = false;
     values.push(val);
   });
-  if (!allFilled) { showToast('Preencha o custo de todos os itens dessa entrada antes de salvar', true); return; }
+  if (!allFilled) { showToast('Preencha o custo de todos os itens dessa entrada antes de salvar (ou use "Pular" se não souber)', true); return; }
   showLoadingProgress('Salvando custos...');
   try {
     let done = 0;
