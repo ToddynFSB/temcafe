@@ -542,10 +542,13 @@
 <div id="financeiro-area" class="hidden">
   <nav id="finance-nav" class="max-w-7xl mx-auto px-4 pt-3 pb-1 hidden">
     <div class="nav-grid">
-      <button class="finance-tab-btn finance-tab-active px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="custos"><i data-lucide="banknote" class="w-5 h-5"></i>Custos Pendentes</button>
+      <button class="finance-tab-btn finance-tab-active px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="dre"><i data-lucide="scale" class="w-5 h-5"></i>DRE</button>
+      <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="custos"><i data-lucide="banknote" class="w-5 h-5"></i>Custos Pendentes</button>
       <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="cmv"><i data-lucide="percent" class="w-5 h-5"></i>CMV</button>
       <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="vendas"><i data-lucide="credit-card" class="w-5 h-5"></i>Vendas</button>
       <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="faturamento"><i data-lucide="trending-up" class="w-5 h-5"></i>Faturamento</button>
+      <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="despesas"><i data-lucide="receipt" class="w-5 h-5"></i>Gastos</button>
+      <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="funcionarios"><i data-lucide="users" class="w-5 h-5"></i>Funcionários</button>
     </div>
   </nav>
 
@@ -693,6 +696,102 @@
       <div id="fat-day-detail">
         <p class="text-stone-400 text-center py-8 text-sm">Toque num dia no gráfico acima pra ver o detalhe.</p>
       </div>
+    </section>
+
+    <!-- Sub-aba: DRE -->
+    <section id="fpanel-dre" class="hidden fade-in">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-bold text-stone-800 flex items-center gap-2"><i data-lucide="scale" class="w-5 h-5 text-emerald-600"></i>DRE — Resultado do Período</h2>
+        <button onclick="lockFinanceiro()" class="text-xs text-stone-400 hover:text-stone-600 flex items-center gap-1"><i data-lucide="lock" class="w-3.5 h-3.5"></i>Bloquear</button>
+      </div>
+      <div class="flex flex-wrap gap-1.5 mb-4">
+        <button class="dre-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-800 text-white" data-filter="7days">7 dias</button>
+        <button class="dre-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-filter="30days">30 dias</button>
+        <button class="dre-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-filter="month">Este mês</button>
+      </div>
+      <div id="dre-content"></div>
+    </section>
+
+    <!-- Sub-aba: Gastos -->
+    <section id="fpanel-despesas" class="hidden fade-in">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-bold text-stone-800 flex items-center gap-2"><i data-lucide="receipt" class="w-5 h-5 text-emerald-600"></i>Gastos</h2>
+        <button onclick="lockFinanceiro()" class="text-xs text-stone-400 hover:text-stone-600 flex items-center gap-1"><i data-lucide="lock" class="w-3.5 h-3.5"></i>Bloquear</button>
+      </div>
+      <div class="bg-white rounded-xl p-5 shadow-sm border border-stone-100 mb-5">
+        <h3 class="font-semibold mb-4 text-stone-800 text-sm">Registrar Gasto</h3>
+        <form onsubmit="handleAddExpense(event)">
+          <div class="grid sm:grid-cols-2 gap-3 mb-3">
+            <input id="new-expense-desc" type="text" placeholder="Descrição *" required class="input-field text-sm">
+            <select id="new-expense-category" required class="input-field text-sm" onchange="toggleExpenseCustomCategory()"><option value="">Categoria *</option></select>
+          </div>
+          <input id="new-expense-category-custom" type="text" placeholder="Nome da nova categoria *" class="input-field text-sm w-full mb-3 hidden">
+          <div class="grid sm:grid-cols-2 gap-3 mb-4">
+            <div class="relative"><span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-stone-400">R$</span><input id="new-expense-amount" type="number" placeholder="Valor" min="0.01" step="any" required class="input-field text-sm w-full pl-9"></div>
+            <input id="new-expense-date" type="date" required class="input-field text-sm">
+          </div>
+          <div class="flex gap-2"><button type="submit" class="btn-primary px-5 py-2.5 rounded-lg text-sm font-medium">Salvar Gasto</button></div>
+        </form>
+      </div>
+      <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 mb-4">
+        <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-2">Filtrar</p>
+        <div class="flex flex-wrap gap-1.5 mb-3">
+          <button class="expense-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-800 text-white" data-filter="30days">30 dias</button>
+          <button class="expense-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-filter="month">Este mês</button>
+          <button class="expense-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-filter="all">Tudo</button>
+        </div>
+        <select id="expense-category-filter" class="input-field text-sm w-full"><option value="">Todas categorias</option></select>
+      </div>
+      <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 mb-4">
+        <h3 class="font-semibold text-sm mb-3 text-stone-800 flex items-center gap-2"><i data-lucide="pie-chart" class="w-4 h-4 text-emerald-600"></i>Total por categoria</h3>
+        <div id="expense-category-totals" class="space-y-2.5"></div>
+      </div>
+      <h3 class="font-semibold mb-3 text-stone-800 text-sm">Gastos Registrados</h3>
+      <div id="expenses-list" class="space-y-2"></div>
+    </section>
+
+    <!-- Sub-aba: Funcionários -->
+    <section id="fpanel-funcionarios" class="hidden fade-in">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-bold text-stone-800 flex items-center gap-2"><i data-lucide="users" class="w-5 h-5 text-emerald-600"></i>Funcionários</h2>
+        <button onclick="lockFinanceiro()" class="text-xs text-stone-400 hover:text-stone-600 flex items-center gap-1"><i data-lucide="lock" class="w-3.5 h-3.5"></i>Bloquear</button>
+      </div>
+      <div class="bg-white rounded-xl p-5 shadow-sm border border-stone-100 mb-5">
+        <h3 class="font-semibold mb-4 text-stone-800 text-sm">Cadastrar Funcionário</h3>
+        <form onsubmit="handleAddEmployee(event)">
+          <input id="new-emp-name" type="text" placeholder="Nome *" required class="input-field text-sm w-full mb-3">
+          <div class="grid sm:grid-cols-2 gap-3 mb-3">
+            <select id="new-emp-pay-type" required class="input-field text-sm" onchange="updateEmployeePayValueLabel()">
+              <option value="">Tipo de pagamento *</option>
+              <option value="mensal">Mensal fixo (CLT)</option>
+              <option value="diaria">Diária</option>
+              <option value="comissao">Comissão (%)</option>
+            </select>
+            <div class="relative"><span id="new-emp-pay-value-prefix" class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-stone-400">R$</span><input id="new-emp-pay-value" type="number" placeholder="Valor *" min="0" step="any" required class="input-field text-sm w-full pl-9"></div>
+          </div>
+          <p class="text-xs text-stone-500 mb-1.5" id="new-emp-pay-value-hint"></p>
+          <div class="mb-3">
+            <p class="text-xs font-semibold text-stone-600 uppercase tracking-wide mb-1.5">Dias trabalhados</p>
+            <div class="flex flex-wrap gap-1.5" id="new-emp-work-days">
+              <label class="flex items-center gap-1 text-xs bg-stone-50 border border-stone-200 rounded-lg px-2 py-1.5 cursor-pointer"><input type="checkbox" value="0" class="emp-workday-cb">Dom</label>
+              <label class="flex items-center gap-1 text-xs bg-stone-50 border border-stone-200 rounded-lg px-2 py-1.5 cursor-pointer"><input type="checkbox" value="1" class="emp-workday-cb" checked>Seg</label>
+              <label class="flex items-center gap-1 text-xs bg-stone-50 border border-stone-200 rounded-lg px-2 py-1.5 cursor-pointer"><input type="checkbox" value="2" class="emp-workday-cb" checked>Ter</label>
+              <label class="flex items-center gap-1 text-xs bg-stone-50 border border-stone-200 rounded-lg px-2 py-1.5 cursor-pointer"><input type="checkbox" value="3" class="emp-workday-cb" checked>Qua</label>
+              <label class="flex items-center gap-1 text-xs bg-stone-50 border border-stone-200 rounded-lg px-2 py-1.5 cursor-pointer"><input type="checkbox" value="4" class="emp-workday-cb" checked>Qui</label>
+              <label class="flex items-center gap-1 text-xs bg-stone-50 border border-stone-200 rounded-lg px-2 py-1.5 cursor-pointer"><input type="checkbox" value="5" class="emp-workday-cb" checked>Sex</label>
+              <label class="flex items-center gap-1 text-xs bg-stone-50 border border-stone-200 rounded-lg px-2 py-1.5 cursor-pointer"><input type="checkbox" value="6" class="emp-workday-cb">Sáb</label>
+            </div>
+          </div>
+          <div class="grid sm:grid-cols-2 gap-3 mb-3">
+            <input id="new-emp-work-hours" type="text" placeholder="Horário (ex: 08:00–17:00)" class="input-field text-sm">
+            <input id="new-emp-start-date" type="date" class="input-field text-sm">
+          </div>
+          <textarea id="new-emp-notes" rows="2" placeholder="Observações (opcional)" class="w-full input-field text-sm resize-none mb-4"></textarea>
+          <div class="flex gap-2"><button type="submit" class="btn-primary px-5 py-2.5 rounded-lg text-sm font-medium">Salvar Funcionário</button></div>
+        </form>
+      </div>
+      <h3 class="font-semibold mb-3 text-stone-800 text-sm">Funcionários Cadastrados</h3>
+      <div id="employees-list" class="space-y-3"></div>
     </section>
   </main>
 </div>
@@ -4203,6 +4302,20 @@ async function confirmDelete() {
       if (result.ok) { allData = allData.filter(r => r.id !== f.id); renderAll(); showToast('Produto excluído!'); }
       else showToast('Erro ao excluir', true);
     }
+  } else if (deleteType === 'expense') {
+    const ex = financeData.find(r => r.id === deleteId);
+    if (ex) {
+      const result = await financeApiCall('delete', { id: ex.id });
+      if (result.ok) { financeData = financeData.filter(r => r.id !== ex.id); renderExpenses(); renderDRE(); showToast('Gasto excluído!'); }
+      else showToast('Erro ao excluir', true);
+    }
+  } else if (deleteType === 'employee') {
+    const emp = financeData.find(r => r.id === deleteId);
+    if (emp) {
+      const result = await financeApiCall('delete', { id: emp.id });
+      if (result.ok) { financeData = financeData.filter(r => r.id !== emp.id); renderEmployees(); showToast('Funcionário excluído!'); }
+      else showToast('Erro ao excluir', true);
+    }
   }
   pendingDeleteId = null; pendingDeleteType = null;
 }
@@ -4261,9 +4374,31 @@ document.addEventListener('click', (e) => {
   document.getElementById('fpanel-cmv').classList.toggle('hidden', activeFinanceTab!=='cmv');
   document.getElementById('fpanel-vendas').classList.toggle('hidden', activeFinanceTab!=='vendas');
   document.getElementById('fpanel-faturamento').classList.toggle('hidden', activeFinanceTab!=='faturamento');
+  document.getElementById('fpanel-dre').classList.toggle('hidden', activeFinanceTab!=='dre');
+  document.getElementById('fpanel-despesas').classList.toggle('hidden', activeFinanceTab!=='despesas');
+  document.getElementById('fpanel-funcionarios').classList.toggle('hidden', activeFinanceTab!=='funcionarios');
   if (activeFinanceTab === 'cmv') renderFinanceCMV();
   if (activeFinanceTab === 'vendas') { renderSalesSelect(); renderSalesToday(); if (currentSalesMode==='bulk') { initBulkSalesDate(); } }
   if (activeFinanceTab === 'faturamento') renderFaturamento();
+  if (activeFinanceTab === 'dre') renderDRE();
+  if (activeFinanceTab === 'despesas') renderExpenses();
+  if (activeFinanceTab === 'funcionarios') renderEmployees();
+  lucide.createIcons();
+});
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.dre-filter'); if (!btn) return;
+  dreFilter = btn.dataset.filter;
+  renderDRE();
+});
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.expense-filter'); if (!btn) return;
+  expenseFilter = btn.dataset.filter;
+  renderExpenses();
+});
+document.addEventListener('change', (e) => {
+  if (e.target.id !== 'expense-category-filter') return;
+  expenseCategoryFilter = e.target.value;
+  renderExpenses();
 });
 
 function fmtCurrency(v) {
@@ -4417,6 +4552,8 @@ function computeWeekdaySeasonality(entries) {
   });
   return buckets.map(b => ({ weekday:b.weekday, revenue:b.revenue, days:b.days.size, avg: b.days.size>0 ? b.revenue/b.days.size : 0 }));
 }
+// Gráfico de LINHA (trocado de barras — mais claro pra ver tendência dia a dia). Cada dia vira um
+// ponto clicável (mesmo comportamento de antes: toca no ponto pra ver o detalhe daquele dia).
 function buildFaturamentoChartSVG(dailyMap, startDate, endDate) {
   const days = [];
   const d = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
@@ -4427,17 +4564,34 @@ function buildFaturamentoChartSVG(dailyMap, startDate, endDate) {
   }
   if (days.length===0) return '<p class="text-xs text-stone-400">Sem dados suficientes pra gráfico.</p>';
   const max = Math.max(...days.map(x=>x.value), 0.0001);
-  const barW = 26, gap = 6, chartH = 100;
-  const width = days.length*(barW+gap)+gap;
-  const bars = days.map((x,i)=>{
-    const h = Math.max(2, Math.round((x.value/max)*chartH));
-    const xPos = gap + i*(barW+gap);
-    const label = `${x.date.getDate()}/${x.date.getMonth()+1}`;
-    const isSelected = faturamentoSelectedDay === x.key;
-    const color = x.value>0 ? (isSelected ? '#047857' : '#10b981') : '#e7e5e4';
-    return `<g style="cursor:pointer" onclick="selectFaturamentoDay('${x.key}')"><title>${label}: ${fmtCurrency(x.value)}</title><rect x="${xPos}" y="${chartH-h+16}" width="${barW}" height="${h}" rx="3" fill="${color}"></rect><text x="${xPos+barW/2}" y="${chartH+30}" font-size="8" fill="#78716c" text-anchor="middle">${label}</text></g>`;
+  const colW = 32, gap = 10, chartH = 90, topPad = 10;
+  const width = days.length*colW + gap*2;
+  const points = days.map((x,i) => {
+    const cx = gap + i*colW + colW/2;
+    const cy = topPad + chartH - (x.value/max)*chartH;
+    return { ...x, cx, cy };
+  });
+  const linePath = points.map((p,i) => `${i===0?'M':'L'}${p.cx.toFixed(1)},${p.cy.toFixed(1)}`).join(' ');
+  const areaPath = `M${points[0].cx.toFixed(1)},${(topPad+chartH).toFixed(1)} ` +
+    points.map(p => `L${p.cx.toFixed(1)},${p.cy.toFixed(1)}`).join(' ') +
+    ` L${points[points.length-1].cx.toFixed(1)},${(topPad+chartH).toFixed(1)} Z`;
+  const dots = points.map(p => {
+    const label = `${p.date.getDate()}/${p.date.getMonth()+1}`;
+    const isSelected = faturamentoSelectedDay === p.key;
+    const r = isSelected ? 5 : 3.5;
+    const color = p.value>0 ? (isSelected ? '#047857' : '#10b981') : '#d6d3d1';
+    return `<g style="cursor:pointer" onclick="selectFaturamentoDay('${p.key}')">
+      <title>${label}: ${fmtCurrency(p.value)}</title>
+      <rect x="${(p.cx-colW/2).toFixed(1)}" y="0" width="${colW}" height="${topPad+chartH+30}" fill="transparent"></rect>
+      <circle cx="${p.cx.toFixed(1)}" cy="${p.cy.toFixed(1)}" r="${r}" fill="${color}" stroke="#fff" stroke-width="1.5"></circle>
+      <text x="${p.cx.toFixed(1)}" y="${topPad+chartH+22}" font-size="8" fill="#78716c" text-anchor="middle">${label}</text>
+    </g>`;
   }).join('');
-  return `<div class="overflow-x-auto -mx-1 px-1"><svg width="${width}" height="140" viewBox="0 0 ${width} 140" xmlns="http://www.w3.org/2000/svg" style="min-width:${width}px">${bars}</svg></div>`;
+  return `<div class="overflow-x-auto -mx-1 px-1"><svg width="${width}" height="${topPad+chartH+34}" viewBox="0 0 ${width} ${topPad+chartH+34}" xmlns="http://www.w3.org/2000/svg" style="min-width:${width}px">
+    <path d="${areaPath}" fill="#10b981" fill-opacity="0.08"></path>
+    <path d="${linePath}" fill="none" stroke="#10b981" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"></path>
+    ${dots}
+  </svg></div>`;
 }
 function renderFaturamento() {
   document.querySelectorAll('.faturamento-filter').forEach(b => { b.className = `faturamento-filter px-3 py-1.5 rounded-lg text-xs font-medium ${b.dataset.filter===faturamentoFilter?'bg-stone-800 text-white':'bg-stone-100 text-stone-600 hover:bg-stone-200'}`; });
@@ -4603,10 +4757,16 @@ function renderFinanceiro() {
   document.getElementById('fpanel-cmv').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='cmv');
   document.getElementById('fpanel-vendas').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='vendas');
   document.getElementById('fpanel-faturamento').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='faturamento');
+  document.getElementById('fpanel-dre').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='dre');
+  document.getElementById('fpanel-despesas').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='despesas');
+  document.getElementById('fpanel-funcionarios').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='funcionarios');
   if (financeUnlocked) {
     renderFinancePending(); renderFinanceCMV();
     if (activeFinanceTab === 'vendas') { renderSalesSelect(); renderSalesToday(); if (currentSalesMode==='bulk') { initBulkSalesDate(); } }
     if (activeFinanceTab === 'faturamento') renderFaturamento();
+    if (activeFinanceTab === 'dre') renderDRE();
+    if (activeFinanceTab === 'despesas') renderExpenses();
+    if (activeFinanceTab === 'funcionarios') renderEmployees();
     lucide.createIcons();
   }
 }
@@ -4623,11 +4783,12 @@ async function unlockFinanceiro() {
       ...r,
       cost_price: r.cost_price !== undefined && r.cost_price !== null ? parseFloat(r.cost_price) || 0 : undefined,
       total_cost: r.total_cost !== undefined && r.total_cost !== null ? parseFloat(r.total_cost) || 0 : undefined,
+      employee_pay_value: r.employee_pay_value !== undefined && r.employee_pay_value !== null ? parseFloat(r.employee_pay_value) || 0 : undefined,
     }));
     financeUnlocked = true;
     hideLoadingProgress();
     document.getElementById('finance-password-input').value = '';
-    activeFinanceTab = 'custos';
+    activeFinanceTab = 'dre';
     renderFinanceiro();
   } catch (err) {
     hideLoadingProgress();
@@ -4826,6 +4987,343 @@ function renderFinanceCMV() {
   }).join('');
 }
 
+// ============================================================
+// GASTOS (DESPESAS)
+// Reaproveita o padrão dinâmico da aba Financeiro: type='expense' -> {id, type,
+// product_name(=descrição), category, total_cost(=valor), expense_date(=data, "yyyy-MM-dd"),
+// linked_employee_id(opcional, quando é folha gerada a partir de um funcionário), updated_at}
+// ============================================================
+const DEFAULT_EXPENSE_CATEGORIES = ['Aluguel','Fornecedores','Mão de obra','Manutenção','Marketing','Taxas e Impostos','Utilidades (água/luz/internet)','Outros'];
+let expenseFilter = '30days';
+let expenseCategoryFilter = '';
+function getExpenses() { return financeData.filter(r => r.type === 'expense'); }
+function getAllExpenseCategories() {
+  const used = getExpenses().map(e => e.category).filter(Boolean);
+  return Array.from(new Set([...DEFAULT_EXPENSE_CATEGORIES, ...used])).sort((a,b)=>a.localeCompare(b));
+}
+function populateExpenseCategorySelects() {
+  const categories = getAllExpenseCategories();
+  const formSel = document.getElementById('new-expense-category');
+  if (formSel) { const val = formSel.value; formSel.innerHTML = '<option value="">Categoria *</option>' + categories.map(c=>`<option value="${c}">${c}</option>`).join('') + '<option value="__custom__">+ Nova categoria...</option>'; if (val) formSel.value = val; }
+  const filterSel = document.getElementById('expense-category-filter');
+  if (filterSel) { const val = filterSel.value; filterSel.innerHTML = '<option value="">Todas categorias</option>' + categories.map(c=>`<option value="${c}">${c}</option>`).join(''); filterSel.value = val; }
+}
+function toggleExpenseCustomCategory() {
+  const sel = document.getElementById('new-expense-category');
+  const custom = document.getElementById('new-expense-category-custom');
+  const isCustom = sel.value === '__custom__';
+  custom.classList.toggle('hidden', !isCustom);
+  custom.required = isCustom;
+}
+async function handleAddExpense(e) {
+  e.preventDefault();
+  const desc = document.getElementById('new-expense-desc').value.trim();
+  let category = document.getElementById('new-expense-category').value;
+  if (category === '__custom__') category = document.getElementById('new-expense-category-custom').value.trim();
+  const amount = parseFloat(document.getElementById('new-expense-amount').value);
+  const date = document.getElementById('new-expense-date').value;
+  if (!desc || !category || !amount || amount <= 0 || !date) { showToast('Preencha todos os campos obrigatórios', true); return; }
+  showLoadingProgress('Salvando gasto...');
+  try {
+    const payload = { type:'expense', product_name:desc, category, total_cost:amount, expense_date:date, updated_at:new Date().toISOString() };
+    const r = await financeApiCall('create', { data: payload });
+    financeData.push({ id:r.id, ...payload });
+    hideLoadingProgress();
+    showToast('Gasto registrado!');
+    e.target.reset();
+    document.getElementById('new-expense-date').value = localDateStr(new Date());
+    toggleExpenseCustomCategory();
+    renderExpenses();
+  } catch (err) {
+    hideLoadingProgress();
+    console.error('Erro ao salvar gasto:', err);
+    showToast('Erro ao salvar gasto: ' + err.message, true);
+  }
+}
+function expenseRangeForFilter(filter) {
+  const end = new Date(); end.setHours(12,0,0,0);
+  let start = new Date(end);
+  if (filter === 'month') start = new Date(end.getFullYear(), end.getMonth(), 1, 12, 0, 0);
+  else if (filter === 'all') start = null;
+  else start.setDate(end.getDate() - 29); // 30days (padrão)
+  return { start, end };
+}
+function getExpensesInRange(start, end) {
+  return getExpenses().filter(ex => {
+    if (!ex.expense_date) return false;
+    if (start && ex.expense_date < localDateStr(start)) return false;
+    if (end && ex.expense_date > localDateStr(end)) return false;
+    return true;
+  });
+}
+function requestDeleteExpense(id) {
+  const ex = financeData.find(r => r.id === id); if (!ex) return;
+  pendingDeleteId = id; pendingDeleteType = 'expense';
+  document.getElementById('delete-confirm-text').textContent = `Deseja excluir o gasto "${ex.product_name}" (${fmtCurrency(ex.total_cost)})?`;
+  document.getElementById('delete-confirm-modal').classList.remove('hidden');
+}
+function renderExpenses() {
+  populateExpenseCategorySelects();
+  if (!document.getElementById('new-expense-date').value) document.getElementById('new-expense-date').value = localDateStr(new Date());
+  document.querySelectorAll('.expense-filter').forEach(b => { b.className = `expense-filter px-3 py-1.5 rounded-lg text-xs font-medium ${b.dataset.filter===expenseFilter?'bg-stone-800 text-white':'bg-stone-100 text-stone-600 hover:bg-stone-200'}`; });
+  const { start, end } = expenseRangeForFilter(expenseFilter);
+  let entries = getExpensesInRange(start, end);
+  if (expenseCategoryFilter) entries = entries.filter(e => e.category === expenseCategoryFilter);
+  entries.sort((a,b) => (b.expense_date||'').localeCompare(a.expense_date||''));
+
+  const byCategory = {};
+  entries.forEach(e => { byCategory[e.category] = (byCategory[e.category]||0) + (e.total_cost||0); });
+  const total = entries.reduce((s,e)=>s+(e.total_cost||0),0);
+  const catRows = Object.entries(byCategory).sort((a,b)=>b[1]-a[1]);
+  const catEl = document.getElementById('expense-category-totals');
+  catEl.innerHTML = catRows.length === 0 ? '<p class="text-stone-400 text-center py-4 text-sm">Sem gastos no período</p>' : catRows.map(([cat,val]) => {
+    const pct = total>0 ? (val/total)*100 : 0;
+    return `<div>
+      <div class="flex justify-between items-center mb-1 gap-2">
+        <span class="text-sm text-stone-700 truncate">${cat}</span>
+        <span class="text-sm font-semibold text-stone-800 whitespace-nowrap">${fmtCurrency(val)} <span class="text-stone-400 font-normal">(${pct.toFixed(0)}%)</span></span>
+      </div>
+      <div class="h-1.5 bg-stone-100 rounded-full overflow-hidden"><div class="h-full bg-red-400 rounded-full" style="width:${Math.max(2,pct)}%"></div></div>
+    </div>`;
+  }).join('');
+
+  const listEl = document.getElementById('expenses-list');
+  listEl.innerHTML = entries.length === 0 ? '<p class="text-stone-400 text-center py-8 text-sm">Nenhum gasto registrado</p>' : entries.map(ex => `
+    <div class="p-4 bg-white rounded-xl shadow-sm border border-stone-100 flex justify-between items-center gap-2">
+      <div class="min-w-0">
+        <p class="text-sm font-medium text-stone-800 truncate">${ex.product_name}</p>
+        <p class="text-xs text-stone-400">${ex.category} · ${parseLocalDate(ex.expense_date).toLocaleDateString('pt-BR')}${ex.linked_employee_id?' · 👤 Folha':''}</p>
+      </div>
+      <div class="flex items-center gap-2 flex-shrink-0">
+        <span class="text-sm font-bold text-red-700">${fmtCurrency(ex.total_cost)}</span>
+        <button onclick="requestDeleteExpense('${ex.id}')" class="text-stone-300 hover:text-red-600"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+      </div>
+    </div>`).join('');
+  lucide.createIcons();
+}
+
+// ============================================================
+// FUNCIONÁRIOS
+// type='employee' -> {id, type, product_name(=nome), employee_pay_type('mensal'|'diaria'|
+// 'comissao'), employee_pay_value, employee_work_days(JSON array 0-6), employee_work_hours,
+// employee_status('ativo'|'inativo'), employee_start_date, employee_notes, updated_at}
+// A folha de pagamento NÃO é calculada automaticamente no DRE — segue o mesmo padrão de "Custos
+// Pendentes" (pré-preenche, mas exige confirmação manual): o botão "Gerar despesa do mês" cria um
+// gasto de verdade em Gastos (categoria "Mão de obra"), com linked_employee_id apontando pra cá.
+// ============================================================
+const EMPLOYEE_PAY_TYPE_LABELS = { mensal:'Mensal fixo (CLT)', diaria:'Diária', comissao:'Comissão' };
+function getEmployees() { return financeData.filter(r => r.type === 'employee'); }
+function updateEmployeePayValueLabel() {
+  const type = document.getElementById('new-emp-pay-type').value;
+  const prefix = document.getElementById('new-emp-pay-value-prefix');
+  const hint = document.getElementById('new-emp-pay-value-hint');
+  if (type === 'comissao') { prefix.textContent = '%'; hint.textContent = 'Percentual de referência — a despesa de comissão em si é lançada manualmente em Gastos.'; }
+  else if (type === 'diaria') { prefix.textContent = 'R$'; hint.textContent = 'Valor pago por dia trabalhado.'; }
+  else if (type === 'mensal') { prefix.textContent = 'R$'; hint.textContent = 'Salário mensal fixo.'; }
+  else { prefix.textContent = 'R$'; hint.textContent = ''; }
+}
+async function handleAddEmployee(e) {
+  e.preventDefault();
+  const name = document.getElementById('new-emp-name').value.trim();
+  const payType = document.getElementById('new-emp-pay-type').value;
+  const payValue = parseFloat(document.getElementById('new-emp-pay-value').value);
+  const workDays = Array.from(document.querySelectorAll('.emp-workday-cb:checked')).map(cb => parseInt(cb.value));
+  const workHours = document.getElementById('new-emp-work-hours').value.trim();
+  const startDate = document.getElementById('new-emp-start-date').value;
+  const notes = document.getElementById('new-emp-notes').value.trim();
+  if (!name || !payType || isNaN(payValue) || payValue < 0) { showToast('Preencha todos os campos obrigatórios', true); return; }
+  showLoadingProgress('Salvando funcionário...');
+  try {
+    const payload = { type:'employee', product_name:name, employee_pay_type:payType, employee_pay_value:payValue, employee_work_days:JSON.stringify(workDays), employee_work_hours:workHours, employee_status:'ativo', employee_start_date:startDate||'', employee_notes:notes, updated_at:new Date().toISOString() };
+    const r = await financeApiCall('create', { data: payload });
+    financeData.push({ id:r.id, ...payload });
+    hideLoadingProgress();
+    showToast('Funcionário cadastrado!');
+    e.target.reset();
+    document.querySelectorAll('.emp-workday-cb').forEach(cb => cb.checked = ['1','2','3','4','5'].includes(cb.value));
+    updateEmployeePayValueLabel();
+    renderEmployees();
+  } catch (err) {
+    hideLoadingProgress();
+    console.error('Erro ao salvar funcionário:', err);
+    showToast('Erro ao salvar funcionário: ' + err.message, true);
+  }
+}
+function requestDeleteEmployee(id) {
+  const emp = financeData.find(r => r.id === id); if (!emp) return;
+  pendingDeleteId = id; pendingDeleteType = 'employee';
+  document.getElementById('delete-confirm-text').textContent = `Deseja excluir o funcionário "${emp.product_name}"? Isso não apaga despesas de folha já geradas.`;
+  document.getElementById('delete-confirm-modal').classList.remove('hidden');
+}
+async function toggleEmployeeStatus(id) {
+  const emp = financeData.find(r => r.id === id); if (!emp) return;
+  const newStatus = emp.employee_status === 'ativo' ? 'inativo' : 'ativo';
+  try {
+    await financeApiCall('update', { data: { ...emp, employee_status:newStatus } });
+    emp.employee_status = newStatus;
+    renderEmployees();
+    showToast(newStatus==='ativo' ? 'Funcionário reativado!' : 'Funcionário marcado como inativo');
+  } catch (err) {
+    console.error('Erro ao atualizar status:', err);
+    showToast('Erro ao atualizar status: ' + err.message, true);
+  }
+}
+function toggleGeneratePayroll(employeeId) {
+  const el = document.getElementById(`payroll-form-${employeeId}`);
+  if (el) el.classList.toggle('hidden');
+}
+async function confirmGeneratePayroll(employeeId) {
+  const emp = financeData.find(r => r.id === employeeId); if (!emp) return;
+  const amount = parseFloat(document.getElementById(`payroll-amount-${employeeId}`).value);
+  const date = document.getElementById(`payroll-date-${employeeId}`).value;
+  if (isNaN(amount) || amount <= 0 || !date) { showToast('Preencha o valor e a data', true); return; }
+  showLoadingProgress('Gerando despesa de folha...');
+  try {
+    const payload = { type:'expense', product_name:`Folha: ${emp.product_name}`, category:'Mão de obra', total_cost:amount, expense_date:date, linked_employee_id:employeeId, updated_at:new Date().toISOString() };
+    const r = await financeApiCall('create', { data: payload });
+    financeData.push({ id:r.id, ...payload });
+    hideLoadingProgress();
+    showToast('Despesa de folha gerada!');
+    renderEmployees();
+  } catch (err) {
+    hideLoadingProgress();
+    console.error('Erro ao gerar despesa de folha:', err);
+    showToast('Erro ao gerar despesa de folha: ' + err.message, true);
+  }
+}
+function renderEmployees() {
+  const el = document.getElementById('employees-list');
+  const employees = getEmployees().sort((a,b) => {
+    if (a.employee_status !== b.employee_status) return a.employee_status === 'ativo' ? -1 : 1;
+    return (a.product_name||'').localeCompare(b.product_name||'');
+  });
+  updateEmployeePayValueLabel();
+  if (employees.length === 0) { el.innerHTML = '<p class="text-stone-400 text-center py-8 text-sm">Nenhum funcionário cadastrado</p>'; lucide.createIcons(); return; }
+  const today = new Date();
+  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+  el.innerHTML = employees.map(emp => {
+    let workDays = []; try { workDays = JSON.parse(emp.employee_work_days || '[]'); } catch(e) {}
+    const daysLabel = workDays.length ? workDays.slice().sort().map(d=>WEEKDAY_SHORT[d]).join(', ') : '—';
+    const payLabel = emp.employee_pay_type === 'comissao' ? `${emp.employee_pay_value}% de comissão` : `${fmtCurrency(emp.employee_pay_value)} ${emp.employee_pay_type==='diaria'?'/ dia':'/ mês'}`;
+    // Pré-preenche um valor sugerido só pra mensal e diária (comissão depende do faturamento
+    // gerado, sem uma estimativa automática confiável — fica em branco pra digitar).
+    let suggestedAmount = '';
+    if (emp.employee_pay_type === 'mensal') suggestedAmount = emp.employee_pay_value;
+    else if (emp.employee_pay_type === 'diaria' && workDays.length) {
+      const daysWorked = countMatchingDays(monthStart, today, new Set(workDays));
+      suggestedAmount = (emp.employee_pay_value * daysWorked).toFixed(2);
+    }
+    const isInactive = emp.employee_status !== 'ativo';
+    return `<div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 ${isInactive?'opacity-60':''}">
+      <div class="flex justify-between items-start mb-2 gap-2">
+        <div class="min-w-0">
+          <p class="font-semibold text-stone-800 text-sm">${emp.product_name} ${isInactive?'<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-stone-100 text-stone-500 font-semibold align-middle">INATIVO</span>':''}</p>
+          <p class="text-xs text-stone-500 mt-0.5">${EMPLOYEE_PAY_TYPE_LABELS[emp.employee_pay_type]||emp.employee_pay_type} · ${payLabel}</p>
+          <p class="text-xs text-stone-400 mt-0.5">📅 ${daysLabel}${emp.employee_work_hours?` · ${emp.employee_work_hours}`:''}</p>
+          ${emp.employee_notes ? `<p class="text-xs text-stone-400 mt-0.5 italic">${emp.employee_notes}</p>` : ''}
+        </div>
+        <div class="flex items-center gap-1.5 flex-shrink-0">
+          <button onclick="toggleEmployeeStatus('${emp.id}')" class="text-xs px-2 py-1 rounded-lg font-medium ${isInactive?'bg-emerald-50 text-emerald-700 hover:bg-emerald-100':'bg-stone-100 text-stone-500 hover:bg-stone-200'}">${isInactive?'Reativar':'Desativar'}</button>
+          <button onclick="requestDeleteEmployee('${emp.id}')" class="text-stone-300 hover:text-red-600"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+        </div>
+      </div>
+      <button onclick="toggleGeneratePayroll('${emp.id}')" class="text-xs font-medium text-emerald-700 hover:text-emerald-800 flex items-center gap-1 mt-2"><i data-lucide="banknote" class="w-3.5 h-3.5"></i>Gerar despesa do mês</button>
+      <div id="payroll-form-${emp.id}" class="hidden mt-3 p-3 bg-emerald-50 border border-emerald-100 rounded-lg space-y-2">
+        <p class="text-xs text-emerald-800">Confira e ajuste antes de confirmar — isso cria um gasto em "Mão de obra" vinculado a este funcionário.</p>
+        <div class="grid grid-cols-2 gap-2">
+          <div class="relative"><span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-stone-400">R$</span><input id="payroll-amount-${emp.id}" type="number" min="0.01" step="any" value="${suggestedAmount}" class="input-field text-sm w-full pl-9"></div>
+          <input id="payroll-date-${emp.id}" type="date" value="${localDateStr(new Date())}" class="input-field text-sm">
+        </div>
+        <button onclick="confirmGeneratePayroll('${emp.id}')" class="w-full btn-success px-3 py-2 rounded-lg text-xs font-medium">✓ Confirmar e Gerar Despesa</button>
+      </div>
+    </div>`;
+  }).join('');
+  lucide.createIcons();
+}
+
+// ============================================================
+// DRE — Demonstração de Resultado do período. Reaproveita 100% o cálculo de custo por receita já
+// existente (computeRecipeCost/getProductCMV — os mesmos usados na aba CMV e no Faturamento), não
+// cria uma lógica de custo paralela.
+// ============================================================
+let dreFilter = '7days';
+// Pros itens vendidos SEM custo de receita confirmado, estima o CMV aplicando a proporção
+// custo/faturamento observada nos itens QUE TÊM custo confirmado — uma extrapolação a partir de
+// dado real, não um número inventado do zero. Sem nenhum item confirmado no período, não estima
+// nada (hasEstimate=false), pra não fabricar uma proporção sem base nenhuma.
+function computeDRE(entries, expenses) {
+  const totalRevenue = entries.reduce((s,e)=>s+(e.total_revenue||0), 0);
+  let knownCost = 0, knownRevenue = 0, unknownRevenue = 0;
+  entries.forEach(e => {
+    const cmv = getProductCMV(e.product_name);
+    if (cmv) { knownCost += cmv.costPerUnit * (e.total_qty_sold||0); knownRevenue += (e.total_revenue||0); }
+    else { unknownRevenue += (e.total_revenue||0); }
+  });
+  const knownCostRatio = knownRevenue > 0 ? (knownCost / knownRevenue) : null;
+  const hasEstimate = knownCostRatio !== null && unknownRevenue > 0;
+  const estimatedExtraCost = hasEstimate ? unknownRevenue * knownCostRatio : 0;
+  const totalCMV = knownCost + estimatedExtraCost;
+  const totalExpenses = expenses.reduce((s,e)=>s+(e.total_cost||0), 0);
+  const confirmedProfit = knownRevenue - knownCost - totalExpenses;
+  const estimatedProfit = totalRevenue - totalCMV - totalExpenses;
+  const coveragePct = totalRevenue > 0 ? (knownRevenue/totalRevenue)*100 : 0;
+  return { totalRevenue, knownRevenue, unknownRevenue, knownCost, estimatedExtraCost, totalCMV, totalExpenses, confirmedProfit, estimatedProfit, coveragePct, hasEstimate };
+}
+function renderDRE() {
+  document.querySelectorAll('.dre-filter').forEach(b => { b.className = `dre-filter px-3 py-1.5 rounded-lg text-xs font-medium ${b.dataset.filter===dreFilter?'bg-stone-800 text-white':'bg-stone-100 text-stone-600 hover:bg-stone-200'}`; });
+  const { start, end } = faturamentoRangeForFilter(dreFilter);
+  const entries = getSaleRevenueEntriesInRange(start, end);
+  const expenses = getExpensesInRange(start, end);
+  const dre = computeDRE(entries, expenses);
+  const el = document.getElementById('dre-content'); if (!el) return;
+  const profitColor = (v) => v >= 0 ? 'text-emerald-700' : 'text-red-600';
+  el.innerHTML = `
+    <div class="grid grid-cols-2 gap-3 mb-4">
+      <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100">
+        <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-1">Lucro confirmado</p>
+        <p class="text-xl font-bold ${profitColor(dre.confirmedProfit)}">${fmtCurrency(dre.confirmedProfit)}</p>
+        <p class="text-[11px] text-stone-400 mt-1">Só com custos já validados · ${dre.coveragePct.toFixed(0)}% do faturamento</p>
+      </div>
+      <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100">
+        <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-1">Lucro estimado</p>
+        <p class="text-xl font-bold ${profitColor(dre.estimatedProfit)}">${fmtCurrency(dre.estimatedProfit)}</p>
+        <p class="text-[11px] text-stone-400 mt-1">Inclui CMV extrapolado pros itens pendentes</p>
+      </div>
+    </div>
+    <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 mb-4">
+      <h3 class="font-semibold text-sm mb-3 text-stone-800">Detalhamento</h3>
+      <div class="space-y-2 text-sm">
+        <div class="flex justify-between items-center py-1.5 border-b border-stone-100">
+          <span class="text-stone-600">Faturamento</span>
+          <span class="font-semibold text-stone-800">${fmtCurrency(dre.totalRevenue)}</span>
+        </div>
+        <div class="flex justify-between items-center py-1.5 border-b border-stone-100">
+          <span class="text-stone-600">(–) CMV confirmado</span>
+          <span class="font-semibold text-red-600">${fmtCurrency(dre.knownCost)}</span>
+        </div>
+        <div class="flex justify-between items-center py-1.5 border-b border-stone-100">
+          <span class="text-stone-600">(–) CMV estimado (adicional)</span>
+          <span class="font-semibold text-amber-600">${dre.hasEstimate ? fmtCurrency(dre.estimatedExtraCost) : '—'}</span>
+        </div>
+        <div class="flex justify-between items-center py-1.5 border-b border-stone-100">
+          <span class="text-stone-600">(–) Despesas</span>
+          <span class="font-semibold text-red-600">${fmtCurrency(dre.totalExpenses)}</span>
+        </div>
+        <div class="flex justify-between items-center py-2 pt-2">
+          <span class="font-bold text-stone-800">(=) Lucro confirmado</span>
+          <span class="font-bold ${profitColor(dre.confirmedProfit)}">${fmtCurrency(dre.confirmedProfit)}</span>
+        </div>
+        <div class="flex justify-between items-center py-1">
+          <span class="font-bold text-stone-800">(=) Lucro estimado</span>
+          <span class="font-bold ${profitColor(dre.estimatedProfit)}">${fmtCurrency(dre.estimatedProfit)}</span>
+        </div>
+      </div>
+      ${dre.unknownRevenue > 0 && !dre.hasEstimate ? `<p class="text-[11px] text-stone-400 mt-3 pt-3 border-t border-stone-100">${fmtCurrency(dre.unknownRevenue)} em vendas sem nenhum custo de receita confirmado ainda neste período — sem base pra estimar o CMV desses itens (lance os custos em Custos Pendentes).</p>` : ''}
+      ${dre.hasEstimate ? `<p class="text-[11px] text-stone-400 mt-3 pt-3 border-t border-stone-100">${fmtCurrency(dre.unknownRevenue)} em vendas sem custo de receita confirmado — o CMV estimado desses itens usa a proporção custo/faturamento média dos itens que já têm custo confirmado.</p>` : ''}
+      ${entries.length === 0 ? '<p class="text-stone-400 text-center py-4 text-sm">Sem vendas no período</p>' : ''}
+    </div>
+  `;
+}
 
 // ============================================================
 // START
