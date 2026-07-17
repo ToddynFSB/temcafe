@@ -1087,7 +1087,11 @@ async function loadAllData() {
   });
 }
 
-async function dbCreate(data) {
+// Os três aceitam um segundo parâmetro opcional {silent:true} pra pular o renderAll() automático —
+// usado dentro de loops que fazem várias chamadas seguidas (ex: descontar cada insumo de uma venda
+// em lote), pra não re-renderizar o app inteiro a cada item. Quem chama em loop é responsável por
+// dar um renderAll() manual no final. Sem o parâmetro, o comportamento é o de sempre.
+async function dbCreate(data, opts) {
   let result;
   try {
     result = await apiCall('create', { data });
@@ -1098,13 +1102,13 @@ async function dbCreate(data) {
   if (result.ok) {
     data.id = result.id;
     allData.push(data);
-    try { renderAll(); } catch (e) { console.error('Erro ao renderizar após salvar:', e); }
+    if (!opts || !opts.silent) { try { renderAll(); } catch (e) { console.error('Erro ao renderizar após salvar:', e); } }
     return { isOk: true };
   }
   return { isOk: false };
 }
 
-async function dbUpdate(data) {
+async function dbUpdate(data, opts) {
   let result;
   try {
     result = await apiCall('update', { data });
@@ -1115,13 +1119,13 @@ async function dbUpdate(data) {
   if (result.ok) {
     const idx = allData.findIndex(r => r.id === data.id);
     if (idx >= 0) allData[idx] = data;
-    try { renderAll(); } catch (e) { console.error('Erro ao renderizar após salvar:', e); }
+    if (!opts || !opts.silent) { try { renderAll(); } catch (e) { console.error('Erro ao renderizar após salvar:', e); } }
     return { isOk: true };
   }
   return { isOk: false };
 }
 
-async function dbDelete(data) {
+async function dbDelete(data, opts) {
   let result;
   try {
     result = await apiCall('delete', { id: data.id });
@@ -1131,7 +1135,7 @@ async function dbDelete(data) {
   }
   if (result.ok) {
     allData = allData.filter(r => r.id !== data.id);
-    try { renderAll(); } catch (e) { console.error('Erro ao renderizar após salvar:', e); }
+    if (!opts || !opts.silent) { try { renderAll(); } catch (e) { console.error('Erro ao renderizar após salvar:', e); } }
     return { isOk: true };
   }
   return { isOk: false };
@@ -2044,11 +2048,12 @@ async function confirmBatchEntry() {
     for (const b of batchData) {
       updateLoadingProgress(`Adicionando ${done+1}/${batchData.length}: ${b.name}`);
       const prod = allData.find(r => r.id === b.id);
-      if (prod) await dbUpdate({...prod, quantity: prod.quantity + b.storageQty});
+      if (prod) await dbUpdate({...prod, quantity: prod.quantity + b.storageQty}, {silent:true});
       done++;
     }
     const itemList = batchData.map(b=>`${fmtQty(b.qty,b.unit)} ${b.unit} ${b.name}`).join('; ');
-    await dbCreate({ ...blankRecord(), type:'movement', movement_type:'entrada', movement_product:itemList, movement_quantity:batchData.length, movement_date:new Date().toISOString(), movement_user:user, movement_note:`Entrada: ${itemList}`, batch_items:JSON.stringify(batchData) });
+    await dbCreate({ ...blankRecord(), type:'movement', movement_type:'entrada', movement_product:itemList, movement_quantity:batchData.length, movement_date:new Date().toISOString(), movement_user:user, movement_note:`Entrada: ${itemList}`, batch_items:JSON.stringify(batchData) }, {silent:true});
+    renderAll();
     hideLoadingProgress();
     showToast('Entrada confirmada!'); resetBatchForm();
   } catch (err) {
@@ -2216,7 +2221,7 @@ async function confirmManualExit() {
     for (const e of insumoEntries) {
       updateLoadingProgress(`Retirando ${done+1}/${totalSteps}: ${e.name}`);
       const prod = allData.find(r => r.id === e.id);
-      await dbUpdate({...prod, quantity: Math.max(0, prod.quantity - e.storageQty)});
+      await dbUpdate({...prod, quantity: Math.max(0, prod.quantity - e.storageQty)}, {silent:true});
       done++;
     }
     const vendaDiretaExitData = [];
@@ -2229,7 +2234,7 @@ async function confirmManualExit() {
         const p = getProducts().find(x => x.product_name === ing.name);
         const storageUnit = p.storage_unit||p.unit;
         const deduct = convertQuantity(ing.qty*vd.qty, ing.unit, storageUnit, getCustomConversions(p));
-        await dbUpdate({...p, quantity: Math.max(0, p.quantity - deduct)});
+        await dbUpdate({...p, quantity: Math.max(0, p.quantity - deduct)}, {silent:true});
         deductedIngredients.push({ name: ing.name, qty: deduct, unit: storageUnit });
       }
       // Guarda no mesmo formato usado nas vendas (value:'recipe_<id>' + deductedIngredients), pra
@@ -2239,7 +2244,8 @@ async function confirmManualExit() {
     }
     const allExitData = [...insumoEntries, ...vendaDiretaExitData];
     const itemList = allExitData.map(e => e.value ? `${fmtQty(e.qty,'')} ${e.name} (venda direta)` : `${fmtQty(e.qty,e.unit)} ${e.unit} ${e.name}`).join('; ');
-    await dbCreate({ ...blankRecord(), type:'movement', movement_type:'saida_manual', movement_product:itemList, movement_quantity:allExitData.length, movement_date:new Date().toISOString(), movement_note:reason?`Saída Manual: ${itemList} (${reason})`:`Saída Manual: ${itemList}`, batch_items:JSON.stringify(allExitData) });
+    await dbCreate({ ...blankRecord(), type:'movement', movement_type:'saida_manual', movement_product:itemList, movement_quantity:allExitData.length, movement_date:new Date().toISOString(), movement_note:reason?`Saída Manual: ${itemList} (${reason})`:`Saída Manual: ${itemList}`, batch_items:JSON.stringify(allExitData) }, {silent:true});
+    renderAll();
     hideLoadingProgress();
     showToast('Saída confirmada!'); resetManualExitForm();
   } catch (err) {
@@ -2854,7 +2860,7 @@ async function confirmSales() {
       if (s.value.startsWith('finished_')) {
         const id = s.value.replace('finished_','');
         const fp = allData.find(r => r.id === id);
-        await dbUpdate({...fp, quantity: fp.quantity - s.qty});
+        await dbUpdate({...fp, quantity: fp.quantity - s.qty}, {silent:true});
         notesParts.push(`${s.qty} ${s.name}`);
       } else if (s.value.startsWith('recipe_')) {
         const id = s.value.replace('recipe_','');
@@ -2865,7 +2871,7 @@ async function confirmSales() {
           const p = getProducts().find(x => x.product_name === ing.name);
           const storageUnit = p.storage_unit||p.unit;
           const deduct = convertQuantity(ing.qty * s.qty, ing.unit, storageUnit, getCustomConversions(p));
-          await dbUpdate({...p, quantity: Math.max(0, p.quantity - deduct)});
+          await dbUpdate({...p, quantity: Math.max(0, p.quantity - deduct)}, {silent:true});
           // Guarda o valor EXATO descontado (já na unidade de estoque) direto na venda, pra "desfazer"
           // no futuro devolver certinho mesmo que a receita seja editada depois.
           deductedIngredients.push({ name: ing.name, qty: deduct, unit: storageUnit });
@@ -2876,7 +2882,8 @@ async function confirmSales() {
       done++;
     }
     updateLoadingProgress('Salvando registro da venda...');
-    await dbCreate({ ...blankRecord(), type:'movement', movement_type:'venda', movement_product:notesParts.join('; '), movement_quantity:salesData.reduce((a,s)=>a+s.qty,0), movement_date:new Date().toISOString(), movement_note:`Venda: ${notesParts.join('; ')}`, batch_items:JSON.stringify(salesData) });
+    await dbCreate({ ...blankRecord(), type:'movement', movement_type:'venda', movement_product:notesParts.join('; '), movement_quantity:salesData.reduce((a,s)=>a+s.qty,0), movement_date:new Date().toISOString(), movement_note:`Venda: ${notesParts.join('; ')}`, batch_items:JSON.stringify(salesData) }, {silent:true});
+    renderAll();
     hideLoadingProgress();
     salesSubmitInProgress = false;
     showToast('Vendas registradas!');
@@ -2924,23 +2931,32 @@ function handleBulkFileUpload(event) {
       const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
       
       const items = [];
+      const skipped = [];
       for (const row of rows) {
         if (!row[0] || typeof row[0] !== 'string') continue;
-        const name = String(row[0]).trim();
-        if (name.startsWith('- ')) {
-          const cleanName = name.substring(2).trim();
-          const qty = parseInt(row[1]);
-          const totalValueRaw = parseFloat(row[2]); // coluna "Valor Total" (R$ vendido desse item)
-          const totalValue = (!isNaN(totalValueRaw) && totalValueRaw > 0) ? totalValueRaw : null;
-          if (cleanName && qty > 0) {
-            items.push({ original: cleanName, qty, totalValue });
-          }
-        }
+        const raw = String(row[0]).trim();
+        if (!raw) continue;
+        // Aceita "- Nome", "– Nome" (travessão — o Excel/Sheets às vezes autocorrige o hífen pra
+        // travessão sozinho, sem avisar), "— Nome", "• Nome", ou até sem prefixo nenhum, desde que
+        // a coluna B tenha uma quantidade válida. ANTES, só "- " (hífen+espaço exato) era aceito e
+        // qualquer variação sumia da planilha em silêncio — sem erro, sem aviso, sem rastro.
+        const cleanName = raw.replace(/^[-–—•]\s*/, '').trim();
+        if (!cleanName) continue;
+        const qty = parseInt(row[1]);
+        if (isNaN(qty) || qty <= 0) { skipped.push(raw); continue; }
+        const totalValueRaw = parseFloat(row[2]); // coluna "Valor Total" (R$ vendido desse item)
+        const totalValue = (!isNaN(totalValueRaw) && totalValueRaw > 0) ? totalValueRaw : null;
+        items.push({ original: cleanName, qty, totalValue });
       }
       
       if (items.length === 0) {
         showToast('Nenhum item encontrado na planilha', true);
         return;
+      }
+      // Antes essas linhas simplesmente desapareciam sem ninguém perceber — agora aparece um aviso
+      // bem visível, com o texto exato da linha, pra conferir antes de confirmar as vendas.
+      if (skipped.length > 0) {
+        showToast(`⚠️ ${skipped.length} linha(s) da planilha ficaram de fora (sem quantidade válida na coluna B): ${skipped.slice(0,4).join(' | ')}${skipped.length>4?` e mais ${skipped.length-4}...`:''}`, true);
       }
       
       showBulkMatchPreview(items);
@@ -2993,6 +3009,29 @@ function findBestMatch(importedName, systemNames) {
   return bestMatch && bestScore >= 30 ? { name: bestMatch, score: bestScore } : null;
 }
 
+// Mesma pontuação do findBestMatch, mas sem o corte em 30 — só serve pra AVISAR quando um item que
+// caiu como "não controlado" tem um nome parecido com algo que já existe no sistema (ex: espaço
+// extra, acento diferente, abreviação), pra não passar despercebido igual aconteceu antes.
+function findNearMatchForWarning(importedName, systemNames) {
+  const normalized = normalizeForMatch(importedName);
+  const normalizedWords = normalized.split(' ').filter(w => w.length > 1);
+  let bestMatch = null, bestScore = 0;
+  for (const sysName of systemNames) {
+    const sysNormalized = normalizeForMatch(sysName);
+    if (normalized === sysNormalized) continue;
+    let score;
+    if (normalized.includes(sysNormalized) || sysNormalized.includes(normalized)) score = 90;
+    else {
+      const sysWords = sysNormalized.split(' ').filter(w => w.length > 1);
+      let matchCount = 0;
+      for (const w of normalizedWords) if (sysWords.some(sw => sw.includes(w) || w.includes(sw))) matchCount++;
+      const totalWords = Math.max(normalizedWords.length, sysWords.length);
+      score = totalWords > 0 ? (matchCount / totalWords) * 80 : 0;
+    }
+    if (score > bestScore) { bestScore = score; bestMatch = sysName; }
+  }
+  return bestMatch && bestScore >= 12 ? bestMatch : null;
+}
 function showBulkMatchPreview(items) {
   const finished = getFinishedProducts();
   const vendaDireta = getRecipes().filter(r => r.recipe_type === 'Venda Direta');
@@ -3014,7 +3053,8 @@ function showBulkMatchPreview(items) {
     }
     const match = findBestMatch(item.original, controlledNames);
     if (match) return { ...item, match: match.name, score: match.score, fromAlias: false };
-    return { ...item, match: '__uncontrolled__', score: 0, fromAlias: false };
+    const nearMatch = findNearMatchForWarning(item.original, controlledNames);
+    return { ...item, match: '__uncontrolled__', score: 0, fromAlias: false, nearMatch };
   });
 
   const foundCount = matched.filter(m => m.match !== '__uncontrolled__').length;
@@ -3042,6 +3082,7 @@ function showBulkMatchPreview(items) {
           ${m.totalValue ? `<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">💰 ${fmtCurrency(m.totalValue)}</span>` : ''}
           ${m.fromAlias ? '<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">🔒 vínculo salvo</span>' : ''}
         </div>
+        ${m.nearMatch ? `<p class="text-[11px] text-red-600 font-medium ml-5 mb-1">⚠️ Parece com "${m.nearMatch}" — confira se não é o mesmo item antes de confirmar</p>` : ''}
         <div class="flex items-center gap-2">
           <span class="text-xs text-stone-400 ml-5">→ Sistema:</span>
           <select class="bulk-match-select input-field text-xs py-1 px-2 flex-1" data-idx="${i}" data-qty="${m.qty}" data-original="${m.original.replace(/"/g,'&quot;')}" data-total-value="${m.totalValue||''}">
@@ -3157,7 +3198,7 @@ async function processBulkSales(priceHints, prebuiltSalesData) {
         const id = s.value.replace('finished_','');
         const fp = allData.find(r => r.id === id);
         if (!fp||fp.quantity<s.qty) { hideLoadingProgress(); salesSubmitInProgress=false; showToast(`Estoque insuficiente de ${s.name}`, true); return; }
-        await dbUpdate({...fp, quantity: fp.quantity - s.qty});
+        await dbUpdate({...fp, quantity: fp.quantity - s.qty}, {silent:true});
         notesParts.push(`${s.qty} ${s.name}`);
       } else if (s.value.startsWith('recipe_')) {
         const id = s.value.replace('recipe_','');
@@ -3169,7 +3210,7 @@ async function processBulkSales(priceHints, prebuiltSalesData) {
           if (!p) { hideLoadingProgress(); salesSubmitInProgress=false; showToast(`Insumo ${ing.name} não encontrado`, true); return; }
           const storageUnit = p.storage_unit||p.unit;
           const deduct = convertQuantity(ing.qty*s.qty, ing.unit, storageUnit, getCustomConversions(p));
-          await dbUpdate({...p, quantity: Math.max(0, p.quantity - deduct)});
+          await dbUpdate({...p, quantity: Math.max(0, p.quantity - deduct)}, {silent:true});
           // Guarda o valor EXATO descontado (já na unidade de estoque) direto na venda, pra "desfazer"
           // no futuro devolver certinho mesmo que a receita seja editada depois.
           deductedIngredients.push({ name: ing.name, qty: deduct, unit: storageUnit });
@@ -3183,7 +3224,7 @@ async function processBulkSales(priceHints, prebuiltSalesData) {
       done++;
     }
     updateLoadingProgress('Salvando registro da venda...');
-    await dbCreate({ ...blankRecord(), type:'movement', movement_type:'venda', movement_product:notesParts.join('; '), movement_quantity:salesData.reduce((a,s)=>a+s.qty,0), movement_date:saleDate.toISOString(), movement_note:`Venda em lote: ${notesParts.join('; ')}`, batch_items:JSON.stringify(salesData) });
+    await dbCreate({ ...blankRecord(), type:'movement', movement_type:'venda', movement_product:notesParts.join('; '), movement_quantity:salesData.reduce((a,s)=>a+s.qty,0), movement_date:saleDate.toISOString(), movement_note:`Venda em lote: ${notesParts.join('; ')}`, batch_items:JSON.stringify(salesData) }, {silent:true});
     // Se veio da importação de planilha com "Valor Total", aproveita e já registra o valor de venda
     // (pra alimentar o faturamento e a margem no CMV), sem precisar digitar preço manualmente.
     if (priceHints && priceHints.length && financeUnlocked) {
@@ -3197,6 +3238,9 @@ async function processBulkSales(priceHints, prebuiltSalesData) {
       });
       try { await saveSaleRevenue(hintsWithUnit, saleDate); } catch (e) { console.error('Erro ao salvar faturamento diário:', e); }
     }
+    // Uma única renderização no final, em vez de uma a cada insumo descontado — é isso que deixava
+    // vendas grandes (muitos itens/insumos) lentas, principalmente com o histórico já grande.
+    renderAll();
     const feedbackEl = document.getElementById('bulk-sales-feedback');
     document.getElementById('bulk-feedback-title').textContent = `✓ ${salesData.length} venda(s) registrada(s)${notFound.length>0?` (${notFound.length} não encontrado(s))`:''}`;
     document.getElementById('bulk-feedback-content').innerHTML = `<div class="p-2 bg-emerald-50 rounded border border-emerald-200"><strong class="text-emerald-700">Processados:</strong> ${salesData.map(s=>`${s.qty} ${s.name}`).join(', ')}</div>${notFound.length>0?`<div class="p-2 bg-red-50 rounded border border-red-200"><strong class="text-red-700">Não encontrados:</strong> ${notFound.join(', ')}</div>`:''}`;
@@ -3455,7 +3499,7 @@ async function confirmCancelProduction() {
       if (p) {
         const storageUnit = p.storage_unit || p.unit;
         const returnQty = convertQuantity(it.qty, it.unit, storageUnit, getCustomConversions(p));
-        await dbUpdate({...p, quantity: p.quantity + returnQty});
+        await dbUpdate({...p, quantity: p.quantity + returnQty}, {silent:true});
       }
       done++;
     }
@@ -3463,13 +3507,13 @@ async function confirmCancelProduction() {
     const creditedQty = parseFloat(m.production_real_yield || m.movement_quantity) || 0;
     const target = getProducts().find(p => p.product_name === m.movement_product) || getFinishedProducts().find(p => p.product_name === m.movement_product);
     if (target) {
-      await dbUpdate({...target, quantity: Math.max(0, target.quantity - creditedQty)});
+      await dbUpdate({...target, quantity: Math.max(0, target.quantity - creditedQty)}, {silent:true});
     }
     // Marca a movimentação original como cancelada (mantém no histórico, só sinaliza)
-    await dbUpdate({...m, movement_note: `🚫 CANCELADA — ${m.movement_note||''}`});
+    await dbUpdate({...m, movement_note: `🚫 CANCELADA — ${m.movement_note||''}`}, {silent:true});
     // Cria um registro do estorno, pra ficar rastreável no histórico
     const itemsNote = items.map(it=>`${fmtQty(it.qty,it.unit)} ${it.unit} ${it.name}`).join(', ') || 'nenhum insumo detalhado';
-    await dbCreate({ ...blankRecord(), type:'movement', movement_type:'estorno_producao', movement_product:m.movement_product, movement_quantity:creditedQty, movement_date:new Date().toISOString(), movement_note:`Cancelamento de produção: removido ${fmtQty(creditedQty,'')} de ${m.movement_product}. Devolvido ao estoque: ${itemsNote}`, batch_items:JSON.stringify(items), production_recipe_id:m.production_recipe_id||'' });
+    await dbCreate({ ...blankRecord(), type:'movement', movement_type:'estorno_producao', movement_product:m.movement_product, movement_quantity:creditedQty, movement_date:new Date().toISOString(), movement_note:`Cancelamento de produção: removido ${fmtQty(creditedQty,'')} de ${m.movement_product}. Devolvido ao estoque: ${itemsNote}`, batch_items:JSON.stringify(items), production_recipe_id:m.production_recipe_id||'' }, {silent:true});
     hideLoadingProgress();
     renderAll();
     showToast('Produção cancelada — insumos devolvidos ao estoque!');
@@ -3788,7 +3832,7 @@ async function confirmUndoMovement() {
         const storageUnit = p.storage_unit || p.unit;
         const qtyInStorageUnit = it.unit ? convertQuantity(it.qty, it.unit, storageUnit, getCustomConversions(p)) : it.qty;
         const newQty = preview.verb === 'add' ? p.quantity + qtyInStorageUnit : Math.max(0, p.quantity - qtyInStorageUnit);
-        await dbUpdate({...p, quantity: newQty});
+        await dbUpdate({...p, quantity: newQty}, {silent:true});
       } else {
         // Não silencia mais: se o insumo não existe mais (renomeado/excluído), avisa no final em
         // vez de simplesmente não devolver a quantidade sem ninguém perceber.
@@ -3798,10 +3842,10 @@ async function confirmUndoMovement() {
     }
     updateLoadingProgress('Marcando como desfeita...');
     // Marca a movimentação original como desfeita (mantém no histórico, só sinaliza)
-    await dbUpdate({...m, movement_note: `↩️ DESFEITA — ${m.movement_note||''}`});
+    await dbUpdate({...m, movement_note: `↩️ DESFEITA — ${m.movement_note||''}`}, {silent:true});
     // Cria um registro de estorno, pra ficar rastreável no histórico
     const itemsNote = preview.items.map(it=>`${fmtQty(it.qty,it.unit)} ${it.unit} ${it.name}`).join(', ') || 'sem detalhamento';
-    await dbCreate({ ...blankRecord(), type:'movement', movement_type:'estorno', movement_product:m.movement_product, movement_quantity:m.movement_quantity, movement_date:new Date().toISOString(), movement_note:`Desfeito: ${movementTypeLabel(m.movement_type)} de "${m.movement_product}". ${preview.note} ${itemsNote}${notFoundItems.length ? ` ⚠️ NÃO devolvido (insumo não encontrado): ${notFoundItems.join(', ')}` : ''}` });
+    await dbCreate({ ...blankRecord(), type:'movement', movement_type:'estorno', movement_product:m.movement_product, movement_quantity:m.movement_quantity, movement_date:new Date().toISOString(), movement_note:`Desfeito: ${movementTypeLabel(m.movement_type)} de "${m.movement_product}". ${preview.note} ${itemsNote}${notFoundItems.length ? ` ⚠️ NÃO devolvido (insumo não encontrado): ${notFoundItems.join(', ')}` : ''}` }, {silent:true});
     hideLoadingProgress();
     renderAll();
     if (notFoundItems.length) {
