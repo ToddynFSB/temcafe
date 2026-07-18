@@ -4993,15 +4993,32 @@ function openApplyStockToSaleModal(movementId) {
   const finished = getFinishedProducts();
   const vendaDireta = getRecipes().filter(r => r.recipe_type === 'Venda Direta');
   let batchItems = []; try { batchItems = JSON.parse(m.batch_items||'[]'); } catch(e){}
+  const controlledNames = [...finished.map(f=>f.product_name), ...vendaDireta.map(r=>r.recipe_name)];
   retroactiveStockMatched = batchItems
     .filter(it => !(it.value && it.value.startsWith('uncontrolled_')))
     .map(it => {
+      // 1) Match direto pelo id gravado na venda (o mais confiável — não depende do nome).
       if (it.value && it.value.startsWith('finished_')) {
-        const fp = finished.find(f => f.product_name === it.name);
-        return { name: it.name, qty: it.qty, match: fp ? fp.product_name : null, type: 'finished', fuzzy: false, snapshot: null };
+        const fp = finished.find(f => f.id === it.value.replace('finished_','')) || finished.find(f => f.product_name === it.name);
+        if (fp) return { name: it.name, qty: it.qty, match: fp.product_name, type: 'finished', fuzzy: false, snapshot: null };
       }
+      if (it.value && it.value.startsWith('recipe_')) {
+        const recipe = vendaDireta.find(r => r.id === it.value.replace('recipe_','')) || vendaDireta.find(r => r.recipe_name === it.name);
+        if (recipe) return { name: it.name, qty: it.qty, match: recipe.recipe_name, type: 'venda_direta', fuzzy: false, snapshot: (it.deductedIngredients && it.deductedIngredients.length) ? it.deductedIngredients : null };
+      }
+      // 2) Match exato por nome.
+      const fp = finished.find(f => f.product_name === it.name);
+      if (fp) return { name: it.name, qty: it.qty, match: fp.product_name, type: 'finished', fuzzy: false, snapshot: null };
       const recipe = vendaDireta.find(r => r.recipe_name === it.name);
-      return { name: it.name, qty: it.qty, match: recipe ? recipe.recipe_name : null, type: 'venda_direta', fuzzy: false, snapshot: (it.deductedIngredients && it.deductedIngredients.length) ? it.deductedIngredients : null };
+      if (recipe) return { name: it.name, qty: it.qty, match: recipe.recipe_name, type: 'venda_direta', fuzzy: false, snapshot: (it.deductedIngredients && it.deductedIngredients.length) ? it.deductedIngredients : null };
+      // 3) Match por aproximação (nomes vindos da planilha costumam ter sufixos tipo "(200ml)",
+      // travessões etc. que não batem exatamente com o nome da receita no sistema).
+      const fuzzy = findBestMatch(it.name, controlledNames);
+      if (fuzzy) {
+        const isFinished = finished.some(f => f.product_name === fuzzy.name);
+        return { name: it.name, qty: it.qty, match: fuzzy.name, type: isFinished ? 'finished' : 'venda_direta', fuzzy: true, snapshot: null };
+      }
+      return { name: it.name, qty: it.qty, match: null, type: null, fuzzy: false, snapshot: null };
     });
   document.getElementById('retroactive-stock-title').textContent = 'Descontar estoque desta venda';
   renderRetroactiveStockList();
@@ -5055,6 +5072,7 @@ async function confirmRetroactiveStockDeduction() {
         salesData.push({ value:`finished_${fp.id}`, name: fp.product_name, unit: fp.unit, type:'finished', qty: m.qty });
       } else {
         const recipe = vendaDireta.find(r => r.recipe_name === m.match);
+        if (!recipe) { done++; continue; } // receita não existe mais — pula em vez de quebrar tudo
         const deductedIngredients = [];
         if (m.snapshot) {
           // Já sabe exatamente quanto descontar de cada insumo (veio gravado na própria venda) —
@@ -5086,11 +5104,18 @@ async function confirmRetroactiveStockDeduction() {
     }
     let created = false;
     if (mode === 'movement') {
-      // A venda já existe no Histórico — só marca ela como conferida, não precisa de um
-      // registro novo (senão duplicaria a entrada na lista de vendas).
+      // A venda já existe no Histórico de Vendas — marca ela como conferida (pra não descontar de
+      // novo) E cria um registro separado da baixa de estoque, pra ficar rastreável no Histórico de
+      // Movimentações. Esse registro é do tipo 'saida_manual' com marca própria, então NÃO aparece
+      // de novo na lista de vendas (que só mostra type venda), evitando duplicar a venda.
       updateLoadingProgress('Marcando venda como conferida...');
       const original = allData.find(r => r.id === movementId);
       if (original) assertSaved(await dbUpdate({...original, movement_note: `${original.movement_note||''} 🔧[estoque aplicado ${new Date().toLocaleDateString('pt-BR')}]`}, {silent:true}), 'marcação da venda');
+      if (salesData.length > 0) {
+        const itemList = salesData.map(s=>`${fmtQty(s.qty,'')} ${s.name}`).join('; ');
+        const saleDate = original ? original.movement_date : new Date().toISOString();
+        assertSaved(await dbCreate({ ...blankRecord(), type:'movement', movement_type:'saida_manual', movement_product:itemList, movement_quantity:salesData.reduce((a,s)=>a+s.qty,0), movement_date: saleDate, movement_note:`🔧 Baixa de estoque aplicada a uma venda já registrada (sem mexer no faturamento): ${itemList}`, batch_items:JSON.stringify(salesData) }, {silent:true}), 'registro da baixa de estoque');
+      }
       created = salesData.length > 0;
     } else if (salesData.length > 0) {
       updateLoadingProgress('Salvando registro...');
