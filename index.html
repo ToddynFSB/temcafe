@@ -1113,6 +1113,23 @@ let consumptionCustomEndDate = null;
 // ============================================================
 // API — Google Sheets via Apps Script
 // ============================================================
+// Tenta de novo sozinho antes de desistir — "Failed to fetch" quase sempre é uma falha de rede
+// passageira (wifi engasgou, o Apps Script demorou um pouco mais que o normal pra responder), não
+// um erro de verdade no sistema. Tentar mais 2 vezes, com uma pausa curta entre elas, resolve a
+// maioria desses casos sem a pessoa nem perceber que algo deu errado.
+async function fetchWithRetry(url, maxRetries = 2) {
+  let lastError;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const res = await fetch(url);
+      return await res.json();
+    } catch (e) {
+      lastError = e;
+      if (attempt < maxRetries) await new Promise(r => setTimeout(r, 700 * (attempt + 1)));
+    }
+  }
+  throw new Error(`Sem conexão com o servidor depois de ${maxRetries + 1} tentativa(s) (${lastError.message}). Confira sua internet.`);
+}
 async function apiCall(action, data = {}) {
   if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === 'COLE_SUA_URL_AQUI') {
     throw new Error('URL do Apps Script não configurada');
@@ -1120,8 +1137,7 @@ async function apiCall(action, data = {}) {
   const params = new URLSearchParams({ action });
   if (data.data) params.set('data', JSON.stringify(data.data));
   if (data.id) params.set('id', data.id);
-  const res = await fetch(`${APPS_SCRIPT_URL}?${params.toString()}`);
-  const json = await res.json();
+  const json = await fetchWithRetry(`${APPS_SCRIPT_URL}?${params.toString()}`);
   if (json.error) throw new Error(json.error);
   return json;
 }
@@ -1201,6 +1217,37 @@ async function dbDelete(data, opts) {
     return { isOk: true };
   }
   return { isOk: false };
+}
+
+// Manda VÁRIAS criações/atualizações do Estoque numa viagem só, em vez de uma por vez. Cada
+// operação: {op:'create', data:{...}} ou {op:'update', data:{...}}. Ou tudo é gravado, ou nada é
+// — não existe mais "descontou o insumo mas não criou o registro", porque os dois vão juntos.
+async function dbBatchWrite(operations, opts) {
+  if (operations.length === 0) return { isOk: true, results: [] };
+  let result;
+  try {
+    result = await apiCall('batchWrite', { data: operations });
+  } catch (e) {
+    console.error('dbBatchWrite falhou:', e);
+    return { isOk: false, error: e.message };
+  }
+  if (result.ok) {
+    operations.forEach((op, i) => {
+      const r = result.results && result.results[i];
+      if (!r || !r.ok) return;
+      if (op.op === 'create') {
+        op.data.id = r.id;
+        allData.push(op.data);
+      } else if (op.op === 'update') {
+        const idx = allData.findIndex(x => x.id === op.data.id);
+        if (idx >= 0) allData[idx] = op.data;
+      }
+    });
+    const failed = (result.results || []).filter(r => !r.ok);
+    if (!opts || !opts.silent) { try { renderAll(); } catch (e) { console.error('Erro ao renderizar após salvar:', e); } }
+    return { isOk: failed.length === 0, results: result.results, failedCount: failed.length };
+  }
+  return { isOk: false, error: result.error };
 }
 
 async function syncData() {
@@ -2929,9 +2976,9 @@ async function confirmSales() {
   }
   showLoadingProgress('Registrando vendas...');
   salesSubmitInProgress = true;
+  const notesParts = [];
+  const stockShortfalls = []; // avisa no final, nunca trava a venda no meio
   try {
-    const notesParts = [];
-    const stockShortfalls = []; // avisa no final, nunca trava a venda no meio
     let done = 0;
     for (const s of salesData) {
       updateLoadingProgress(`Processando ${done+1}/${salesData.length}: ${s.name}`);
@@ -2978,7 +3025,14 @@ async function confirmSales() {
     hideLoadingProgress();
     salesSubmitInProgress = false;
     console.error('Erro ao registrar vendas:', err);
-    showResultModal('Erro ao registrar vendas', err.message, true);
+    const lines = [`Erro: ${err.message}`];
+    if (notesParts.length > 0) {
+      lines.push(`✓ Isto JÁ FOI descontado do estoque antes da falha:\n${notesParts.join('\n')}`);
+      lines.push('Não repita esses itens ao tentar de novo.');
+    } else {
+      lines.push('Nada chegou a ser descontado ainda — pode tentar de novo com segurança.');
+    }
+    showResultModal('Erro ao registrar vendas', lines, true);
   }
 }
 let salesHistoryFilter = 'today';
@@ -3365,20 +3419,31 @@ async function processBulkSales(priceHints, prebuiltSalesData) {
     }
   }
   if (salesData.length === 0) { showToast('Nenhum produto encontrado', true); return; }
-  showLoadingProgress('Processando vendas...');
+  showLoadingProgress('Preparando venda...');
   salesSubmitInProgress = true;
+  const notesParts = [];
+  const stockShortfalls = []; // avisa no final, nunca trava a venda no meio
+  const operations = []; // tudo que precisa ser gravado, montado na memória primeiro
+  // Quantidade "corrente" de cada insumo NESTA venda — necessário porque, como tudo é calculado
+  // antes de mandar pro servidor (nenhuma gravação no meio do loop), o mesmo insumo usado em dois
+  // itens diferentes da mesma venda (ex: leite no cappuccino E no chocolate quente) precisa somar
+  // os dois descontos, não recalcular do zero pra cada um.
+  const qtySnapshot = {};
+  function currentQty(product) {
+    if (!(product.id in qtySnapshot)) qtySnapshot[product.id] = product.quantity;
+    return qtySnapshot[product.id];
+  }
   try {
-    const notesParts = [];
-    const stockShortfalls = []; // avisa no final, nunca trava a venda no meio
-    let done = 0;
     for (const s of salesData) {
-      updateLoadingProgress(`Processando ${done+1}/${salesData.length}: ${s.name}`);
       if (s.value.startsWith('finished_')) {
         const id = s.value.replace('finished_','');
         const fp = allData.find(r => r.id === id);
         if (!fp) { hideLoadingProgress(); salesSubmitInProgress=false; showToast(`Produto ${s.name} não encontrado`, true); return; }
-        if (fp.quantity < s.qty) stockShortfalls.push(`${fp.product_name}: faltou ${fmtQty(s.qty-fp.quantity,fp.unit)} ${fp.unit} (tinha ${fmtQty(fp.quantity,fp.unit)}, vendeu ${fmtQty(s.qty,fp.unit)})`);
-        assertSaved(await dbUpdate({...fp, quantity: Math.max(0, fp.quantity - s.qty)}, {silent:true}), s.name);
+        const before = currentQty(fp);
+        if (before < s.qty) stockShortfalls.push(`${fp.product_name}: faltou ${fmtQty(s.qty-before,fp.unit)} ${fp.unit} (tinha ${fmtQty(before,fp.unit)}, vendeu ${fmtQty(s.qty,fp.unit)})`);
+        const after = Math.max(0, before - s.qty);
+        qtySnapshot[fp.id] = after;
+        operations.push({ op:'update', data: {...fp, quantity: after} });
         notesParts.push(`${s.qty} ${s.name}`);
       } else if (s.value.startsWith('recipe_')) {
         const id = s.value.replace('recipe_','');
@@ -3390,11 +3455,14 @@ async function processBulkSales(priceHints, prebuiltSalesData) {
           if (!p) { hideLoadingProgress(); salesSubmitInProgress=false; showToast(`Insumo ${ing.name} não encontrado`, true); return; }
           const storageUnit = p.storage_unit||p.unit;
           const deduct = convertQuantity(ing.qty*s.qty, ing.unit, storageUnit, getCustomConversions(p));
+          const before = currentQty(p);
           // Se o insumo tiver menos do que precisava, desconta até zero mesmo assim (a venda já
           // aconteceu de verdade — se estava zerado é sinal de erro de entrada no estoque, não de
           // venda errada) e guarda um aviso pra mostrar no final, sem travar a operação no meio.
-          if (p.quantity < deduct) stockShortfalls.push(`${p.product_name}: faltou ${fmtQty(deduct-p.quantity,storageUnit)} ${storageUnit} (tinha ${fmtQty(p.quantity,storageUnit)}, precisava ${fmtQty(deduct,storageUnit)} pra ${s.qty}× ${s.name})`);
-          assertSaved(await dbUpdate({...p, quantity: Math.max(0, p.quantity - deduct)}, {silent:true}), ing.name);
+          if (before < deduct) stockShortfalls.push(`${p.product_name}: faltou ${fmtQty(deduct-before,storageUnit)} ${storageUnit} (tinha ${fmtQty(before,storageUnit)}, precisava ${fmtQty(deduct,storageUnit)} pra ${s.qty}× ${s.name})`);
+          const after = Math.max(0, before - deduct);
+          qtySnapshot[p.id] = after;
+          operations.push({ op:'update', data: {...p, quantity: after} });
           // Guarda o valor EXATO descontado (já na unidade de estoque) direto na venda, pra "desfazer"
           // no futuro devolver certinho mesmo que a receita seja editada depois.
           deductedIngredients.push({ name: ing.name, qty: deduct, unit: storageUnit });
@@ -3405,10 +3473,17 @@ async function processBulkSales(priceHints, prebuiltSalesData) {
         // Item não controlado: não desconta nenhum estoque, só entra no registro da venda e no faturamento.
         notesParts.push(`${s.qty} ${s.name} (não controlado)`);
       }
-      done++;
     }
-    updateLoadingProgress('Salvando registro da venda...');
-    assertSaved(await dbCreate({ ...blankRecord(), type:'movement', movement_type:'venda', movement_product:notesParts.join('; '), movement_quantity:salesData.reduce((a,s)=>a+s.qty,0), movement_date:saleDate.toISOString(), movement_note:`Venda em lote: ${notesParts.join('; ')}`, batch_items:JSON.stringify(salesData) }, {silent:true}), 'registro da venda');
+
+    // O registro da venda entra NO MESMO PACOTE dos descontos — ou os dois são gravados juntos,
+    // ou nenhum é. É isso que garante que o estoque nunca muda sem deixar rastro no Histórico.
+    operations.push({ op:'create', data: { ...blankRecord(), type:'movement', movement_type:'venda', movement_product:notesParts.join('; '), movement_quantity:salesData.reduce((a,s)=>a+s.qty,0), movement_date:saleDate.toISOString(), movement_note:`Venda em lote: ${notesParts.join('; ')}`, batch_items:JSON.stringify(salesData) } });
+
+    updateLoadingProgress(`Salvando ${operations.length} mudança(s) numa viagem só...`);
+    const batchResult = await dbBatchWrite(operations, {silent:true});
+    if (!batchResult.isOk) {
+      throw new Error(batchResult.error || `${batchResult.failedCount||'algumas'} operação(ões) falharam ao gravar em lote`);
+    }
     // Se veio da importação de planilha com "Valor Total", aproveita e já registra o valor de venda
     // (pra alimentar o faturamento e a margem no CMV), sem precisar digitar preço manualmente.
     if (priceHints && priceHints.length && financeUnlocked) {
@@ -3442,7 +3517,10 @@ async function processBulkSales(priceHints, prebuiltSalesData) {
     hideLoadingProgress();
     salesSubmitInProgress = false;
     console.error('Erro ao processar vendas:', err);
-    showResultModal('Erro ao processar vendas', err.message, true);
+    showResultModal('Erro ao processar vendas', [
+      `Erro: ${err.message}`,
+      'Como agora tudo é enviado numa única viagem, o mais provável é que NADA tenha sido salvo ainda — confira o estoque do(s) insumo(s) envolvidos antes de tentar de novo. Se não tiver mudado nada, pode tentar novamente com segurança, sem risco de duplicar.'
+    ], true);
   }
 }
 
@@ -4641,10 +4719,29 @@ async function financeApiCall(action, data = {}) {
   const params = new URLSearchParams({ action, sheet: 'Financeiro', password: financePassword });
   if (data.data) params.set('data', JSON.stringify(data.data));
   if (data.id) params.set('id', data.id);
-  const res = await fetch(`${APPS_SCRIPT_URL}?${params.toString()}`);
-  const json = await res.json();
+  const json = await fetchWithRetry(`${APPS_SCRIPT_URL}?${params.toString()}`);
   if (json.error) throw new Error(json.error);
   return json;
+}
+// Mesma ideia do dbBatchWrite, só que pra aba Financeiro — usada pra salvar o faturamento de
+// vários itens vendidos numa venda em lote de uma vez só, em vez de uma viagem por item.
+async function financeBatchWrite(operations) {
+  if (operations.length === 0) return { isOk: true, results: [] };
+  const json = await financeApiCall('batchWrite', { data: operations });
+  if (!json.ok) return { isOk: false, error: json.error };
+  operations.forEach((op, i) => {
+    const r = json.results && json.results[i];
+    if (!r || !r.ok) return;
+    if (op.op === 'create') {
+      op.data.id = r.id;
+      financeData.push(op.data);
+    } else if (op.op === 'update') {
+      const idx = financeData.findIndex(x => x.id === op.data.id);
+      if (idx >= 0) financeData[idx] = op.data;
+    }
+  });
+  const failed = (json.results || []).filter(r => !r.ok);
+  return { isOk: failed.length === 0, results: json.results };
 }
 // Vínculos memorizados entre nome-da-planilha e nome-no-sistema (aprendidos a partir de correções).
 function getSaleAlias(spreadsheetName) {
@@ -4673,6 +4770,8 @@ function getFinanceSalePrice(productName) {
   return rec ? { price: rec.sale_price, totalQty: rec.total_qty_sold, totalRevenue: rec.total_revenue, updatedAt: rec.sale_price_updated_at } : null;
 }
 async function saveSalePrices(items) {
+  const operations = [];
+  const nowIso = new Date().toISOString();
   for (const it of items) {
     if (!it.totalValue || it.totalValue <= 0 || !it.qty) continue;
     const existing = financeData.find(r => r.type==='sale_price' && r.product_name === it.systemName);
@@ -4680,13 +4779,15 @@ async function saveSalePrices(items) {
     const newTotalRevenue = (existing ? (existing.total_revenue||0) : 0) + it.totalValue;
     const avgPrice = newTotalQty > 0 ? newTotalRevenue / newTotalQty : 0;
     if (existing) {
-      await financeApiCall('update', { data: { ...existing, total_qty_sold:newTotalQty, total_revenue:newTotalRevenue, sale_price:avgPrice, sale_price_updated_at:new Date().toISOString() } });
-      Object.assign(existing, { total_qty_sold:newTotalQty, total_revenue:newTotalRevenue, sale_price:avgPrice, sale_price_updated_at:new Date().toISOString() });
+      const updated = { ...existing, total_qty_sold:newTotalQty, total_revenue:newTotalRevenue, sale_price:avgPrice, sale_price_updated_at:nowIso };
+      operations.push({ op:'update', data: updated });
+      Object.assign(existing, updated);
     } else {
-      const r = await financeApiCall('create', { data: { type:'sale_price', product_name:it.systemName, total_qty_sold:newTotalQty, total_revenue:newTotalRevenue, sale_price:avgPrice, sale_price_updated_at:new Date().toISOString() } });
-      financeData.push({ id:r.id, type:'sale_price', product_name:it.systemName, total_qty_sold:newTotalQty, total_revenue:newTotalRevenue, sale_price:avgPrice, sale_price_updated_at:new Date().toISOString() });
+      const data = { type:'sale_price', product_name:it.systemName, total_qty_sold:newTotalQty, total_revenue:newTotalRevenue, sale_price:avgPrice, sale_price_updated_at:nowIso };
+      operations.push({ op:'create', data });
     }
   }
+  if (operations.length > 0) await financeBatchWrite(operations);
 }
 // Registra o faturamento do dia, item a item (inclusive itens não controlados), pra alimentar o
 // gráfico e o detalhamento da aba Faturamento. Reaproveita as colunas já existentes da aba
@@ -4697,13 +4798,10 @@ async function saveSalePrices(items) {
 function getSaleRevenueEntries() { return financeData.filter(r => r.type === 'sale_revenue'); }
 async function saveSaleRevenue(items, saleDate) {
   const dateStr = localDateStr(saleDate);
-  for (const it of items) {
-    if (!it.totalValue || it.totalValue <= 0 || !it.qty) continue;
-    const unitPrice = it.totalValue / it.qty;
-    const payload = { type:'sale_revenue', product_name:it.systemName, cost_unit:it.unit||'', sale_price:unitPrice, total_qty_sold:it.qty, total_revenue:it.totalValue, sale_price_updated_at:dateStr };
-    const r = await financeApiCall('create', { data: payload });
-    financeData.push({ id:r.id, ...payload });
-  }
+  const operations = items
+    .filter(it => it.totalValue && it.totalValue > 0 && it.qty)
+    .map(it => ({ op:'create', data: { type:'sale_revenue', product_name:it.systemName, cost_unit:it.unit||'', sale_price: it.totalValue/it.qty, total_qty_sold:it.qty, total_revenue:it.totalValue, sale_price_updated_at:dateStr } }));
+  if (operations.length > 0) await financeBatchWrite(operations);
 }
 // ============================================================
 // ABA FATURAMENTO — gráfico por dia + detalhe do dia selecionado
