@@ -637,14 +637,10 @@
         <div id="bulk-sales-feedback" class="hidden p-4 rounded-lg border"><p class="text-xs font-semibold mb-2" id="bulk-feedback-title"></p><div id="bulk-feedback-content" class="space-y-1 text-xs"></div></div>
       </div>
 
-      <div id="sales-stock-gap-wrap" class="hidden mb-5">
-        <h3 class="font-semibold mb-2 text-stone-800 text-sm flex items-center gap-1.5">⚠️ Dias faturados sem baixa no estoque</h3>
-        <div id="sales-stock-gap-list" class="space-y-2"></div>
-      </div>
-
       <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
         <h3 class="font-semibold text-stone-800 text-sm">Histórico de Vendas</h3>
-        <div class="flex gap-1.5 flex-wrap">
+        <div class="flex gap-1.5 flex-wrap items-center">
+          <button onclick="openPickDayForStockModal()" class="px-2.5 py-1 rounded-lg text-xs font-medium bg-amber-100 text-amber-800 hover:bg-amber-200 flex items-center gap-1">🔧 Descontar Estoque</button>
           <button class="sales-history-filter px-2.5 py-1 rounded-lg text-xs font-medium bg-stone-800 text-white" data-filter="today">Hoje</button>
           <button class="sales-history-filter px-2.5 py-1 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-filter="7days">7 dias</button>
           <button class="sales-history-filter px-2.5 py-1 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-filter="30days">30 dias</button>
@@ -860,6 +856,19 @@
   </div>
 
   <!-- MODAL: Baixa retroativa de estoque (venda que já está no faturamento mas nunca descontou o estoque) -->
+  <!-- MODAL: Escolher o dia pra descontar estoque -->
+  <div id="pick-day-stock-modal" class="hidden fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl p-6 w-full max-w-xs shadow-2xl">
+      <h3 class="font-bold text-stone-800 mb-1">Descontar Estoque</h3>
+      <p class="text-sm text-stone-500 mb-4">Escolha o dia da venda que você quer descontar no estoque (o faturamento desse dia já existe e não muda em nada).</p>
+      <input id="pick-day-stock-date" type="date" class="w-full input-field text-sm mb-4">
+      <div class="flex gap-2">
+        <button onclick="confirmPickDayForStock()" class="flex-1 px-4 py-2.5 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700">Ver Itens</button>
+        <button onclick="document.getElementById('pick-day-stock-modal').classList.add('hidden')" class="flex-1 btn-ghost px-4 py-2.5 rounded-lg text-sm font-medium">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
   <div id="retroactive-stock-modal" class="hidden fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
     <div class="bg-white rounded-2xl p-6 w-full max-w-lg shadow-2xl max-h-[85vh] overflow-y-auto">
       <h3 class="font-bold mb-1 text-stone-800 text-lg">Descontar estoque desses itens</h3>
@@ -2943,7 +2952,6 @@ async function confirmSales() {
 }
 let salesHistoryFilter = 'today';
 function renderSalesToday() {
-  renderSalesStockGapList();
   document.querySelectorAll('.sales-history-filter').forEach(b => { b.className = `sales-history-filter px-2.5 py-1 rounded-lg text-xs font-medium ${b.dataset.filter===salesHistoryFilter?'bg-stone-800 text-white':'bg-stone-100 text-stone-600 hover:bg-stone-200'}`; });
 
   let sales = getMovements().filter(m=>m.movement_type==='venda').sort((a,b)=>new Date(b.movement_date)-new Date(a.movement_date));
@@ -4896,6 +4904,18 @@ function selectFaturamentoDay(dateKey) {
 // ============================================================
 let retroactiveStockDay = null;
 let retroactiveStockMatched = [];
+// Botão simples "🔧 Descontar Estoque" na aba Vendas: escolhe o dia, e cai na mesma tela de
+// conferência de itens já usada no Faturamento — mesmo motor, só um jeito mais direto de chegar nela.
+function openPickDayForStockModal() {
+  document.getElementById('pick-day-stock-date').value = '';
+  document.getElementById('pick-day-stock-modal').classList.remove('hidden');
+}
+function confirmPickDayForStock() {
+  const val = document.getElementById('pick-day-stock-date').value;
+  if (!val) { showToast('Escolha uma data', true); return; }
+  document.getElementById('pick-day-stock-modal').classList.add('hidden');
+  openRetroactiveStockModal(val);
+}
 function openRetroactiveStockModal(dayKey) {
   retroactiveStockDay = dayKey;
   const items = getSaleRevenueEntries().filter(e => e.sale_price_updated_at === dayKey);
@@ -4920,7 +4940,9 @@ function openRetroactiveStockModal(dayKey) {
 
   const matchedCount = retroactiveStockMatched.filter(m=>m.match).length;
   const skipCount = retroactiveStockMatched.length - matchedCount;
-  document.getElementById('retroactive-stock-list').innerHTML = `
+  document.getElementById('retroactive-stock-list').innerHTML = retroactiveStockMatched.length === 0
+    ? '<p class="text-sm text-stone-400 text-center py-6">Nenhuma venda com valor registrado nesse dia no faturamento.</p>'
+    : `
     <div class="flex gap-2 text-xs mb-1 flex-wrap">
       <span class="px-2 py-1 rounded-full bg-emerald-100 text-emerald-800 font-medium">${matchedCount} serão descontados</span>
       ${skipCount>0?`<span class="px-2 py-1 rounded-full bg-stone-100 text-stone-600 font-medium">${skipCount} ignorado(s) (sem produto/receita — provavelmente não controlado)</span>`:''}
@@ -5002,32 +5024,6 @@ async function confirmRetroactiveStockDeduction() {
 }
 function getRetroactiveStockMovement(dayKey) {
   return getMovements().find(m => m.movement_note && m.movement_note.startsWith(`🔧 Baixa retroativa (${dayKey})`) && !isMovementUndone(m)) || null;
-}
-// Um dia "tem baixa de estoque" se existir QUALQUER movimentação de venda (normal ou baixa
-// retroativa) registrada nesse dia — não só a marca de baixa retroativa. Assim, dias vendidos
-// depois do conserto (que já descontam certinho na hora) não aparecem como pendentes aqui.
-function dayHasStockMovement(dayKey) {
-  return getMovements().some(m => m.movement_type === 'venda' && !isMovementUndone(m) && localDateStr(new Date(m.movement_date)) === dayKey);
-}
-function getDaysNeedingStockDeduction() {
-  const days = [...new Set(getSaleRevenueEntries().map(e => e.sale_price_updated_at).filter(Boolean))];
-  return days.filter(d => !dayHasStockMovement(d)).sort().reverse();
-}
-function renderSalesStockGapList() {
-  const el = document.getElementById('sales-stock-gap-list'); if (!el) return;
-  const wrap = document.getElementById('sales-stock-gap-wrap');
-  const days = financeUnlocked ? getDaysNeedingStockDeduction() : [];
-  if (days.length === 0) { wrap.classList.add('hidden'); el.innerHTML = ''; return; }
-  wrap.classList.remove('hidden');
-  el.innerHTML = days.map(d => {
-    const items = getSaleRevenueEntries().filter(e => e.sale_price_updated_at === d);
-    const total = items.reduce((s,it)=>s+(it.total_revenue||0),0);
-    const label = weekdayLabel(parseLocalDate(d)) + ', ' + parseLocalDate(d).toLocaleDateString('pt-BR');
-    return `<div class="p-3 bg-white rounded-lg border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-      <div><p class="text-sm font-medium text-stone-800">${label}</p><p class="text-xs text-stone-500">${items.length} item(ns) faturado(s) · ${fmtCurrency(total)} · sem baixa no estoque</p></div>
-      <button onclick="openRetroactiveStockModal('${d}')" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-600 text-white hover:bg-amber-700 whitespace-nowrap">🔧 Descontar estoque</button>
-    </div>`;
-  }).join('');
 }
 function renderFaturamentoDayDetail() {
   const el = document.getElementById('fat-day-detail'); if (!el) return;
