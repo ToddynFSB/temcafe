@@ -591,7 +591,12 @@
         <h2 class="text-lg font-bold text-stone-800 flex items-center gap-2"><i data-lucide="tags" class="w-5 h-5 text-emerald-600"></i>Preço Médio de Insumos</h2>
         <button onclick="lockFinanceiro()" class="text-xs text-stone-400 hover:text-stone-600 flex items-center gap-1"><i data-lucide="lock" class="w-3.5 h-3.5"></i>Bloquear</button>
       </div>
-      <p class="text-xs text-stone-400 mb-4">Todos os insumos com o preço médio atual. Lance ou ajuste o valor direto aqui, sem precisar esperar uma entrada de estoque — continua alimentando o CMV e o DRE normalmente, e sincroniza com "Custos Pendentes".</p>
+      <p class="text-xs text-stone-400 mb-4">Insumos comprados: lance ou ajuste o preço médio direto aqui, sem esperar uma entrada de estoque. Insumos produzidos internamente: o custo é calculado automaticamente pela receita, então ficam numa categoria separada, só pra consulta.</p>
+
+      <div class="flex gap-2 mb-4">
+        <button id="precos-scope-comprados-btn" class="precos-scope-btn px-4 py-2 rounded-lg text-sm font-medium bg-emerald-700 text-white" data-scope="comprados"><i data-lucide="shopping-cart" class="w-3.5 h-3.5 inline -mt-0.5 mr-1"></i>Comprados</button>
+        <button id="precos-scope-produzidos-btn" class="precos-scope-btn px-4 py-2 rounded-lg text-sm font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-scope="produzidos"><i data-lucide="cake" class="w-3.5 h-3.5 inline -mt-0.5 mr-1"></i>Produzidos</button>
+      </div>
 
       <div class="grid grid-cols-3 gap-2 mb-4" id="precos-stats"></div>
 
@@ -4688,6 +4693,7 @@ let currentArea = 'estoque'; // 'estoque' | 'financeiro'
 let financePrecosSearch = '';
 let financePrecosFilter = 'todos';
 let financePrecosSort = 'nome';
+let financePrecosScope = 'comprados'; // 'comprados' | 'produzidos'
 let financePrecosRows = []; // cache da última renderização, pra resolver clique de "salvar" por índice
 
 // ============================================================
@@ -5554,11 +5560,37 @@ function renderFinancePrecos() {
   if (searchEl) financePrecosSearch = searchEl.value.toLowerCase();
   if (filterEl) financePrecosFilter = filterEl.value;
   if (sortEl) financePrecosSort = sortEl.value;
-
-  let rows = getProducts().map(p => {
-    const rec = getFinanceCostPrice(p.product_name);
-    return { name: p.product_name, unit: p.storage_unit || p.unit || 'un', price: rec ? rec.price : null, updatedAt: rec ? rec.updatedAt : null };
+  document.querySelectorAll('.precos-scope-btn').forEach(b => {
+    const active = b.dataset.scope === financePrecosScope;
+    b.className = `precos-scope-btn px-4 py-2 rounded-lg text-sm font-medium ${active ? 'bg-emerald-700 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`;
   });
+
+  const isProduzidos = financePrecosScope === 'produzidos';
+  const baseProducts = getProducts().filter(p => isProduzidos ? !!p.linked_recipe_id : !p.linked_recipe_id);
+
+  let rows;
+  if (isProduzidos) {
+    // Produzidos: preço não é lançado manualmente — é o custo calculado pela receita vinculada
+    // (mesma conta de computeRecipeCost/getProductCMV usada no CMV), pra nunca divergir.
+    rows = baseProducts.map(p => {
+      const recipe = getRecipes().find(r => r.id === p.linked_recipe_id);
+      const cost = recipe ? computeRecipeCost(recipe) : null;
+      const hasPrice = !!(cost && cost.hasAllCosts);
+      return {
+        name: p.product_name,
+        unit: p.storage_unit || p.unit || 'un',
+        price: hasPrice ? cost.costPerUnit : null,
+        updatedAt: null,
+        recipeName: recipe ? recipe.recipe_name : null,
+        missing: cost ? cost.missing : [],
+      };
+    });
+  } else {
+    rows = baseProducts.map(p => {
+      const rec = getFinanceCostPrice(p.product_name);
+      return { name: p.product_name, unit: p.storage_unit || p.unit || 'un', price: rec ? rec.price : null, updatedAt: rec ? rec.updatedAt : null };
+    });
+  }
 
   const statsEl = document.getElementById('precos-stats');
   if (statsEl) {
@@ -5566,9 +5598,9 @@ function renderFinancePrecos() {
     const comPreco = rows.filter(r => r.price !== null).length;
     const semPreco = total - comPreco;
     statsEl.innerHTML = `
-      <div class="stat-card-glow p-3.5"><p class="text-[10px] font-bold text-emerald-700 uppercase tracking-wide mb-1">Insumos</p><p class="text-xl font-bold text-stone-800">${total}</p></div>
-      <div class="stat-card-glow p-3.5"><p class="text-[10px] font-bold text-emerald-700 uppercase tracking-wide mb-1">Com preço</p><p class="text-xl font-bold text-emerald-700">${comPreco}</p></div>
-      <div class="stat-card-glow p-3.5"><p class="text-[10px] font-bold text-emerald-700 uppercase tracking-wide mb-1">Sem preço</p><p class="text-xl font-bold ${semPreco>0?'text-amber-600':'text-stone-400'}">${semPreco}</p></div>
+      <div class="stat-card-glow p-3.5"><p class="text-[10px] font-bold text-emerald-700 uppercase tracking-wide mb-1">${isProduzidos ? 'Produzidos' : 'Insumos'}</p><p class="text-xl font-bold text-stone-800">${total}</p></div>
+      <div class="stat-card-glow p-3.5"><p class="text-[10px] font-bold text-emerald-700 uppercase tracking-wide mb-1">${isProduzidos ? 'Custo calculado' : 'Com preço'}</p><p class="text-xl font-bold text-emerald-700">${comPreco}</p></div>
+      <div class="stat-card-glow p-3.5"><p class="text-[10px] font-bold text-emerald-700 uppercase tracking-wide mb-1">${isProduzidos ? 'Receita incompleta' : 'Sem preço'}</p><p class="text-xl font-bold ${semPreco>0?'text-amber-600':'text-stone-400'}">${semPreco}</p></div>
     `;
   }
 
@@ -5589,11 +5621,34 @@ function renderFinancePrecos() {
   if (!el) return;
   if (rows.length === 0) {
     el.innerHTML = '';
-    emptyEl.textContent = (financePrecosSearch || financePrecosFilter !== 'todos') ? 'Nada encontrado com esses filtros' : 'Nenhum insumo cadastrado ainda';
+    emptyEl.textContent = (financePrecosSearch || financePrecosFilter !== 'todos') ? 'Nada encontrado com esses filtros' : (isProduzidos ? 'Nenhum insumo produzido cadastrado ainda (vincule uma receita em Insumos)' : 'Nenhum insumo comprado cadastrado ainda');
     emptyEl.classList.remove('hidden');
     return;
   }
   emptyEl.classList.add('hidden');
+
+  if (isProduzidos) {
+    el.innerHTML = rows.map(r => {
+      const hasPrice = r.price !== null;
+      const sub = hasPrice
+        ? `calculado pela receita "${r.recipeName}"`
+        : (r.recipeName ? `receita "${r.recipeName}" incompleta — falta preço de: ${r.missing.length ? r.missing.join(', ') : 'insumo(s) da receita'}` : 'sem receita vinculada');
+      return `<div class="price-row bg-white rounded-xl p-3 border border-stone-100 flex items-center gap-3 flex-wrap">
+        <span class="price-pulse-dot ${hasPrice?'has-price':''} w-2 h-2 rounded-full flex-shrink-0 ${hasPrice?'bg-emerald-500':'bg-amber-400'}"></span>
+        <div class="flex-1 min-w-[140px]">
+          <p class="text-sm font-semibold text-stone-800">${r.name}</p>
+          <p class="text-[11px] text-stone-400">${sub}</p>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <span class="text-sm font-bold price-mono ${hasPrice?'text-stone-800':'text-stone-300'}">${hasPrice ? fmtCurrency(r.price) : '—'}</span>
+          <span class="text-[11px] text-stone-400 w-9">/${r.unit}</span>
+        </div>
+      </div>`;
+    }).join('');
+    lucide.createIcons();
+    return;
+  }
+
   el.innerHTML = rows.map((r, idx) => {
     const hasPrice = r.price !== null;
     const updatedLabel = r.updatedAt ? `atualizado em ${new Date(r.updatedAt).toLocaleDateString('pt-BR')}` : 'sem histórico de preço';
@@ -5615,6 +5670,11 @@ function renderFinancePrecos() {
   }).join('');
   lucide.createIcons();
 }
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.precos-scope-btn'); if (!btn) return;
+  financePrecosScope = btn.dataset.scope;
+  renderFinancePrecos();
+});
 document.addEventListener('input', (e) => {
   if (!e.target.classList || !e.target.classList.contains('price-input-field')) return;
   e.target.classList.add('price-dirty');
