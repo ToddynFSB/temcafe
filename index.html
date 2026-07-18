@@ -636,7 +636,15 @@
 
         <div id="bulk-sales-feedback" class="hidden p-4 rounded-lg border"><p class="text-xs font-semibold mb-2" id="bulk-feedback-title"></p><div id="bulk-feedback-content" class="space-y-1 text-xs"></div></div>
       </div>
-      <h3 class="font-semibold mb-3 text-stone-800 text-sm">Vendas Registradas Hoje</h3>
+      <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <h3 class="font-semibold text-stone-800 text-sm">Histórico de Vendas</h3>
+        <div class="flex gap-1.5 flex-wrap">
+          <button class="sales-history-filter px-2.5 py-1 rounded-lg text-xs font-medium bg-stone-800 text-white" data-filter="today">Hoje</button>
+          <button class="sales-history-filter px-2.5 py-1 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-filter="7days">7 dias</button>
+          <button class="sales-history-filter px-2.5 py-1 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-filter="30days">30 dias</button>
+          <button class="sales-history-filter px-2.5 py-1 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-filter="all">Tudo</button>
+        </div>
+      </div>
       <div id="sales-today-list" class="space-y-2"></div>
     </section>
 
@@ -650,6 +658,7 @@
         <button class="faturamento-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-800 text-white" data-filter="7days">7 dias</button>
         <button class="faturamento-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-filter="30days">30 dias</button>
         <button class="faturamento-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-filter="month">Este mês</button>
+        <button class="faturamento-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-filter="all">Tudo</button>
       </div>
 
       <!-- Total do período + comparação com período anterior + gráfico por dia -->
@@ -2926,13 +2935,32 @@ async function confirmSales() {
     showToast('Erro ao registrar vendas: ' + err.message, true);
   }
 }
+let salesHistoryFilter = 'today';
 function renderSalesToday() {
-  const today = new Date().toLocaleDateString('pt-BR');
-  const sales = getMovements().filter(m=>m.movement_type==='venda'&&new Date(m.movement_date).toLocaleDateString('pt-BR')===today).sort((a,b)=>new Date(b.movement_date)-new Date(a.movement_date));
+  document.querySelectorAll('.sales-history-filter').forEach(b => { b.className = `sales-history-filter px-2.5 py-1 rounded-lg text-xs font-medium ${b.dataset.filter===salesHistoryFilter?'bg-stone-800 text-white':'bg-stone-100 text-stone-600 hover:bg-stone-200'}`; });
+
+  let sales = getMovements().filter(m=>m.movement_type==='venda').sort((a,b)=>new Date(b.movement_date)-new Date(a.movement_date));
+  if (salesHistoryFilter === 'today') {
+    const today = new Date().toLocaleDateString('pt-BR');
+    sales = sales.filter(m=>new Date(m.movement_date).toLocaleDateString('pt-BR')===today);
+  } else if (salesHistoryFilter === '7days') {
+    const cutoff = new Date(); cutoff.setDate(cutoff.getDate()-7);
+    sales = sales.filter(m=>new Date(m.movement_date) >= cutoff);
+  } else if (salesHistoryFilter === '30days') {
+    const cutoff = new Date(); cutoff.setDate(cutoff.getDate()-30);
+    sales = sales.filter(m=>new Date(m.movement_date) >= cutoff);
+  } // 'all' não filtra nada
+
   const el = document.getElementById('sales-today-list'); if (!el) return;
-  el.innerHTML = sales.length===0?'<p class="text-stone-400 text-center py-6 text-sm">Nenhuma venda registrada hoje</p>':
-    sales.map(m=>{const d=new Date(m.movement_date);return`<div class="p-4 bg-white rounded-xl shadow-sm border border-stone-100 card-hover"><div class="flex justify-between items-start"><span class="font-medium text-emerald-700 text-sm">💳 Venda</span><span class="text-xs text-stone-400">${d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</span></div><p class="text-sm text-stone-700 mt-1 break-words">${m.movement_product}</p></div>`;}).join('');
+  const emptyMsg = salesHistoryFilter==='today' ? 'Nenhuma venda registrada hoje' : 'Nenhuma venda registrada nesse período';
+  el.innerHTML = sales.length===0?`<p class="text-stone-400 text-center py-6 text-sm">${emptyMsg}</p>`:
+    sales.map(m=>{const d=new Date(m.movement_date); const undone=isMovementUndone(m); const isRetro=(m.movement_note||'').includes('🔧 Baixa retroativa');return`<div class="p-4 bg-white rounded-xl shadow-sm border border-stone-100 card-hover ${undone?'opacity-50':''}"><div class="flex justify-between items-start"><span class="font-medium text-sm ${undone?'text-stone-400 line-through':(isRetro?'text-amber-700':'text-emerald-700')}">${isRetro?'🔧 Baixa retroativa':'💳 Venda'}</span><span class="text-xs text-stone-400 whitespace-nowrap">${d.toLocaleDateString('pt-BR')} ${d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</span></div><p class="text-sm text-stone-700 mt-1 break-words">${m.movement_product}</p>${undone?'<p class="text-xs text-stone-400 mt-1">(desfeita)</p>':''}</div>`;}).join('');
 }
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.sales-history-filter'); if (!btn) return;
+  salesHistoryFilter = btn.dataset.filter;
+  renderSalesToday();
+});
 // Converte número em formato brasileiro (vírgula decimal, com ou sem ponto de milhar) pra float.
 function parseBrNumber(str) {
   if (str == null) return NaN;
@@ -4615,6 +4643,10 @@ function faturamentoRangeForFilter(filter) {
   let start = new Date(end);
   if (filter === '30days') start.setDate(end.getDate() - 29);
   else if (filter === 'month') start = new Date(end.getFullYear(), end.getMonth(), 1, 12, 0, 0);
+  else if (filter === 'all') {
+    const dates = getSaleRevenueEntries().map(e => e.sale_price_updated_at).filter(Boolean).sort();
+    start = dates.length ? parseLocalDate(dates[0]) : new Date(end);
+  }
   else start.setDate(end.getDate() - 6); // 7days (padrão)
   return { start, end };
 }
