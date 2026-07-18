@@ -1067,6 +1067,20 @@
 
 <div id="toast" class="fixed bottom-4 right-4 px-5 py-3 rounded-xl shadow-lg text-sm hidden z-50 text-white toast-anim font-medium"></div>
 
+<!-- MODAL: Resultado importante (erro ou aviso que precisa ficar na tela até você fechar, não some sozinho) -->
+<div id="result-modal" class="hidden fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl p-6 w-full max-w-lg shadow-2xl max-h-[85vh] overflow-y-auto">
+    <div class="flex items-start gap-3 mb-4">
+      <div id="result-modal-icon" class="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"></div>
+      <div class="min-w-0">
+        <h3 id="result-modal-title" class="font-bold text-stone-800"></h3>
+      </div>
+    </div>
+    <div id="result-modal-body" class="text-sm text-stone-700 space-y-1.5 mb-5 whitespace-pre-line"></div>
+    <button onclick="document.getElementById('result-modal').classList.add('hidden')" class="w-full btn-primary px-4 py-2.5 rounded-lg text-sm font-medium">Entendi</button>
+  </div>
+</div>
+
 <script>
 // ============================================================
 // ⚙️  CONFIGURAÇÃO — cole aqui a URL do seu Apps Script
@@ -1402,6 +1416,19 @@ function showToast(msg, isError) {
   t.className = `fixed bottom-4 right-4 px-5 py-3 rounded-xl shadow-lg text-sm z-50 text-white toast-anim font-medium ${isError ? 'bg-red-600' : 'bg-emerald-700'}`;
   t.classList.remove('hidden');
   setTimeout(() => t.classList.add('hidden'), 3000);
+}
+// Pra erros e avisos importantes (ex: itens que foram até zero, falha no meio de uma operação),
+// um toast que some em 3s não dá tempo de ler. Isso aqui fica na tela até a pessoa fechar.
+function showResultModal(title, lines, isError) {
+  document.getElementById('result-modal-icon').innerHTML = isError
+    ? '<i data-lucide="alert-circle" class="w-5 h-5 text-red-600"></i>'
+    : '<i data-lucide="alert-triangle" class="w-5 h-5 text-amber-600"></i>';
+  document.getElementById('result-modal-icon').className = `w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${isError?'bg-red-100':'bg-amber-100'}`;
+  document.getElementById('result-modal-title').textContent = title;
+  const lineArr = Array.isArray(lines) ? lines : [lines];
+  document.getElementById('result-modal-body').innerHTML = lineArr.map(l => `<p>${l}</p>`).join('');
+  document.getElementById('result-modal').classList.remove('hidden');
+  lucide.createIcons();
 }
 
 // ============================================================
@@ -2299,7 +2326,7 @@ async function confirmManualExit() {
   } catch (err) {
     hideLoadingProgress();
     console.error('Erro ao confirmar saída:', err);
-    showToast('Erro ao confirmar saída: ' + err.message, true);
+    showResultModal('Erro ao confirmar saída', err.message, true);
   }
 }
 function cancelManualExit() { resetManualExitForm(); }
@@ -2939,15 +2966,19 @@ async function confirmSales() {
     renderAll();
     hideLoadingProgress();
     salesSubmitInProgress = false;
-    showToast(`Vendas registradas!${stockShortfalls.length?` ⚠️ ${stockShortfalls.length} insumo(s) foram até zero: ${stockShortfalls.join(' | ')}`:''}`, stockShortfalls.length>0);
     document.getElementById('sales-items-container').innerHTML = '<div class="sales-item grid grid-cols-1 sm:grid-cols-3 gap-2 items-end"><select class="sales-product input-field text-sm min-w-0" required><option value="">Selecione o produto</option></select><input type="number" class="sales-qty input-field text-sm min-w-0" placeholder="Quantidade" min="1" step="1" required><button type="button" onclick="removeSalesItem(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button></div>';
     renderSalesSelect();
     renderSalesToday();
+    if (stockShortfalls.length > 0) {
+      showResultModal('✓ Venda registrada, mas alguns insumos foram até zero', stockShortfalls, false);
+    } else {
+      showToast('Vendas registradas!');
+    }
   } catch (err) {
     hideLoadingProgress();
     salesSubmitInProgress = false;
     console.error('Erro ao registrar vendas:', err);
-    showToast('Erro ao registrar vendas: ' + err.message, true);
+    showResultModal('Erro ao registrar vendas', err.message, true);
   }
 }
 let salesHistoryFilter = 'today';
@@ -3046,10 +3077,14 @@ function handleBulkFileUpload(event) {
         if (!row[0] || typeof row[0] !== 'string') continue;
         const raw = String(row[0]).trim();
         if (!raw) continue;
-        // Aceita "- Nome", "– Nome" (travessão — o Excel/Sheets às vezes autocorrige o hífen pra
-        // travessão sozinho, sem avisar), "— Nome", "• Nome", ou até sem prefixo nenhum, desde que
-        // a coluna B tenha uma quantidade válida. ANTES, só "- " (hífen+espaço exato) era aceito e
-        // qualquer variação sumia da planilha em silêncio — sem erro, sem aviso, sem rastro.
+        // Só linha de ITEM tem o prefixo de hífen ("- Chocolate Quente"). Linha de CATEGORIA (ex:
+        // "Bebidas quentes", "Bolos da Casa") não tem prefixo nenhum — é só o resumo/soma da
+        // categoria, não é um item vendido, e não pode entrar como se fosse um. Aceita variações
+        // do traço (hífen, travessão — o Excel/Sheets às vezes autocorrige sozinho — ou "•"), mas
+        // PRECISA ter uma delas; sem isso, a linha é categoria e é ignorada (não é erro, é o
+        // formato normal da planilha).
+        const dashMatch = raw.match(/^[-–—•]\s*/);
+        if (!dashMatch) continue;
         const cleanName = raw.replace(/^[-–—•]\s*/, '').trim();
         if (!cleanName) continue;
         const qty = parseInt(row[1]);
@@ -3396,14 +3431,18 @@ async function processBulkSales(priceHints, prebuiltSalesData) {
     feedbackEl.classList.remove('hidden');
     hideLoadingProgress();
     salesSubmitInProgress = false;
-    showToast(`${salesData.length} venda(s) processada(s)!${stockShortfalls.length?` ⚠️ ${stockShortfalls.length} insumo(s) foram até zero — confira o resumo abaixo.`:''}`, stockShortfalls.length>0);
     document.getElementById('bulk-sales-textarea').value = '';
     renderSalesToday();
+    if (stockShortfalls.length > 0) {
+      showResultModal(`✓ ${salesData.length} venda(s) processada(s), mas ${stockShortfalls.length} insumo(s) foram até zero`, stockShortfalls, false);
+    } else {
+      showToast(`${salesData.length} venda(s) processada(s)!`);
+    }
   } catch (err) {
     hideLoadingProgress();
     salesSubmitInProgress = false;
     console.error('Erro ao processar vendas:', err);
-    showToast('Erro ao processar vendas: ' + err.message, true);
+    showResultModal('Erro ao processar vendas', err.message, true);
   }
 }
 
@@ -3669,7 +3708,7 @@ async function confirmCancelProduction() {
   } catch (err) {
     hideLoadingProgress();
     console.error('Erro ao cancelar produção:', err);
-    showToast('Erro ao cancelar produção: ' + err.message, true);
+    showResultModal('Erro ao cancelar produção', err.message, true);
   }
 }
 // ============================================================
@@ -3998,14 +4037,14 @@ async function confirmUndoMovement() {
     hideLoadingProgress();
     renderAll();
     if (notFoundItems.length) {
-      showToast(`Desfeito, mas ⚠️ ${notFoundItems.length} insumo(s) não encontrado(s) — NÃO foram devolvidos ao estoque: ${notFoundItems.join(', ')}`, true);
+      showResultModal('⚠️ Desfeito, mas com pendência', `Insumo(s) não encontrado(s) — NÃO foram devolvidos ao estoque:\n${notFoundItems.join('\n')}`, true);
     } else {
       showToast('Movimentação desfeita!');
     }
   } catch (err) {
     hideLoadingProgress();
     console.error('Erro ao desfazer movimentação:', err);
-    showToast('Erro ao desfazer: ' + err.message, true);
+    showResultModal('Erro ao desfazer', err.message, true);
   }
 }
 function renderHistory() {
@@ -5123,16 +5162,21 @@ async function confirmRetroactiveStockDeduction() {
     renderAll();
     hideLoadingProgress();
     const skipped = retroactiveStockMatched.filter(m=>!m.match);
-    const parts = [];
-    if (created) parts.push(`Estoque descontado pra ${salesData.length} item(ns)!`);
-    else parts.push('Nada foi descontado.');
-    if (stockShortfalls.length) parts.push(`⚠️ Foram até zero: ${stockShortfalls.join(' | ')}`);
-    if (skipped.length) parts.push(`${skipped.length} não encontrado(s) — confira manualmente.`);
-    showToast(parts.join(' '), stockShortfalls.length > 0 || skipped.length > 0);
+    if (stockShortfalls.length > 0 || skipped.length > 0) {
+      const lines = [];
+      lines.push(created ? `✓ Estoque descontado pra ${salesData.length} item(ns).` : 'Nada foi descontado.');
+      if (stockShortfalls.length) lines.push(`⚠️ Foram até zero:\n${stockShortfalls.join('\n')}`);
+      if (skipped.length) lines.push(`Não encontrado(s) — confira manualmente: ${skipped.map(s=>s.name).join(', ')}`);
+      showResultModal('Resultado da baixa de estoque', lines, false);
+    } else if (created) {
+      showToast(`Estoque descontado pra ${salesData.length} item(ns)!`);
+    } else {
+      showToast('Nada foi descontado.', true);
+    }
   } catch (err) {
     hideLoadingProgress();
     console.error('Erro na baixa retroativa:', err);
-    showToast('Erro: ' + err.message + ' — pode ter ficado parcial, confira o estoque antes de tentar de novo.', true);
+    showResultModal('Erro na baixa de estoque', err.message + ' — pode ter ficado parcial, confira o estoque antes de tentar de novo.', true);
   }
 }
 function getRetroactiveStockMovement(dayKey) {
