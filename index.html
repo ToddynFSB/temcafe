@@ -871,8 +871,8 @@
 
   <div id="retroactive-stock-modal" class="hidden fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
     <div class="bg-white rounded-2xl p-6 w-full max-w-lg shadow-2xl max-h-[85vh] overflow-y-auto">
-      <h3 class="font-bold mb-1 text-stone-800 text-lg">Descontar estoque desses itens</h3>
-      <p class="text-xs text-stone-500 mb-4">Isso só mexe no <strong>estoque</strong> — o faturamento desse dia já existe e não muda em nada. Confere os itens abaixo antes de confirmar.</p>
+      <h3 id="retroactive-stock-title" class="font-bold mb-1 text-stone-800 text-lg">Descontar estoque desses itens</h3>
+      <p class="text-xs text-stone-500 mb-4">Isso só mexe no <strong>estoque</strong> — o faturamento já existe e não muda em nada. Confere os itens abaixo antes de confirmar.</p>
       <div id="retroactive-stock-list" class="space-y-2 max-h-[50vh] overflow-y-auto mb-4"></div>
       <div class="flex gap-2">
         <button onclick="confirmRetroactiveStockDeduction()" class="flex-1 px-4 py-2.5 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700">Descontar Estoque</button>
@@ -2969,7 +2969,28 @@ function renderSalesToday() {
   const el = document.getElementById('sales-today-list'); if (!el) return;
   const emptyMsg = salesHistoryFilter==='today' ? 'Nenhuma venda registrada hoje' : 'Nenhuma venda registrada nesse período';
   el.innerHTML = sales.length===0?`<p class="text-stone-400 text-center py-6 text-sm">${emptyMsg}</p>`:
-    sales.map(m=>{const d=new Date(m.movement_date); const undone=isMovementUndone(m); const isRetro=(m.movement_note||'').includes('🔧 Baixa retroativa');return`<div class="p-4 bg-white rounded-xl shadow-sm border border-stone-100 card-hover ${undone?'opacity-50':''}"><div class="flex justify-between items-start"><span class="font-medium text-sm ${undone?'text-stone-400 line-through':(isRetro?'text-amber-700':'text-emerald-700')}">${isRetro?'🔧 Baixa retroativa':'💳 Venda'}</span><span class="text-xs text-stone-400 whitespace-nowrap">${d.toLocaleDateString('pt-BR')} ${d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</span></div><p class="text-sm text-stone-700 mt-1 break-words">${m.movement_product}</p>${undone?'<p class="text-xs text-stone-400 mt-1">(desfeita)</p>':''}</div>`;}).join('');
+    sales.map(m=>{
+      const d=new Date(m.movement_date);
+      const undone=isMovementUndone(m);
+      const isRetro=(m.movement_note||'').includes('🔧 Baixa retroativa');
+      const applied=movementStockApplied(m);
+      const canApply = !undone && !isRetro;
+      return `<div class="p-4 bg-white rounded-xl shadow-sm border border-stone-100 card-hover ${undone?'opacity-50':''}">
+        <div class="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-1">
+          <span class="font-medium text-sm ${undone?'text-stone-400 line-through':(isRetro?'text-amber-700':'text-emerald-700')}">${isRetro?'🔧 Baixa retroativa':'💳 Venda'}</span>
+          <div class="flex flex-col items-start sm:items-end gap-1 flex-shrink-0">
+            <span class="text-xs text-stone-400 whitespace-nowrap">${d.toLocaleDateString('pt-BR')} ${d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</span>
+            ${canApply ? (applied
+              ? '<span class="text-[11px] text-emerald-600 font-medium">✓ Estoque conferido</span>'
+              : `<button onclick="openApplyStockToSaleModal('${m.id}')" class="text-[11px] text-amber-700 hover:text-amber-800 font-medium flex items-center gap-0.5">🔧 Descontar Estoque</button>`)
+              : ''}
+          </div>
+        </div>
+        <p class="text-sm text-stone-700 mt-1 break-words">${m.movement_product}</p>
+        ${undone?'<p class="text-xs text-stone-400 mt-1">(desfeita)</p>':''}
+      </div>`;
+    }).join('');
+  lucide.createIcons();
 }
 document.addEventListener('click', (e) => {
   const btn = e.target.closest('.sales-history-filter'); if (!btn) return;
@@ -4902,9 +4923,25 @@ function selectFaturamentoDay(dateKey) {
 // SEM criar nenhum faturamento novo, já que esse já existe. Marca a movimentação criada com um
 // texto fixo pra saber depois que aquele dia já foi baixado (evita fazer duas vezes sem querer).
 // ============================================================
+// ============================================================
+// APLICAR BAIXA DE ESTOQUE — pra quando uma venda já existe no Histórico (com os itens certinhos)
+// mas o desconto de estoque dela nunca foi de fato aplicado (por causa da falha de gravação já
+// corrigida). Dois jeitos de chegar aqui:
+//   'movement' -> botão 🔧 direto numa venda específica do Histórico de Vendas — usa os itens
+//                 exatos gravados NAQUELA venda (o jeito mais preciso, é o principal).
+//   'day'      -> botão 🔧 Descontar Estoque no topo da aba Vendas, escolhendo uma data — usa o
+//                 que está no Faturamento daquele dia (fallback pra quando nem a venda em si foi
+//                 gravada, só o faturamento).
+// Em nenhum dos dois cria faturamento novo — só mexe em estoque.
+// ============================================================
+let retroactiveStockMode = 'day';
 let retroactiveStockDay = null;
+let retroactiveStockMovementId = null;
 let retroactiveStockMatched = [];
-// Botão simples "🔧 Descontar Estoque" na aba Vendas: escolhe o dia, e cai na mesma tela de
+function movementStockApplied(m) {
+  return (m.movement_note||'').includes('🔧[estoque aplicado');
+}
+// Botão simples "🔧 Descontar Estoque" no topo da aba Vendas: escolhe o dia, e cai na mesma tela de
 // conferência de itens já usada no Faturamento — mesmo motor, só um jeito mais direto de chegar nela.
 function openPickDayForStockModal() {
   document.getElementById('pick-day-stock-date').value = '';
@@ -4917,7 +4954,9 @@ function confirmPickDayForStock() {
   openRetroactiveStockModal(val);
 }
 function openRetroactiveStockModal(dayKey) {
+  retroactiveStockMode = 'day';
   retroactiveStockDay = dayKey;
+  retroactiveStockMovementId = null;
   const items = getSaleRevenueEntries().filter(e => e.sale_price_updated_at === dayKey);
   const finished = getFinishedProducts();
   const vendaDireta = getRecipes().filter(r => r.recipe_type === 'Venda Direta');
@@ -4925,27 +4964,59 @@ function openRetroactiveStockModal(dayKey) {
 
   retroactiveStockMatched = items.map(it => {
     const finishedMatch = finished.find(f => f.product_name === it.product_name);
-    if (finishedMatch) return { name: it.product_name, qty: it.total_qty_sold, match: finishedMatch.product_name, type: 'finished', fuzzy: false };
+    if (finishedMatch) return { name: it.product_name, qty: it.total_qty_sold, match: finishedMatch.product_name, type: 'finished', fuzzy: false, snapshot: null };
     const recipeMatch = vendaDireta.find(r => r.recipe_name === it.product_name);
-    if (recipeMatch) return { name: it.product_name, qty: it.total_qty_sold, match: recipeMatch.recipe_name, type: 'venda_direta', fuzzy: false };
+    if (recipeMatch) return { name: it.product_name, qty: it.total_qty_sold, match: recipeMatch.recipe_name, type: 'venda_direta', fuzzy: false, snapshot: null };
     // Sem match exato — tenta por aproximação (mesmo motor da conferência de vendas em lote),
     // pra pegar casos de nome levemente diferente (ex: espaço a mais, acento faltando).
     const fuzzy = findBestMatch(it.product_name, controlledNames);
     if (fuzzy) {
       const isFinished = finished.some(f => f.product_name === fuzzy.name);
-      return { name: it.product_name, qty: it.total_qty_sold, match: fuzzy.name, type: isFinished ? 'finished' : 'venda_direta', fuzzy: true };
+      return { name: it.product_name, qty: it.total_qty_sold, match: fuzzy.name, type: isFinished ? 'finished' : 'venda_direta', fuzzy: true, snapshot: null };
     }
-    return { name: it.product_name, qty: it.total_qty_sold, match: null, type: null, fuzzy: false };
+    return { name: it.product_name, qty: it.total_qty_sold, match: null, type: null, fuzzy: false, snapshot: null };
   });
-
+  document.getElementById('retroactive-stock-title').textContent = 'Descontar estoque desse dia';
+  renderRetroactiveStockList();
+  document.getElementById('retroactive-stock-modal').classList.remove('hidden');
+  lucide.createIcons();
+}
+// Botão 🔧 numa venda específica do Histórico de Vendas — usa os itens exatos gravados naquela
+// venda (batch_items), inclusive o valor exato já calculado na hora (deductedIngredients), quando
+// existir. É o jeito mais preciso de aplicar a baixa, porque não depende de casar nomes com o
+// Faturamento nem de recalcular pela receita atual.
+function openApplyStockToSaleModal(movementId) {
+  const m = allData.find(r => r.id === movementId); if (!m) return;
+  retroactiveStockMode = 'movement';
+  retroactiveStockMovementId = movementId;
+  retroactiveStockDay = null;
+  const finished = getFinishedProducts();
+  const vendaDireta = getRecipes().filter(r => r.recipe_type === 'Venda Direta');
+  let batchItems = []; try { batchItems = JSON.parse(m.batch_items||'[]'); } catch(e){}
+  retroactiveStockMatched = batchItems
+    .filter(it => !(it.value && it.value.startsWith('uncontrolled_')))
+    .map(it => {
+      if (it.value && it.value.startsWith('finished_')) {
+        const fp = finished.find(f => f.product_name === it.name);
+        return { name: it.name, qty: it.qty, match: fp ? fp.product_name : null, type: 'finished', fuzzy: false, snapshot: null };
+      }
+      const recipe = vendaDireta.find(r => r.recipe_name === it.name);
+      return { name: it.name, qty: it.qty, match: recipe ? recipe.recipe_name : null, type: 'venda_direta', fuzzy: false, snapshot: (it.deductedIngredients && it.deductedIngredients.length) ? it.deductedIngredients : null };
+    });
+  document.getElementById('retroactive-stock-title').textContent = 'Descontar estoque desta venda';
+  renderRetroactiveStockList();
+  document.getElementById('retroactive-stock-modal').classList.remove('hidden');
+  lucide.createIcons();
+}
+function renderRetroactiveStockList() {
   const matchedCount = retroactiveStockMatched.filter(m=>m.match).length;
   const skipCount = retroactiveStockMatched.length - matchedCount;
   document.getElementById('retroactive-stock-list').innerHTML = retroactiveStockMatched.length === 0
-    ? '<p class="text-sm text-stone-400 text-center py-6">Nenhuma venda com valor registrado nesse dia no faturamento.</p>'
+    ? '<p class="text-sm text-stone-400 text-center py-6">Nenhum item pra descontar aqui.</p>'
     : `
     <div class="flex gap-2 text-xs mb-1 flex-wrap">
       <span class="px-2 py-1 rounded-full bg-emerald-100 text-emerald-800 font-medium">${matchedCount} serão descontados</span>
-      ${skipCount>0?`<span class="px-2 py-1 rounded-full bg-stone-100 text-stone-600 font-medium">${skipCount} ignorado(s) (sem produto/receita — provavelmente não controlado)</span>`:''}
+      ${skipCount>0?`<span class="px-2 py-1 rounded-full bg-stone-100 text-stone-600 font-medium">${skipCount} ignorado(s) (sem produto/receita)</span>`:''}
     </div>
     ${retroactiveStockMatched.map(m => `
       <div class="p-2.5 rounded-lg border text-xs flex items-center justify-between gap-2 ${m.match ? (m.fuzzy?'bg-amber-50 border-amber-200':'bg-emerald-50 border-emerald-200') : 'bg-stone-50 border-stone-200'}">
@@ -4953,17 +5024,18 @@ function openRetroactiveStockModal(dayKey) {
         ${!m.match ? '<span class="text-stone-400 whitespace-nowrap">não desconta</span>' : ''}
       </div>`).join('')}
   `;
-  document.getElementById('retroactive-stock-modal').classList.remove('hidden');
-  lucide.createIcons();
 }
 function closeRetroactiveStockModal() {
   document.getElementById('retroactive-stock-modal').classList.add('hidden');
   retroactiveStockDay = null;
+  retroactiveStockMovementId = null;
   retroactiveStockMatched = [];
 }
 async function confirmRetroactiveStockDeduction() {
   const toProcess = retroactiveStockMatched.filter(m => m.match);
   const dayKey = retroactiveStockDay;
+  const movementId = retroactiveStockMovementId;
+  const mode = retroactiveStockMode;
   if (toProcess.length === 0) { showToast('Nenhum item pra descontar', true); closeRetroactiveStockModal(); return; }
   closeRetroactiveStockModal();
   showLoadingProgress('Descontando estoque...');
@@ -4983,25 +5055,44 @@ async function confirmRetroactiveStockDeduction() {
         salesData.push({ value:`finished_${fp.id}`, name: fp.product_name, unit: fp.unit, type:'finished', qty: m.qty });
       } else {
         const recipe = vendaDireta.find(r => r.recipe_name === m.match);
-        let ingredients=[]; try{ingredients=JSON.parse(recipe.recipe_ingredients);}catch(e){}
         const deductedIngredients = [];
-        for (const ing of ingredients) {
-          const p = getProducts().find(x => x.product_name === ing.name);
-          if (!p) continue;
-          const storageUnit = p.storage_unit||p.unit;
-          const deduct = convertQuantity(ing.qty*m.qty, ing.unit, storageUnit, getCustomConversions(p));
-          // A venda já aconteceu de verdade — desconta até zero mesmo que falte, e avisa no final
-          // (se estava zerado é sinal de erro de entrada no estoque, não de venda errada).
-          if (p.quantity < deduct) stockShortfalls.push(`${p.product_name}: faltou ${fmtQty(deduct-p.quantity,storageUnit)} ${storageUnit} (pra ${m.qty}× ${m.name})`);
-          assertSaved(await dbUpdate({...p, quantity: Math.max(0, p.quantity - deduct)}, {silent:true}), ing.name);
-          deductedIngredients.push({ name: ing.name, qty: deduct, unit: storageUnit });
+        if (m.snapshot) {
+          // Já sabe exatamente quanto descontar de cada insumo (veio gravado na própria venda) —
+          // não precisa recalcular pela receita atual, que pode ter mudado desde então.
+          for (const d of m.snapshot) {
+            const p = getProducts().find(x => x.product_name === d.name);
+            if (!p) continue;
+            if (p.quantity < d.qty) stockShortfalls.push(`${p.product_name}: faltou ${fmtQty(d.qty-p.quantity,d.unit)} ${d.unit} (pra ${m.qty}× ${m.name})`);
+            assertSaved(await dbUpdate({...p, quantity: Math.max(0, p.quantity - d.qty)}, {silent:true}), d.name);
+            deductedIngredients.push({ name: d.name, qty: d.qty, unit: d.unit });
+          }
+        } else {
+          let ingredients=[]; try{ingredients=JSON.parse(recipe.recipe_ingredients);}catch(e){}
+          for (const ing of ingredients) {
+            const p = getProducts().find(x => x.product_name === ing.name);
+            if (!p) continue;
+            const storageUnit = p.storage_unit||p.unit;
+            const deduct = convertQuantity(ing.qty*m.qty, ing.unit, storageUnit, getCustomConversions(p));
+            // A venda já aconteceu de verdade — desconta até zero mesmo que falte, e avisa no final
+            // (se estava zerado é sinal de erro de entrada no estoque, não de venda errada).
+            if (p.quantity < deduct) stockShortfalls.push(`${p.product_name}: faltou ${fmtQty(deduct-p.quantity,storageUnit)} ${storageUnit} (pra ${m.qty}× ${m.name})`);
+            assertSaved(await dbUpdate({...p, quantity: Math.max(0, p.quantity - deduct)}, {silent:true}), ing.name);
+            deductedIngredients.push({ name: ing.name, qty: deduct, unit: storageUnit });
+          }
         }
         salesData.push({ value:`recipe_${recipe.id}`, name: recipe.recipe_name, unit: recipe.recipe_yield_unit, type:'venda_direta', qty: m.qty, deductedIngredients });
       }
       done++;
     }
     let created = false;
-    if (salesData.length > 0) {
+    if (mode === 'movement') {
+      // A venda já existe no Histórico — só marca ela como conferida, não precisa de um
+      // registro novo (senão duplicaria a entrada na lista de vendas).
+      updateLoadingProgress('Marcando venda como conferida...');
+      const original = allData.find(r => r.id === movementId);
+      if (original) assertSaved(await dbUpdate({...original, movement_note: `${original.movement_note||''} 🔧[estoque aplicado ${new Date().toLocaleDateString('pt-BR')}]`}, {silent:true}), 'marcação da venda');
+      created = salesData.length > 0;
+    } else if (salesData.length > 0) {
       updateLoadingProgress('Salvando registro...');
       const itemList = salesData.map(s=>`${fmtQty(s.qty,'')} ${s.name}`).join('; ');
       assertSaved(await dbCreate({ ...blankRecord(), type:'movement', movement_type:'venda', movement_product:itemList, movement_quantity:salesData.reduce((a,s)=>a+s.qty,0), movement_date: parseLocalDate(dayKey).toISOString(), movement_note:`🔧 Baixa retroativa (${dayKey}) — venda já registrada no faturamento, isso só desconta o estoque: ${itemList}`, batch_items:JSON.stringify(salesData) }, {silent:true}), 'registro da baixa retroativa');
