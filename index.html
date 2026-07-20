@@ -1178,6 +1178,17 @@ async function fetchWithRetry(url, maxRetries = 2) {
   }
   throw new Error(`Sem conexão com o servidor depois de ${maxRetries + 1} tentativa(s) (${lastError.message}). Confira sua internet.`);
 }
+// Arredonda o campo quantity antes de gravar (6 casas decimais — mesma precisão já usada em
+// convertQuantity). Sem isso, somas/subtrações repetidas de ponto flutuante (produção, venda,
+// entrada, baixa manual...) acumulam erro ao longo de meses de uso e a quantidade real gravada
+// vai divergindo de um número "redondo" (ex: 4.999999999998 em vez de 5), mesmo que a tela
+// disfarce isso na exibição. Roda em todo dbCreate/dbUpdate/dbBatchWrite, então cobre qualquer
+// caminho que grave estoque, sem precisar arredondar em cada um dos ~20 lugares que fazem a conta.
+function roundQtyField(data) {
+  if (data && typeof data.quantity === 'number' && !isNaN(data.quantity)) {
+    data.quantity = Math.round(data.quantity * 1e6) / 1e6;
+  }
+}
 async function apiCall(action, data = {}) {
   if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === 'COLE_SUA_URL_AQUI') {
     throw new Error('URL do Apps Script não configurada');
@@ -1200,6 +1211,7 @@ async function loadAllData() {
     });
     return r;
   });
+  invalidateDataCache();
 }
 
 // Os três aceitam um segundo parâmetro opcional {silent:true} pra pular o renderAll() automático —
@@ -1208,6 +1220,7 @@ async function loadAllData() {
 // dar um renderAll() manual no final. Sem o parâmetro, o comportamento é o de sempre.
 async function dbCreate(data, opts) {
   let result;
+  roundQtyField(data);
   try {
     result = await apiCall('create', { data });
   } catch (e) {
@@ -1217,6 +1230,7 @@ async function dbCreate(data, opts) {
   if (result.ok) {
     data.id = result.id;
     allData.push(data);
+    invalidateDataCache();
     if (!opts || !opts.silent) { try { renderAll(); } catch (e) { console.error('Erro ao renderizar após salvar:', e); } }
     return { isOk: true };
   }
@@ -1225,6 +1239,7 @@ async function dbCreate(data, opts) {
 
 async function dbUpdate(data, opts) {
   let result;
+  roundQtyField(data);
   try {
     result = await apiCall('update', { data });
   } catch (e) {
@@ -1234,6 +1249,7 @@ async function dbUpdate(data, opts) {
   if (result.ok) {
     const idx = allData.findIndex(r => r.id === data.id);
     if (idx >= 0) allData[idx] = data;
+    invalidateDataCache();
     if (!opts || !opts.silent) { try { renderAll(); } catch (e) { console.error('Erro ao renderizar após salvar:', e); } }
     return { isOk: true };
   }
@@ -1261,6 +1277,7 @@ async function dbDelete(data, opts) {
   }
   if (result.ok) {
     allData = allData.filter(r => r.id !== data.id);
+    invalidateDataCache();
     if (!opts || !opts.silent) { try { renderAll(); } catch (e) { console.error('Erro ao renderizar após salvar:', e); } }
     return { isOk: true };
   }
@@ -1272,6 +1289,7 @@ async function dbDelete(data, opts) {
 // — não existe mais "descontou o insumo mas não criou o registro", porque os dois vão juntos.
 async function dbBatchWrite(operations, opts) {
   if (operations.length === 0) return { isOk: true, results: [] };
+  operations.forEach(op => roundQtyField(op.data));
   let result;
   try {
     result = await apiCall('batchWrite', { data: operations });
@@ -1291,6 +1309,7 @@ async function dbBatchWrite(operations, opts) {
         if (idx >= 0) allData[idx] = op.data;
       }
     });
+    invalidateDataCache();
     const failed = (result.results || []).filter(r => !r.ok);
     if (!opts || !opts.silent) { try { renderAll(); } catch (e) { console.error('Erro ao renderizar após salvar:', e); } }
     return { isOk: failed.length === 0, results: result.results, failedCount: failed.length };
@@ -1423,18 +1442,35 @@ function convertQuantity(qty, from, to, customConversions) {
   if (conversionFactors[rev]) return parseFloat((qty / conversionFactors[rev]).toFixed(6));
   return qty;
 }
+// Antes, quantidades em "un"/"g"/"ml"/"fatia" eram sempre arredondadas pra número inteiro — o que
+// escondia valores como 0,2 garrafa (uma taça de vinho) mostrando "0" ou "1", como se não tivesse
+// gasto nada ou tivesse gasto uma garrafa inteira. Agora mostra até 2 casas decimais em qualquer
+// unidade, só "limpa" pra número inteiro quando o valor já está bem colado nele (diferença menor
+// que 0,005) — isso é só ruído de ponto flutuante de somas/subtrações repetidas (tipo
+// 4.999999999998), não uma quantidade real de verdade. Puramente visual: não muda nada do que é
+// gravado na planilha, só como aparece na tela. Usa vírgula (padrão BR) em vez do ponto do JS.
 function fmtQty(qty, unit) {
   if (qty == null || isNaN(qty)) return '0';
-  const u = (unit||'').toLowerCase();
-  if (['g','ml','un','unidade','unidades','fatia','fatias'].includes(u)) return Math.round(qty).toString();
-  return parseFloat(qty.toFixed(3)).toString();
+  const rounded = Math.round(qty * 100) / 100;
+  const nearestWhole = Math.round(rounded);
+  const isWhole = Math.abs(rounded - nearestWhole) < 0.005;
+  const display = isWhole ? nearestWhole.toString() : rounded.toFixed(2).replace(/0$/, '').replace(/\.$/, '');
+  return display.replace('.', ',');
 }
 
-function getProducts() { return allData.filter(r => r.type === 'product'); }
-function getRecipes() { return allData.filter(r => r.type === 'recipe'); }
-function getMovements() { return allData.filter(r => r.type === 'movement'); }
-function getProductions() { return allData.filter(r => r.type === 'production'); }
-function getFinishedProducts() { return allData.filter(r => r.type === 'finished_product'); }
+// Cache simples das listas filtradas por tipo. Sem isso, cada chamada a getProducts()/
+// getRecipes()/etc. refiltra o allData INTEIRO (que só cresce, com todo o histórico de
+// movimentações) — e essas funções são chamadas repetidamente dentro de loops (ex: uma vez por
+// ingrediente de cada receita no cálculo de CMV). invalidateDataCache() é chamado em todo ponto
+// que muda allData, então o cache nunca fica desatualizado — só evita refazer o filtro à toa
+// quando nada mudou entre uma chamada e outra.
+let _dataCache = {};
+function invalidateDataCache() { _dataCache = {}; }
+function getProducts() { return _dataCache.products || (_dataCache.products = allData.filter(r => r.type === 'product')); }
+function getRecipes() { return _dataCache.recipes || (_dataCache.recipes = allData.filter(r => r.type === 'recipe')); }
+function getMovements() { return _dataCache.movements || (_dataCache.movements = allData.filter(r => r.type === 'movement')); }
+function getProductions() { return _dataCache.productions || (_dataCache.productions = allData.filter(r => r.type === 'production')); }
+function getFinishedProducts() { return _dataCache.finishedProducts || (_dataCache.finishedProducts = allData.filter(r => r.type === 'finished_product')); }
 
 // ============================================================
 // UTILITÁRIOS DE DATA (usados nas Vendas em Lote e no Faturamento)
@@ -1731,18 +1767,18 @@ async function confirmInsumoProduction(recipe, times, realYieldOverride) {
     const p = getProducts().find(x => x.product_name === ing.name);
     const su = p.storage_unit || p.unit;
     const consumptionQty = convertQuantity(ing.qty * times, ing.unit, su, getCustomConversions(p));
-    const res = await dbUpdate({...p, quantity: Math.max(0, p.quantity - consumptionQty)});
+    const res = await dbUpdate({...p, quantity: Math.max(0, p.quantity - consumptionQty)}, {silent:true});
     if (!res.isOk) return { ok:false, error:`erro ao descontar ${ing.name}` };
   }
   const expectedYield = (parseFloat(recipe.recipe_yield)||0) * times;
   const hasLoss = realYieldOverride !== null && realYieldOverride !== undefined && !isNaN(realYieldOverride);
   const yieldQty = hasLoss ? Math.max(0, realYieldOverride) : expectedYield;
   const targetNow = getProducts().find(p => p.id === target.id);
-  const resTarget = await dbUpdate({...targetNow, quantity: targetNow.quantity + yieldQty});
+  const resTarget = await dbUpdate({...targetNow, quantity: targetNow.quantity + yieldQty}, {silent:true});
   if (!resTarget.isOk) return { ok:false, error:'erro ao creditar estoque' };
   const ingNote = ingredients.map(i=>`${fmtQty(i.qty*times,i.unit)} ${i.unit} ${i.name}`).join(', ');
   const lossNote = hasLoss && yieldQty < expectedYield ? ` ⚠️ Perda na produção: esperado ${fmtQty(expectedYield,target.unit)} ${target.unit}, rendeu ${fmtQty(yieldQty,target.unit)} ${target.unit}.` : '';
-  await dbCreate({ ...blankRecord(), type:'movement', movement_type:'producao', movement_product:target.product_name, movement_quantity:yieldQty, movement_date:new Date().toISOString(), movement_note:`Produção: ${fmtQty(yieldQty,target.unit)} ${target.unit} de ${target.product_name} (${fmtQty(times,'')}× receita).${lossNote} Insumos: ${ingNote}`, batch_items:recipe.recipe_ingredients, production_recipe_id:recipe.id, production_real_yield:yieldQty });
+  await dbCreate({ ...blankRecord(), type:'movement', movement_type:'producao', movement_product:target.product_name, movement_quantity:yieldQty, movement_date:new Date().toISOString(), movement_note:`Produção: ${fmtQty(yieldQty,target.unit)} ${target.unit} de ${target.product_name} (${fmtQty(times,'')}× receita).${lossNote} Insumos: ${ingNote}`, batch_items:recipe.recipe_ingredients, production_recipe_id:recipe.id, production_real_yield:yieldQty }, {silent:true});
   return { ok:true };
 }
 
@@ -1799,6 +1835,7 @@ async function confirmAnnotateProduction() {
     const result = await confirmInsumoProduction(recipe, entry.times);
     if (result.ok) successCount++; else errors.push(`${recipe.recipe_name}: ${result.error}`);
   }
+  if (successCount > 0) renderAll();
   btn.disabled = false; btn.textContent = '✓ Confirmar Produções';
   if (successCount > 0) { showToast(`${successCount} produção${successCount>1?'ões':''} registrada${successCount>1?'s':''}!`); closeAnnotateProduction(); }
   if (errors.length > 0) showToast(`Não deu pra registrar: ${errors.join(' · ')}`, true);
@@ -1818,6 +1855,7 @@ async function sendNToProduction(recipeId, times) {
     if (p.quantity < consumptionQty) { showToast(`Estoque insuficiente de ${ing.name} para ${times}× receita`, true); return; }
   }
   for (let i = 0; i < times; i++) await createProduction(recipe);
+  renderAll();
   showToast(`${times}× ${recipe.recipe_name} enviado${times>1?'s':''} para produção!`);
 }
 
@@ -2613,7 +2651,9 @@ async function queueProductionDirect(recipeId) {
   showLoadingProgress('Enviando para produção...');
   try {
     await createProduction(recipe);
+    renderAll();
     hideLoadingProgress();
+    showToast(`${recipe.recipe_name} enviado para produção!`);
   } catch (err) {
     hideLoadingProgress();
     console.error('Erro ao enviar para produção:', err);
@@ -2632,11 +2672,12 @@ function sendToProduction(recipeId) {
     const consumptionQty = convertQuantity(ing.qty, ing.unit, storageUnit, getCustomConversions(p));
     if (p.quantity < consumptionQty) { showToast(`Estoque insuficiente de ${ing.name}`, true); return; }
   }
-  createProduction(recipe);
+  createProduction(recipe).then(() => { renderAll(); showToast(`${recipe.recipe_name} enviado para produção!`); });
 }
 async function createProduction(recipe) {
-  const r = await dbCreate({ ...blankRecord(), type:'production', recipe_name:recipe.recipe_name, recipe_ingredients:recipe.recipe_ingredients, recipe_yield:recipe.recipe_yield, recipe_yield_unit:recipe.recipe_yield_unit, recipe_product_name:recipe.recipe_product_name||recipe.recipe_name, recipe_type:recipe.recipe_type, recipe_sector:recipe.recipe_sector, movement_date:new Date().toISOString(), production_status:'pending', production_recipe_id:recipe.id });
-  if (r.isOk) showToast(`${recipe.recipe_name} enviado para produção!`); else showToast('Erro', true);
+  const r = await dbCreate({ ...blankRecord(), type:'production', recipe_name:recipe.recipe_name, recipe_ingredients:recipe.recipe_ingredients, recipe_yield:recipe.recipe_yield, recipe_yield_unit:recipe.recipe_yield_unit, recipe_product_name:recipe.recipe_product_name||recipe.recipe_name, recipe_type:recipe.recipe_type, recipe_sector:recipe.recipe_sector, movement_date:new Date().toISOString(), production_status:'pending', production_recipe_id:recipe.id }, {silent:true});
+  if (!r.isOk) showToast('Erro', true);
+  return r;
 }
 
 // ============================================================
@@ -2704,6 +2745,7 @@ async function confirmProductionAction() {
   try {
     if (mode === 'queue') {
       for (let i = 0; i < times; i++) { updateLoadingProgress(`Registrando ${i+1}/${times}`); await createProduction(recipe); }
+      renderAll();
       hideLoadingProgress();
       showToast(`${times}× ${recipe.recipe_name} enviado${times>1?'s':''} para Produções Pendentes!`);
       return;
@@ -2712,10 +2754,12 @@ async function confirmProductionAction() {
     if (recipe.recipe_type === 'Insumo') {
       updateLoadingProgress('Descontando insumos e creditando estoque...');
       const r = await confirmInsumoProduction(recipe, times, (realYieldOverride!==null && !isNaN(realYieldOverride)) ? realYieldOverride : null);
+      renderAll();
       hideLoadingProgress();
       if (r.ok) showToast(`${times>1?times+'× ':''}${recipe.recipe_name} produzido!`); else showToast(`Erro: ${r.error}`, true);
     } else {
       for (let i = 0; i < times; i++) { updateLoadingProgress(`Registrando ${i+1}/${times}`); await createProduction(recipe); }
+      renderAll();
       hideLoadingProgress();
       showToast(`${times}× ${recipe.recipe_name} enviado${times>1?'s':''} para Produções Pendentes!`);
     }
@@ -2825,7 +2869,7 @@ async function processFinalization(prod, realYield, ingredients) {
       const p = getProducts().find(x => x.product_name === ing.name);
       const storageUnit = p.storage_unit || p.unit;
       const consumptionQty = convertQuantity(ing.qty, ing.unit, storageUnit, getCustomConversions(p));
-      await dbUpdate({...p, quantity: Math.max(0, p.quantity - consumptionQty)});
+      await dbUpdate({...p, quantity: Math.max(0, p.quantity - consumptionQty)}, {silent:true});
       done++;
     }
     const ingNote = ingredients.map(i=>`${fmtQty(i.qty,i.unit)} ${i.unit} ${i.name}`).join(', ');
@@ -2834,6 +2878,7 @@ async function processFinalization(prod, realYield, ingredients) {
       // Receita tipo Insumo: credita o insumo VINCULADO (não cria um "produto pronto")
       const target = getProducts().find(p => p.linked_recipe_id === prod.production_recipe_id);
       if (!target) {
+        renderAll(); // os insumos já foram descontados acima — reflete isso na tela mesmo com o erro abaixo
         hideLoadingProgress();
         document.getElementById('finalize-error').textContent = 'Sem insumo vinculado a esta receita — edite o insumo e vincule esta receita antes de finalizar.';
         document.getElementById('finalize-error').classList.remove('hidden');
@@ -2842,9 +2887,10 @@ async function processFinalization(prod, realYield, ingredients) {
         return;
       }
       updateLoadingProgress(`Creditando ${target.product_name}...`);
-      await dbUpdate({...target, quantity: target.quantity + realYield});
-      await dbCreate({ ...blankRecord(), type:'movement', movement_type:'producao', movement_product:target.product_name, movement_quantity:realYield, movement_date:new Date().toISOString(), movement_note:`Produção: ${fmtQty(realYield,target.unit)} ${target.unit} de ${target.product_name}. Insumos: ${ingNote}`, batch_items:prod.recipe_ingredients, production_recipe_id:prod.production_recipe_id, production_real_yield:realYield });
-      await dbUpdate({...prod, production_status:'done', production_real_yield:realYield});
+      await dbUpdate({...target, quantity: target.quantity + realYield}, {silent:true});
+      await dbCreate({ ...blankRecord(), type:'movement', movement_type:'producao', movement_product:target.product_name, movement_quantity:realYield, movement_date:new Date().toISOString(), movement_note:`Produção: ${fmtQty(realYield,target.unit)} ${target.unit} de ${target.product_name}. Insumos: ${ingNote}`, batch_items:prod.recipe_ingredients, production_recipe_id:prod.production_recipe_id, production_real_yield:realYield }, {silent:true});
+      await dbUpdate({...prod, production_status:'done', production_real_yield:realYield}, {silent:true});
+      renderAll();
       document.getElementById('finalize-btn').disabled = false;
       document.getElementById('finalize-btn').textContent = 'Finalizar';
       hideLoadingProgress();
@@ -2857,16 +2903,18 @@ async function processFinalization(prod, realYield, ingredients) {
     const finishedUnit = prod.recipe_yield_unit;
     updateLoadingProgress(`Creditando ${finishedName}...`);
     const existing = getFinishedProducts().find(f => f.product_name === finishedName);
-    if (existing) { await dbUpdate({...existing, quantity: existing.quantity + realYield}); }
-    else { await dbCreate({ ...blankRecord(), type:'finished_product', product_name:finishedName, quantity:realYield, unit:finishedUnit, storage_unit:finishedUnit, critical_stock:2, min_stock:5, comfortable_stock:10, linked_recipe_id:prod.production_recipe_id }); }
-    await dbCreate({ ...blankRecord(), type:'movement', movement_type:'producao', movement_product:finishedName, movement_quantity:realYield, movement_date:new Date().toISOString(), movement_note:`Produção: ${fmtQty(realYield,finishedUnit)} ${finishedUnit} de ${finishedName}. Insumos: ${ingNote}`, batch_items:prod.recipe_ingredients, production_recipe_id:prod.production_recipe_id, production_real_yield:realYield });
-    await dbUpdate({...prod, production_status:'done', production_real_yield:realYield});
+    if (existing) { await dbUpdate({...existing, quantity: existing.quantity + realYield}, {silent:true}); }
+    else { await dbCreate({ ...blankRecord(), type:'finished_product', product_name:finishedName, quantity:realYield, unit:finishedUnit, storage_unit:finishedUnit, critical_stock:2, min_stock:5, comfortable_stock:10, linked_recipe_id:prod.production_recipe_id }, {silent:true}); }
+    await dbCreate({ ...blankRecord(), type:'movement', movement_type:'producao', movement_product:finishedName, movement_quantity:realYield, movement_date:new Date().toISOString(), movement_note:`Produção: ${fmtQty(realYield,finishedUnit)} ${finishedUnit} de ${finishedName}. Insumos: ${ingNote}`, batch_items:prod.recipe_ingredients, production_recipe_id:prod.production_recipe_id, production_real_yield:realYield }, {silent:true});
+    await dbUpdate({...prod, production_status:'done', production_real_yield:realYield}, {silent:true});
+    renderAll();
     document.getElementById('finalize-btn').disabled = false;
     document.getElementById('finalize-btn').textContent = 'Finalizar';
     hideLoadingProgress();
     closeFinalize();
     showToast(`${fmtQty(realYield,finishedUnit)} ${finishedUnit} de ${finishedName} produzido!`);
   } catch (err) {
+    renderAll(); // pode ter descontado insumos antes do erro — garante que a tela reflita o que já foi salvo
     hideLoadingProgress();
     document.getElementById('finalize-btn').disabled = false;
     document.getElementById('finalize-btn').textContent = 'Finalizar';
@@ -4257,6 +4305,7 @@ async function clearHistory() {
       deleted++;
     }
     document.getElementById('clear-history-modal').classList.add('hidden');
+    invalidateDataCache();
     renderAll();
     showToast(`${deleted} movimentaç${deleted===1?'ão apagada':'ões apagadas'}!`);
   } catch (err) {
@@ -4642,14 +4691,14 @@ async function confirmDelete() {
     const p = allData.find(r => r.id === deleteId);
     if (p) {
       const result = await apiCall('delete', { id: p.id });
-      if (result.ok) { allData = allData.filter(r => r.id !== p.id); renderAll(); showToast('Insumo excluído!'); }
+      if (result.ok) { allData = allData.filter(r => r.id !== p.id); invalidateDataCache(); renderAll(); showToast('Insumo excluído!'); }
       else showToast('Erro ao excluir', true);
     }
   } else if (deleteType === 'recipe') {
     const rec = allData.find(r => r.id === deleteId);
     if (rec) {
       const result = await apiCall('delete', { id: rec.id });
-      if (result.ok) { allData = allData.filter(r => r.id !== rec.id); renderAll(); showToast('Receita excluída!'); }
+      if (result.ok) { allData = allData.filter(r => r.id !== rec.id); invalidateDataCache(); renderAll(); showToast('Receita excluída!'); }
       else showToast('Erro ao excluir', true);
     }
   } else if (deleteType === 'finished_product') {
@@ -4657,7 +4706,7 @@ async function confirmDelete() {
     const f = allData.find(r => r.id === deleteId);
     if (f) {
       const result = await apiCall('delete', { id: f.id });
-      if (result.ok) { allData = allData.filter(r => r.id !== f.id); renderAll(); showToast('Produto excluído!'); }
+      if (result.ok) { allData = allData.filter(r => r.id !== f.id); invalidateDataCache(); renderAll(); showToast('Produto excluído!'); }
       else showToast('Erro ao excluir', true);
     }
   } else if (deleteType === 'expense') {
