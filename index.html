@@ -1004,6 +1004,36 @@
           <p class="text-xs text-stone-500 italic mt-2">Receita tipo "Insumo" que produz este item.</p>
         </div>
       </div>
+      <div class="bg-blue-50 rounded-lg p-4 mb-5 border border-blue-200">
+        <div class="flex items-center justify-between mb-1">
+          <p class="text-xs font-bold text-blue-800 uppercase tracking-wide">Unidade de Medida Padrão</p>
+          <button type="button" onclick="toggleChangeUnitForm()" class="text-xs font-medium text-blue-700 hover:text-blue-900 underline">Trocar unidade</button>
+        </div>
+        <p class="text-xs text-stone-600">Unidade atual: <strong id="edit-levels-current-unit-label"></strong></p>
+        <div id="edit-levels-change-unit-form" class="hidden mt-3 space-y-3">
+          <p class="text-xs text-stone-500">Muda a unidade em que esse insumo é controlado (ex: de "unidade" pra "g"). O estoque atual é convertido automaticamente pra nova unidade, e as receitas que já usam a unidade antiga continuam funcionando — descontando o valor proporcional. Receitas já na unidade nova passam a funcionar direto, sem conversão.</p>
+          <div class="grid grid-cols-1 sm:grid-cols-[1fr_140px] gap-3 items-end">
+            <div>
+              <label class="text-xs text-stone-500 block mb-1">Nova unidade</label>
+              <select id="edit-levels-new-unit-select" class="w-full input-field text-sm" onchange="toggleNewUnitCustomName(); updateChangeUnitPreview();">
+                <option value="kg">kg</option>
+                <option value="g">g</option>
+                <option value="L">L</option>
+                <option value="ml">ml</option>
+                <option value="unidade">unidade</option>
+                <option value="__custom__">Personalizado...</option>
+              </select>
+              <input id="edit-levels-new-unit-custom" type="text" placeholder="Nome (ex: fatia)" class="w-full input-field text-sm mt-1.5 hidden" oninput="updateChangeUnitPreview()">
+            </div>
+            <div>
+              <label class="text-xs text-stone-500 block mb-1"><span id="edit-levels-change-unit-ratio-label">1 unidade =</span></label>
+              <input id="edit-levels-change-unit-ratio" type="number" min="0.000001" step="any" placeholder="Qtd" class="w-full input-field text-sm" oninput="updateChangeUnitPreview()">
+            </div>
+          </div>
+          <div id="edit-levels-change-unit-preview" class="hidden p-3 rounded-lg bg-white border border-blue-200 text-xs text-stone-700 leading-relaxed"></div>
+          <button type="button" onclick="confirmChangeStorageUnit()" class="w-full btn-primary px-4 py-2.5 rounded-lg text-xs font-medium">Confirmar troca de unidade</button>
+        </div>
+      </div>
       <div class="bg-stone-50 rounded-lg p-4 mb-5 border border-stone-200">
         <p class="text-xs font-bold text-stone-600 uppercase tracking-wide mb-1">Conversão Personalizada</p>
         <p class="text-xs text-stone-500 mb-3">Ex: pão de queijo chega em grama, mas você conta por unidade — cadastre "1 unidade = 38 g" e use essa unidade na hora de lançar estoque ou montar receitas.</p>
@@ -1444,11 +1474,11 @@ function populateUnitSelect(unitSelectEl, productId) {
   unitSelectEl.innerHTML = units.map(u => `<option value="${u}" ${u === base ? 'selected' : ''}>${u}</option>`).join('');
 }
 function convertQuantity(qty, from, to, customConversions) {
-  if (!from || !to || from === to) return qty;
+  if (!from || !to || namesMatch(from, to)) return qty;
   if (customConversions && customConversions.length) {
-    const cc = customConversions.find(c => (c.unit||'').toLowerCase() === from.toLowerCase());
+    const cc = customConversions.find(c => namesMatch(c.unit, from));
     if (cc && cc.equals) return parseFloat((qty * cc.equals).toFixed(6));
-    const ccRev = customConversions.find(c => (c.unit||'').toLowerCase() === to.toLowerCase());
+    const ccRev = customConversions.find(c => namesMatch(c.unit, to));
     if (ccRev && ccRev.equals) return parseFloat((qty / ccRev.equals).toFixed(6));
   }
   if (!canConvert(from, to)) return qty;
@@ -2014,6 +2044,10 @@ function openEditLevels(id) {
   document.getElementById('edit-levels-cc-unit-custom').value = '';
   document.getElementById('edit-levels-cc-unit-custom').classList.add('hidden');
   document.getElementById('edit-levels-cc-unit-select').value = 'unidade';
+  document.getElementById('edit-levels-current-unit-label').textContent = p.storage_unit || p.unit;
+  document.getElementById('edit-levels-change-unit-form').classList.add('hidden');
+  document.getElementById('edit-levels-change-unit-ratio').value = '';
+  document.getElementById('edit-levels-change-unit-preview').classList.add('hidden');
   renderCustomConversionsList();
   renderQuickAddHelper();
   updateAdjustmentPreview();
@@ -2060,6 +2094,83 @@ function removeCustomConversion(i) {
   editingCustomConversions.splice(i, 1);
   renderCustomConversionsList();
   renderQuickAddHelper();
+}
+// ============================================================
+// TROCAR UNIDADE PADRÃO — muda storage_unit/unit do insumo (ex: Tomate de "unidade" pra "g").
+// Direção do input é a natural: "1 [unidade antiga] = quantos [unidade nova]" (ex: 1 unidade =
+// 150 g), diferente da Conversão Personalizada acima (que é sempre em relação à unidade padrão
+// atual). Ao confirmar:
+// 1) a quantidade em estoque é reconvertida pra nova unidade;
+// 2) toda conversão personalizada já cadastrada é reexpressa em relação à nova base (ela tinha
+//    sido definida em relação à base antiga);
+// 3) uma conversão nova é criada pra unidade ANTIGA, assim receitas que já usam ela continuam
+//    funcionando, descontando o valor proporcional na unidade nova — sem precisar editar receita
+//    nenhuma. Receitas que já estiverem na unidade nova funcionam direto, sem conversão.
+// ============================================================
+function toggleChangeUnitForm() {
+  const form = document.getElementById('edit-levels-change-unit-form');
+  form.classList.toggle('hidden');
+  if (!form.classList.contains('hidden')) {
+    const p = allData.find(r => r.id === editingProductId);
+    const current = p ? (p.storage_unit || p.unit) : '';
+    document.getElementById('edit-levels-change-unit-ratio-label').textContent = `1 ${current} =`;
+    document.getElementById('edit-levels-new-unit-select').value = 'g';
+    document.getElementById('edit-levels-new-unit-custom').value = '';
+    document.getElementById('edit-levels-new-unit-custom').classList.add('hidden');
+    document.getElementById('edit-levels-change-unit-ratio').value = '';
+    document.getElementById('edit-levels-change-unit-preview').classList.add('hidden');
+  }
+}
+function toggleNewUnitCustomName() {
+  const sel = document.getElementById('edit-levels-new-unit-select');
+  document.getElementById('edit-levels-new-unit-custom').classList.toggle('hidden', sel.value !== '__custom__');
+}
+function getChangeUnitNewUnitValue() {
+  const sel = document.getElementById('edit-levels-new-unit-select');
+  if (sel.value === '__custom__') return document.getElementById('edit-levels-new-unit-custom').value.trim();
+  return sel.value;
+}
+function updateChangeUnitPreview() {
+  const p = allData.find(r => r.id === editingProductId); if (!p) return;
+  const oldUnit = p.storage_unit || p.unit;
+  const newUnit = getChangeUnitNewUnitValue();
+  const ratio = parseFloat(document.getElementById('edit-levels-change-unit-ratio').value);
+  const el = document.getElementById('edit-levels-change-unit-preview');
+  if (!newUnit || !ratio || ratio <= 0 || namesMatch(newUnit, oldUnit)) { el.classList.add('hidden'); return; }
+  const newQty = parseFloat((p.quantity * ratio).toFixed(6));
+  el.classList.remove('hidden');
+  el.innerHTML = `Estoque atual: <strong>${fmtQty(p.quantity,oldUnit)} ${oldUnit}</strong> → vira <strong>${fmtQty(newQty,newUnit)} ${newUnit}</strong><br>Receitas em "${oldUnit}" continuam funcionando (convertidas automaticamente). Receitas em "${newUnit}" passam a funcionar direto.`;
+}
+async function confirmChangeStorageUnit() {
+  const p = allData.find(r => r.id === editingProductId); if (!p) return;
+  const oldUnit = p.storage_unit || p.unit;
+  const newUnit = getChangeUnitNewUnitValue();
+  if (!newUnit) { showToast('Escolha a nova unidade', true); return; }
+  if (namesMatch(newUnit, oldUnit)) { showToast('Essa já é a unidade atual', true); return; }
+  const ratio = parseFloat(document.getElementById('edit-levels-change-unit-ratio').value);
+  if (!ratio || ratio <= 0) { showToast(`Informe quantos ${newUnit} equivalem a 1 ${oldUnit}`, true); return; }
+  const newQty = parseFloat((p.quantity * ratio).toFixed(6));
+  const rebased = getCustomConversions(p)
+    .filter(c => !namesMatch(c.unit, newUnit))
+    .map(c => ({ unit: c.unit, equals: parseFloat(((parseFloat(c.equals)||0) * ratio).toFixed(6)) }));
+  rebased.push({ unit: oldUnit, equals: ratio });
+  showLoadingProgress('Trocando unidade...');
+  try {
+    const res = await dbUpdate({ ...p, unit:newUnit, storage_unit:newUnit, quantity:newQty, custom_conversions: JSON.stringify(rebased) });
+    hideLoadingProgress();
+    if (!res.isOk) { showToast('Erro ao trocar unidade', true); return; }
+    const linkedRecipe = p.linked_recipe_id ? getRecipes().find(r => r.id === p.linked_recipe_id) : null;
+    if (linkedRecipe && !namesMatch(linkedRecipe.recipe_yield_unit, newUnit)) {
+      showToast(`Unidade trocada — mas a receita "${linkedRecipe.recipe_name}" ainda rende em "${linkedRecipe.recipe_yield_unit}". Edite o rendimento dela pra "${newUnit}" também.`, true);
+    } else {
+      showToast(`Unidade de ${p.product_name} trocada para ${newUnit}!`);
+    }
+    closeEditLevels();
+  } catch (err) {
+    hideLoadingProgress();
+    console.error('Erro ao trocar unidade padrão:', err);
+    showToast('Erro: ' + err.message, true);
+  }
 }
 function renderQuickAddHelper() {
   const wrap = document.getElementById('edit-levels-quick-add');
