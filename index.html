@@ -628,8 +628,24 @@
         <h2 class="text-lg font-bold text-stone-800 flex items-center gap-2"><i data-lucide="percent" class="w-5 h-5 text-emerald-600"></i>CMV por Receita</h2>
         <button onclick="lockFinanceiro()" class="text-xs text-stone-400 hover:text-stone-600 flex items-center gap-1"><i data-lucide="lock" class="w-3.5 h-3.5"></i>Bloquear</button>
       </div>
-      <p class="text-xs text-stone-400 mb-4">Custo estimado de cada receita, com base no custo médio já lançado dos insumos.</p>
+      <p class="text-xs text-stone-400 mb-4">Custo estimado de cada receita, com base no custo médio já lançado dos insumos (ou no custo calculado da receita, pra insumos produzidos internamente).</p>
+
+      <div class="grid grid-cols-3 gap-2 mb-4" id="cmv-stats"></div>
+
+      <div class="flex flex-col sm:flex-row gap-2 mb-4">
+        <div class="relative flex-1">
+          <i data-lucide="search" class="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+          <input id="cmv-search" type="text" placeholder="Buscar receita..." class="input-field text-sm w-full pl-9" oninput="renderFinanceCMV()">
+        </div>
+        <select id="cmv-filter" class="input-field text-sm" onchange="renderFinanceCMV()">
+          <option value="todos">Todos</option>
+          <option value="calculado">Já calculado</option>
+          <option value="incompleto">Incompleto</option>
+        </select>
+      </div>
+
       <div id="finance-cmv-list" class="space-y-2"></div>
+      <div id="finance-cmv-empty" class="hidden text-stone-400 text-center py-10 text-sm"></div>
     </section>
 
     <!-- Sub-aba: Vendas -->
@@ -1758,13 +1774,13 @@ async function confirmInsumoProduction(recipe, times, realYieldOverride) {
   const target = getProducts().find(p => p.linked_recipe_id === recipe.id);
   if (!target) return { ok:false, error:'sem insumo vinculado — edite o insumo e vincule esta receita' };
   for (const ing of ingredients) {
-    const p = getProducts().find(x => x.product_name === ing.name);
+    const p = getProducts().find(x => namesMatch(x.product_name, ing.name));
     if (!p) return { ok:false, error:`${ing.name} não encontrado` };
     const su = p.storage_unit || p.unit;
     if (p.quantity < convertQuantity(ing.qty * times, ing.unit, su, getCustomConversions(p))) return { ok:false, error:`falta ${ing.name}` };
   }
   for (const ing of ingredients) {
-    const p = getProducts().find(x => x.product_name === ing.name);
+    const p = getProducts().find(x => namesMatch(x.product_name, ing.name));
     const su = p.storage_unit || p.unit;
     const consumptionQty = convertQuantity(ing.qty * times, ing.unit, su, getCustomConversions(p));
     const res = await dbUpdate({...p, quantity: Math.max(0, p.quantity - consumptionQty)}, {silent:true});
@@ -2414,7 +2430,7 @@ async function confirmManualExit() {
     const recipe = allData.find(r => r.id === vd.recipeId); if (!recipe) { showToast(`Item ${vd.name} não encontrado`, true); return; }
     let ingredients=[]; try{ingredients=JSON.parse(recipe.recipe_ingredients);}catch(e){}
     for (const ing of ingredients) {
-      const p = getProducts().find(x => x.product_name === ing.name);
+      const p = getProducts().find(x => namesMatch(x.product_name, ing.name));
       if (!p) { showToast(`Insumo ${ing.name} (usado em ${vd.name}) não encontrado`, true); return; }
       const storageUnit = p.storage_unit||p.unit;
       const needed = convertQuantity(ing.qty*vd.qty, ing.unit, storageUnit, getCustomConversions(p));
@@ -2439,7 +2455,7 @@ async function confirmManualExit() {
       let ingredients=[]; try{ingredients=JSON.parse(recipe.recipe_ingredients);}catch(e){}
       const deductedIngredients = [];
       for (const ing of ingredients) {
-        const p = getProducts().find(x => x.product_name === ing.name);
+        const p = getProducts().find(x => namesMatch(x.product_name, ing.name));
         const storageUnit = p.storage_unit||p.unit;
         const deduct = convertQuantity(ing.qty*vd.qty, ing.unit, storageUnit, getCustomConversions(p));
         assertSaved(await dbUpdate({...p, quantity: Math.max(0, p.quantity - deduct)}, {silent:true}), ing.name);
@@ -2866,7 +2882,7 @@ async function processFinalization(prod, realYield, ingredients) {
     let done = 0;
     for (const ing of ingredients) {
       updateLoadingProgress(`Descontando ${done+1}/${ingredients.length}: ${ing.name}`);
-      const p = getProducts().find(x => x.product_name === ing.name);
+      const p = getProducts().find(x => namesMatch(x.product_name, ing.name));
       const storageUnit = p.storage_unit || p.unit;
       const consumptionQty = convertQuantity(ing.qty, ing.unit, storageUnit, getCustomConversions(p));
       await dbUpdate({...p, quantity: Math.max(0, p.quantity - consumptionQty)}, {silent:true});
@@ -3065,7 +3081,7 @@ async function confirmSales() {
       const recipe = allData.find(r => r.id === id); if (!recipe) return;
       let ingredients=[]; try{ingredients=JSON.parse(recipe.recipe_ingredients);}catch(e){}
       for (const ing of ingredients) {
-        const p = getProducts().find(x => x.product_name === ing.name);
+        const p = getProducts().find(x => namesMatch(x.product_name, ing.name));
         if (!p) { showToast(`Insumo ${ing.name} não encontrado`, true); return; }
       }
     }
@@ -3090,7 +3106,7 @@ async function confirmSales() {
         let ingredients=[]; try{ingredients=JSON.parse(recipe.recipe_ingredients);}catch(e){}
         const deductedIngredients = [];
         for (const ing of ingredients) {
-          const p = getProducts().find(x => x.product_name === ing.name);
+          const p = getProducts().find(x => namesMatch(x.product_name, ing.name));
           const storageUnit = p.storage_unit||p.unit;
           const deduct = convertQuantity(ing.qty * s.qty, ing.unit, storageUnit, getCustomConversions(p));
           if (p.quantity < deduct) stockShortfalls.push(`${p.product_name}: faltou ${fmtQty(deduct-p.quantity,storageUnit)} ${storageUnit} (tinha ${fmtQty(p.quantity,storageUnit)}, precisava ${fmtQty(deduct,storageUnit)} pra ${s.qty}× ${s.name})`);
@@ -3547,7 +3563,7 @@ async function processBulkSales(priceHints, prebuiltSalesData) {
         let ingredients=[]; try{ingredients=JSON.parse(recipe.recipe_ingredients);}catch(e){}
         const deductedIngredients = [];
         for (const ing of ingredients) {
-          const p = getProducts().find(x => x.product_name === ing.name);
+          const p = getProducts().find(x => namesMatch(x.product_name, ing.name));
           if (!p) { hideLoadingProgress(); salesSubmitInProgress=false; showToast(`Insumo ${ing.name} não encontrado`, true); return; }
           const storageUnit = p.storage_unit||p.unit;
           const deduct = convertQuantity(ing.qty*s.qty, ing.unit, storageUnit, getCustomConversions(p));
@@ -4744,6 +4760,8 @@ let financePrecosFilter = 'todos';
 let financePrecosSort = 'nome';
 let financePrecosScope = 'comprados'; // 'comprados' | 'produzidos'
 let financePrecosRows = []; // cache da última renderização, pra resolver clique de "salvar" por índice
+let cmvSearch = '';
+let cmvFilter = 'todos';
 
 // ============================================================
 // TROCA DE ÁREA — Central do Estoque <-> Central Financeira
@@ -5325,7 +5343,7 @@ async function confirmRetroactiveStockDeduction() {
         } else {
           let ingredients=[]; try{ingredients=JSON.parse(recipe.recipe_ingredients);}catch(e){}
           for (const ing of ingredients) {
-            const p = getProducts().find(x => x.product_name === ing.name);
+            const p = getProducts().find(x => namesMatch(x.product_name, ing.name));
             if (!p) continue;
             const storageUnit = p.storage_unit||p.unit;
             const deduct = convertQuantity(ing.qty*m.qty, ing.unit, storageUnit, getCustomConversions(p));
@@ -5479,8 +5497,15 @@ function lockFinanceiro() {
 function getFinanceCostedEntryIds() {
   return new Set(financeData.filter(r=>r.type==='costed_entry').map(r=>r.movement_id));
 }
+// Compara nomes ignorando espaços nas pontas e maiúscula/minúscula — protege contra o insumo
+// da receita estar cadastrado com uma pequena diferença (espaço a mais, "Chocolate quente" vs
+// "Chocolate Quente") do nome exato do insumo no estoque, o que faria o sistema achar que o
+// insumo "não existe" mesmo ele estando cadastrado.
+function namesMatch(a, b) {
+  return (a||'').trim().toLowerCase() === (b||'').trim().toLowerCase();
+}
 function getFinanceCostPrice(productName) {
-  const rec = financeData.find(r=>r.type==='cost' && r.product_name===productName);
+  const rec = financeData.find(r=>r.type==='cost' && namesMatch(r.product_name, productName));
   return rec ? { price: rec.cost_price, unit: rec.cost_unit, updatedAt: rec.cost_updated_at } : null;
 }
 function renderFinancePending() {
@@ -5761,16 +5786,40 @@ document.addEventListener('click', async (e) => {
 // Custo estimado de uma receita a partir do custo médio já lançado dos insumos (aba Custos
 // Pendentes). Extraído da aba CMV pra poder ser reaproveitado também no Faturamento (margem
 // por produto), sem duplicar a conta.
-function computeRecipeCost(recipe) {
+// Custo estimado de uma receita a partir do custo dos insumos. Pra cada ingrediente:
+// 1) se for um insumo PRODUZIDO internamente (tem linked_recipe_id, ex: Chocolate Quente que
+//    a gente também vende pronto), calcula o custo pela receita DELE — recursivamente — em vez
+//    de exigir um preço lançado manualmente em Custos Pendentes, já que esse insumo nunca é
+//    comprado. Isso é o mesmo critério já usado na aba Preço Médio > Produzidos.
+// 2) senão, usa o preço médio já lançado (Custos Pendentes / Preço Médio > Comprados).
+// _visited evita loop infinito caso duas receitas acabem se referenciando em círculo.
+function computeRecipeCost(recipe, _visited) {
+  const visited = _visited || new Set();
+  if (visited.has(recipe.id)) {
+    return { totalCost:0, costPerUnit:0, missing:[`${recipe.recipe_name} (referência circular entre receitas)`], hasAllCosts:false, yieldUnit:recipe.recipe_yield_unit };
+  }
+  visited.add(recipe.id);
   let ingredients=[]; try{ingredients=JSON.parse(recipe.recipe_ingredients);}catch(e){}
   let totalCost = 0; const missing = [];
   for (const ing of ingredients) {
-    const costRec = getFinanceCostPrice(ing.name);
-    if (!costRec) { missing.push(ing.name); continue; }
-    const product = getProducts().find(p=>p.product_name===ing.name);
-    const storageUnit = product ? (product.storage_unit||product.unit) : costRec.unit;
+    const product = getProducts().find(p=>namesMatch(p.product_name, ing.name));
+    let storageUnit = product ? (product.storage_unit||product.unit) : ing.unit;
+    let unitPrice = null;
+    if (product && product.linked_recipe_id) {
+      const subRecipe = getRecipes().find(r => r.id === product.linked_recipe_id);
+      if (!subRecipe) { missing.push(ing.name); continue; }
+      const subCost = computeRecipeCost(subRecipe, visited);
+      if (!subCost.hasAllCosts) { missing.push(...subCost.missing); continue; }
+      unitPrice = subCost.costPerUnit;
+      storageUnit = subCost.yieldUnit || storageUnit;
+    } else {
+      const costRec = getFinanceCostPrice(ing.name);
+      if (!costRec) { missing.push(ing.name); continue; }
+      unitPrice = costRec.price;
+      if (!product) storageUnit = costRec.unit;
+    }
     const qtyInStorageUnit = product ? convertQuantity(ing.qty, ing.unit, storageUnit, getCustomConversions(product)) : ing.qty;
-    totalCost += qtyInStorageUnit * costRec.price;
+    totalCost += qtyInStorageUnit * unitPrice;
   }
   const yieldQty = parseFloat(recipe.recipe_yield) || 1;
   const costPerUnit = totalCost / yieldQty;
@@ -5793,15 +5842,46 @@ function getProductCMV(productName) {
   return { costPerUnit: cost.costPerUnit, unit: cost.yieldUnit, recipeName: recipe.recipe_name };
 }
 function renderFinanceCMV() {
-  const el = document.getElementById('finance-cmv-list');
-  const rows = getRecipes().sort((a,b)=>a.recipe_name.localeCompare(b.recipe_name)).map(r => {
+  const searchEl = document.getElementById('cmv-search');
+  const filterEl = document.getElementById('cmv-filter');
+  if (searchEl) cmvSearch = searchEl.value.toLowerCase();
+  if (filterEl) cmvFilter = filterEl.value;
+
+  let rows = getRecipes().sort((a,b)=>a.recipe_name.localeCompare(b.recipe_name)).map(r => {
     const cost = computeRecipeCost(r);
     const saleRec = getFinanceSalePrice(r.recipe_name);
     return { recipe: r, totalCost: cost.totalCost, costPerUnit: cost.costPerUnit, missing: cost.missing, hasAllCosts: cost.hasAllCosts, saleRec };
   });
+
+  const statsEl = document.getElementById('cmv-stats');
+  if (statsEl) {
+    const total = rows.length;
+    const calculado = rows.filter(r => r.hasAllCosts).length;
+    const incompleto = total - calculado;
+    statsEl.innerHTML = `
+      <div class="stat-card-glow p-3.5"><p class="text-[10px] font-bold text-emerald-700 uppercase tracking-wide mb-1">Receitas</p><p class="text-xl font-bold text-stone-800">${total}</p></div>
+      <div class="stat-card-glow p-3.5"><p class="text-[10px] font-bold text-emerald-700 uppercase tracking-wide mb-1">Já calculado</p><p class="text-xl font-bold text-emerald-700">${calculado}</p></div>
+      <div class="stat-card-glow p-3.5"><p class="text-[10px] font-bold text-emerald-700 uppercase tracking-wide mb-1">Incompleto</p><p class="text-xl font-bold ${incompleto>0?'text-amber-600':'text-stone-400'}">${incompleto}</p></div>
+    `;
+  }
+
   // Resumo geral do faturamento capturado (soma de todas as receitas que já têm venda registrada)
   const totalFaturamento = rows.reduce((s,row)=>s+(row.saleRec?row.saleRec.totalRevenue:0),0);
   const summaryHtml = totalFaturamento > 0 ? `<div class="bg-emerald-50 rounded-xl p-4 border border-emerald-100 mb-4"><p class="text-[10px] font-bold text-emerald-700 uppercase tracking-wide mb-1">Faturamento total capturado</p><p class="text-xl font-bold text-emerald-800">${fmtCurrency(totalFaturamento)}</p></div>` : '';
+
+  if (cmvSearch) rows = rows.filter(r => r.recipe.recipe_name.toLowerCase().includes(cmvSearch));
+  if (cmvFilter === 'calculado') rows = rows.filter(r => r.hasAllCosts);
+  if (cmvFilter === 'incompleto') rows = rows.filter(r => !r.hasAllCosts);
+
+  const el = document.getElementById('finance-cmv-list');
+  const emptyEl = document.getElementById('finance-cmv-empty');
+  if (rows.length === 0) {
+    el.innerHTML = summaryHtml;
+    emptyEl.textContent = (cmvSearch || cmvFilter !== 'todos') ? 'Nada encontrado com esses filtros' : 'Nenhuma receita cadastrada ainda';
+    emptyEl.classList.remove('hidden');
+    return;
+  }
+  emptyEl.classList.add('hidden');
   el.innerHTML = summaryHtml + rows.map(row => {
     let marginHtml = '';
     if (row.hasAllCosts && row.saleRec && row.saleRec.price > 0) {
