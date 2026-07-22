@@ -3700,9 +3700,19 @@ function renderLosses() {
 // ============================================================
 let historyGroupByDay = false;
 // Extrai os itens de detalhe de uma movimentação (entrada/saída/produção/venda), já normalizados.
+// Em movimentações de Produção, batch_items guarda os ingredientes da receita "crua" (pra 1×),
+// não multiplicados pelo número de vezes que a receita foi feita — o desconto real do estoque
+// SEMPRE foi pela quantidade certa (ingrediente × vezes), isso aqui é só a lista que aparece em
+// "Detalhes" no histórico, que sem essa correção mostrava a quantidade de 1 receita só mesmo
+// quando foram feitas várias.
 function getMovementDetailItems(m) {
   let items = []; try { items = JSON.parse(m.batch_items || '[]'); } catch(e) {}
   if (!Array.isArray(items)) return [];
+  let times = 1;
+  if (m.movement_type === 'producao') {
+    const info = getProductionInfo(m);
+    if (info.times && info.times > 0) times = info.times;
+  }
   return items.map(it => {
     if (it.value && it.value.startsWith('recipe_')) {
       const recipe = allData.find(r=>r.id===it.value.replace('recipe_',''));
@@ -3711,7 +3721,7 @@ function getMovementDetailItems(m) {
     if (it.value && it.value.startsWith('finished_')) {
       return { name: it.name, qty: it.qty, unit: '' };
     }
-    return { name: it.name, qty: it.qty, unit: it.unit || '' };
+    return { name: it.name, qty: (parseFloat(it.qty)||0) * times, unit: it.unit || '' };
   });
 }
 // Pra movimentos de produção: acha a receita, calcula quantas vezes foi feita e o rendimento.
@@ -3959,10 +3969,15 @@ function getRecentProductMovements(product, limit) {
         const qty = parseFloat(m.production_real_yield || m.movement_quantity) || 0;
         moves.push({ date:new Date(m.movement_date), qty, sign:1, source:'👩\u200d🍳 Produção (produzido)', undone:isMovementUndone(m) });
       }
+      // batch_items guarda a receita "crua" (pra 1×) — precisa multiplicar pelo número de vezes
+      // que a receita foi feita de verdade, senão mostra só o consumo de 1 receita mesmo quando
+      // foram feitas várias (o desconto real do estoque já era pela quantidade certa; só essa
+      // listagem que não multiplicava — mesmo problema já corrigido em getMovementDetailItems).
       let ingredients=[]; try{ingredients=JSON.parse(m.batch_items||'[]');}catch(e){}
+      const prodTimes = getProductionInfo(m).times || 1;
       for (const ing of ingredients) {
         if (ing.name !== product.product_name) continue;
-        const qty = convertQuantity(ing.qty, ing.unit, storageUnit, getCustomConversions(product));
+        const qty = convertQuantity(ing.qty * prodTimes, ing.unit, storageUnit, getCustomConversions(product));
         moves.push({ date:new Date(m.movement_date), qty, sign:-1, source:`👩‍🍳 Produção: ${m.movement_product||'—'}`, undone:isMovementUndone(m) });
       }
     } else if (m.movement_type === 'venda') {
@@ -4056,10 +4071,15 @@ function computeCalculatedBalance(product, anchorDate, anchorQty) {
       if (m.movement_product === product.product_name) {
         balance += parseFloat(m.production_real_yield || m.movement_quantity) || 0;
       }
+      // batch_items guarda a receita "crua" (pra 1×) — precisa multiplicar pelo número de vezes
+      // que a receita foi feita de verdade, senão o saldo calculado aqui fica errado (mostrando
+      // menos consumo do que realmente aconteceu) e pode fazer parecer que tem uma diferença que
+      // não existe — mesmo problema já corrigido em getMovementDetailItems / getRecentProductMovements.
       let ingredients=[]; try{ingredients=JSON.parse(m.batch_items||'[]');}catch(e){}
+      const prodTimes = getProductionInfo(m).times || 1;
       for (const ing of ingredients) {
         if (ing.name !== product.product_name) continue;
-        balance -= convertQuantity(ing.qty, ing.unit, storageUnit, getCustomConversions(product));
+        balance -= convertQuantity(ing.qty * prodTimes, ing.unit, storageUnit, getCustomConversions(product));
       }
     } else if (m.movement_type === 'venda' && !isMovementUndone(m)) {
       let saleItems=[]; try{saleItems=JSON.parse(m.batch_items||'[]');}catch(e){}
@@ -4485,11 +4505,16 @@ function computeConsumptionForRange(startDate, endDate, weekdaysSet) {
         }
       }
     } else if (m.movement_type==='producao') {
+      // batch_items guarda a receita "crua" (pra 1×) — precisa multiplicar pelo número de vezes
+      // que a receita foi feita de verdade, senão o relatório de consumo mostra menos insumo
+      // gasto do que realmente foi (mesmo problema já corrigido nos outros lugares que leem
+      // batch_items de uma movimentação de produção).
       let ingredients=[]; try{ingredients=JSON.parse(m.batch_items||'[]');}catch(e){}
+      const prodTimes = getProductionInfo(m).times || 1;
       for (const ing of ingredients) {
         const prod = getProducts().find(p=>p.product_name===ing.name);
         const finalUnit = prod ? (prod.storage_unit || prod.unit) : ing.unit;
-        const totalQty = convertQuantity(ing.qty, ing.unit, finalUnit, getCustomConversions(prod));
+        const totalQty = convertQuantity(ing.qty * prodTimes, ing.unit, finalUnit, getCustomConversions(prod));
         // m.recipe_name não existe em movimentações (é campo de receita) — o nome certo do que
         // foi produzido fica em movement_product.
         addConsumption(ing.name, totalQty, finalUnit, prod?prod.category:'', dateStr, `👩‍🍳 Produção: ${m.movement_product||'—'}`);
