@@ -1211,11 +1211,15 @@ let consumptionCustomEndDate = null;
 // passageira (wifi engasgou, o Apps Script demorou um pouco mais que o normal pra responder), não
 // um erro de verdade no sistema. Tentar mais 2 vezes, com uma pausa curta entre elas, resolve a
 // maioria desses casos sem a pessoa nem perceber que algo deu errado.
-async function fetchWithRetry(url, maxRetries = 2) {
+async function fetchWithRetry(url, fetchOptions = null, maxRetries = 2) {
   let lastError;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      const res = await fetch(url);
+      // Apps Script redireciona toda resposta (inclusive de POST) — 'follow' garante que o
+      // corpo do redirecionamento seja lido normalmente em vez de virar um erro de rede.
+      const res = fetchOptions
+        ? await fetch(url, { redirect: 'follow', ...fetchOptions })
+        : await fetch(url);
       return await res.json();
     } catch (e) {
       lastError = e;
@@ -1239,10 +1243,20 @@ async function apiCall(action, data = {}) {
   if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === 'COLE_SUA_URL_AQUI') {
     throw new Error('URL do Apps Script não configurada');
   }
-  const params = new URLSearchParams({ action });
-  if (data.data) params.set('data', JSON.stringify(data.data));
-  if (data.id) params.set('id', data.id);
-  const json = await fetchWithRetry(`${APPS_SCRIPT_URL}?${params.toString()}`);
+  // Leitura continua por GET (não tem problema de tamanho, e assim não muda nada nesse caminho).
+  // Ações de escrita vão por POST — o corpo da requisição não tem o limite de tamanho que a URL
+  // do GET tem, o que evita o "Failed to fetch" em vendas em lote com muitos itens (a requisição
+  // nem chegava a sair do navegador antes, por a URL montada ficar grande demais).
+  if (action === 'getAll') {
+    const params = new URLSearchParams({ action });
+    const json = await fetchWithRetry(`${APPS_SCRIPT_URL}?${params.toString()}`);
+    if (json.error) throw new Error(json.error);
+    return json;
+  }
+  const body = { action };
+  if (data.data) body.data = data.data;
+  if (data.id) body.id = data.id;
+  const json = await fetchWithRetry(APPS_SCRIPT_URL, { method: 'POST', body: JSON.stringify(body) });
   if (json.error) throw new Error(json.error);
   return json;
 }
@@ -4974,10 +4988,17 @@ function fmtCurrency(v) {
 }
 async function financeApiCall(action, data = {}) {
   if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === 'COLE_SUA_URL_AQUI') throw new Error('URL do Apps Script não configurada');
-  const params = new URLSearchParams({ action, sheet: 'Financeiro', password: financePassword });
-  if (data.data) params.set('data', JSON.stringify(data.data));
-  if (data.id) params.set('id', data.id);
-  const json = await fetchWithRetry(`${APPS_SCRIPT_URL}?${params.toString()}`);
+  // Mesma ideia do apiCall: leitura por GET, escrita por POST (sem limite de tamanho de URL).
+  if (action === 'getAll') {
+    const params = new URLSearchParams({ action, sheet: 'Financeiro', password: financePassword });
+    const json = await fetchWithRetry(`${APPS_SCRIPT_URL}?${params.toString()}`);
+    if (json.error) throw new Error(json.error);
+    return json;
+  }
+  const body = { action, sheet: 'Financeiro', password: financePassword };
+  if (data.data) body.data = data.data;
+  if (data.id) body.id = data.id;
+  const json = await fetchWithRetry(APPS_SCRIPT_URL, { method: 'POST', body: JSON.stringify(body) });
   if (json.error) throw new Error(json.error);
   return json;
 }
