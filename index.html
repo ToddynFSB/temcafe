@@ -553,7 +553,7 @@
   <nav id="finance-nav" class="max-w-7xl mx-auto px-4 pt-3 pb-1 hidden">
     <div class="nav-grid">
       <button class="finance-tab-btn finance-tab-active px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="dre"><i data-lucide="scale" class="w-5 h-5"></i>DRE</button>
-      <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="custos"><i data-lucide="banknote" class="w-5 h-5"></i>Custos Pendentes</button>
+      <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="custos"><i data-lucide="banknote" class="w-5 h-5"></i>Custos de Estoque</button>
       <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="precos"><i data-lucide="tags" class="w-5 h-5"></i>Preço Médio</button>
       <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="cmv"><i data-lucide="percent" class="w-5 h-5"></i>CMV</button>
       <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="vendas"><i data-lucide="credit-card" class="w-5 h-5"></i>Vendas</button>
@@ -574,15 +574,38 @@
       <button onclick="unlockFinanceiro()" class="w-full px-4 py-2.5 rounded-lg text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 transition-colors">Entrar</button>
     </div>
 
-    <!-- Sub-aba: Custos Pendentes -->
+    <!-- Sub-aba: Custos de Estoque -->
     <section id="fpanel-custos" class="hidden fade-in">
       <div class="flex items-center justify-between mb-4">
-        <h2 class="text-lg font-bold text-stone-800 flex items-center gap-2"><i data-lucide="banknote" class="w-5 h-5 text-emerald-600"></i>Custos Pendentes</h2>
+        <h2 class="text-lg font-bold text-stone-800 flex items-center gap-2"><i data-lucide="banknote" class="w-5 h-5 text-emerald-600"></i>Custos de Estoque</h2>
         <button onclick="lockFinanceiro()" class="text-xs text-stone-400 hover:text-stone-600 flex items-center gap-1"><i data-lucide="lock" class="w-3.5 h-3.5"></i>Bloquear</button>
       </div>
       <p class="text-xs text-stone-400 mb-4">Entradas de estoque recentes que ainda não têm o preço pago lançado. Preencha com base na nota fiscal — se você já lançou esse insumo antes, o valor já vem pré-preenchido com o último preço.</p>
       <div id="finance-pending-list" class="space-y-4"></div>
       <div id="finance-pending-empty" class="hidden text-stone-400 text-center py-10 text-sm">🎉 Nenhuma entrada pendente de custo</div>
+
+      <!-- Custo avulso: gasto ligado ao estoque mas sem receita/venda pra vincular (taxa de entrega,
+           insumo fora do cardápio, perda não rastreada) — desconta na hora no DRE, igual Despesas,
+           só que numa linha separada pra não misturar com contas fixas (aluguel, água, luz). -->
+      <div class="mt-8 pt-6 border-t border-stone-200">
+        <h3 class="font-semibold text-stone-800 text-sm mb-1 flex items-center gap-2"><i data-lucide="package-minus" class="w-4 h-4 text-emerald-600"></i>Lançar custo avulso</h3>
+        <p class="text-xs text-stone-400 mb-4">Pra custos ligados ao estoque que não valem uma receita ou não têm venda pra vincular — taxa de entrega, insumo fora do cardápio, perda não rastreada. Entra direto no DRE, sem esperar uma venda.</p>
+        <div class="bg-white rounded-xl p-5 shadow-sm border border-stone-100 mb-5">
+          <form onsubmit="handleAddStockCost(event)">
+            <div class="grid sm:grid-cols-2 gap-3 mb-3">
+              <input id="new-stockcost-desc" type="text" placeholder="Descrição *" required class="input-field text-sm">
+              <select id="new-stockcost-category" required class="input-field text-sm" onchange="toggleStockCostCustomCategory()"><option value="">Categoria *</option></select>
+            </div>
+            <input id="new-stockcost-category-custom" type="text" placeholder="Nome da nova categoria *" class="input-field text-sm w-full mb-3 hidden">
+            <div class="grid sm:grid-cols-2 gap-3 mb-4">
+              <div class="relative"><span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-stone-400">R$</span><input id="new-stockcost-amount" type="number" placeholder="Valor" min="0.01" step="any" required class="input-field text-sm w-full pl-9"></div>
+              <input id="new-stockcost-date" type="date" required class="input-field text-sm">
+            </div>
+            <div class="flex gap-2"><button type="submit" class="btn-primary px-5 py-2.5 rounded-lg text-sm font-medium">Salvar Custo Avulso</button></div>
+          </form>
+        </div>
+        <div id="stock-costs-list" class="space-y-2"></div>
+      </div>
     </section>
 
     <!-- Sub-aba: Preço Médio de Insumos -->
@@ -783,6 +806,7 @@
         <button class="dre-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-800 text-white" data-filter="7days">7 dias</button>
         <button class="dre-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-filter="30days">30 dias</button>
         <button class="dre-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-filter="month">Este mês</button>
+        <button class="dre-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-filter="year">Este ano</button>
       </div>
       <div id="dre-content"></div>
     </section>
@@ -801,6 +825,17 @@
             <select id="new-expense-category" required class="input-field text-sm" onchange="toggleExpenseCustomCategory()"><option value="">Categoria *</option></select>
           </div>
           <input id="new-expense-category-custom" type="text" placeholder="Nome da nova categoria *" class="input-field text-sm w-full mb-3 hidden">
+          <div class="mb-3">
+            <label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Grupo no DRE *</label>
+            <select id="new-expense-dre-group" required class="input-field text-sm w-full">
+              <option value="">Selecione o grupo *</option>
+              <option value="fixa">Despesa Fixa (aluguel, utilidades...)</option>
+              <option value="imposto">Imposto</option>
+              <option value="extra">Despesa Extra (manutenção, marketing, limpeza...)</option>
+              <option value="cmo">CMO — Mão de Obra</option>
+            </select>
+            <p class="text-[11px] text-stone-400 mt-1">Define em qual linha do DRE esse gasto entra. CMO normalmente não precisa ser lançado aqui à mão — o Registro Semanal em Funcionários já lança automaticamente.</p>
+          </div>
           <div class="grid sm:grid-cols-2 gap-3 mb-4">
             <div class="relative"><span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-stone-400">R$</span><input id="new-expense-amount" type="number" placeholder="Valor" min="0.01" step="any" required class="input-field text-sm w-full pl-9"></div>
             <input id="new-expense-date" type="date" required class="input-field text-sm">
@@ -834,39 +869,39 @@
       <div class="bg-white rounded-xl p-5 shadow-sm border border-stone-100 mb-5">
         <h3 class="font-semibold mb-4 text-stone-800 text-sm">Cadastrar Funcionário</h3>
         <form onsubmit="handleAddEmployee(event)">
-          <input id="new-emp-name" type="text" placeholder="Nome *" required class="input-field text-sm w-full mb-3">
-          <div class="grid sm:grid-cols-2 gap-3 mb-3">
-            <select id="new-emp-pay-type" required class="input-field text-sm" onchange="updateEmployeePayValueLabel()">
-              <option value="">Tipo de pagamento *</option>
-              <option value="mensal">Mensal fixo (CLT)</option>
-              <option value="diaria">Diária</option>
-              <option value="comissao">Comissão (%)</option>
-            </select>
-            <div class="relative"><span id="new-emp-pay-value-prefix" class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-stone-400">R$</span><input id="new-emp-pay-value" type="number" placeholder="Valor *" min="0" step="any" required class="input-field text-sm w-full pl-9"></div>
+          <div class="grid sm:grid-cols-2 gap-3 mb-4">
+            <input id="new-emp-name" type="text" placeholder="Nome *" required class="input-field text-sm">
+            <div class="relative"><span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-stone-400">R$</span><input id="new-emp-pay-value" type="number" placeholder="Valor da hora *" min="0" step="any" required class="input-field text-sm w-full pl-9"></div>
           </div>
-          <p class="text-xs text-stone-500 mb-1.5" id="new-emp-pay-value-hint"></p>
-          <div class="mb-3">
-            <p class="text-xs font-semibold text-stone-600 uppercase tracking-wide mb-1.5">Dias trabalhados</p>
-            <div class="flex flex-wrap gap-1.5" id="new-emp-work-days">
-              <label class="flex items-center gap-1 text-xs bg-stone-50 border border-stone-200 rounded-lg px-2 py-1.5 cursor-pointer"><input type="checkbox" value="0" class="emp-workday-cb">Dom</label>
-              <label class="flex items-center gap-1 text-xs bg-stone-50 border border-stone-200 rounded-lg px-2 py-1.5 cursor-pointer"><input type="checkbox" value="1" class="emp-workday-cb" checked>Seg</label>
-              <label class="flex items-center gap-1 text-xs bg-stone-50 border border-stone-200 rounded-lg px-2 py-1.5 cursor-pointer"><input type="checkbox" value="2" class="emp-workday-cb" checked>Ter</label>
-              <label class="flex items-center gap-1 text-xs bg-stone-50 border border-stone-200 rounded-lg px-2 py-1.5 cursor-pointer"><input type="checkbox" value="3" class="emp-workday-cb" checked>Qua</label>
-              <label class="flex items-center gap-1 text-xs bg-stone-50 border border-stone-200 rounded-lg px-2 py-1.5 cursor-pointer"><input type="checkbox" value="4" class="emp-workday-cb" checked>Qui</label>
-              <label class="flex items-center gap-1 text-xs bg-stone-50 border border-stone-200 rounded-lg px-2 py-1.5 cursor-pointer"><input type="checkbox" value="5" class="emp-workday-cb" checked>Sex</label>
-              <label class="flex items-center gap-1 text-xs bg-stone-50 border border-stone-200 rounded-lg px-2 py-1.5 cursor-pointer"><input type="checkbox" value="6" class="emp-workday-cb">Sáb</label>
-            </div>
-          </div>
-          <div class="grid sm:grid-cols-2 gap-3 mb-3">
-            <input id="new-emp-work-hours" type="text" placeholder="Horário (ex: 08:00–17:00)" class="input-field text-sm">
-            <input id="new-emp-start-date" type="date" class="input-field text-sm">
-          </div>
-          <textarea id="new-emp-notes" rows="2" placeholder="Observações (opcional)" class="w-full input-field text-sm resize-none mb-4"></textarea>
           <div class="flex gap-2"><button type="submit" class="btn-primary px-5 py-2.5 rounded-lg text-sm font-medium">Salvar Funcionário</button></div>
         </form>
       </div>
       <h3 class="font-semibold mb-3 text-stone-800 text-sm">Funcionários Cadastrados</h3>
-      <div id="employees-list" class="space-y-3"></div>
+      <div id="employees-list" class="space-y-2 mb-8"></div>
+
+      <!-- Registro Semanal: só histórico de horas/pagamento — nenhum cálculo daqui alimenta o DRE
+           nem gera despesa automática. Rateio e folha continuam sendo feitos numa planilha externa. -->
+      <div class="pt-6 border-t border-stone-200">
+        <h3 class="font-semibold text-stone-800 text-sm mb-1 flex items-center gap-2"><i data-lucide="clock" class="w-4 h-4 text-emerald-600"></i>Registro Semanal</h3>
+        <p class="text-xs text-stone-400 mb-4">Histórico de horas trabalhadas e pagamento por semana. Só registro — não gera despesa nem alimenta o DRE automaticamente.</p>
+        <div class="bg-white rounded-xl p-5 shadow-sm border border-stone-100 mb-5">
+          <div class="grid sm:grid-cols-2 gap-3 mb-4">
+            <select id="week-emp-select" class="input-field text-sm" onchange="updateWeekTotalsPreview()"><option value="">Selecione o funcionário *</option></select>
+            <input id="week-ref-date" type="date" class="input-field text-sm">
+          </div>
+          <p class="text-xs font-semibold text-stone-600 uppercase tracking-wide mb-1.5">Dias / registros da semana</p>
+          <div id="week-days-container" class="space-y-2 mb-2"></div>
+          <button type="button" onclick="addWeekDayRow()" class="text-xs font-medium flex items-center gap-1 mb-4 btn-ghost px-3 py-1.5 rounded-lg"><i data-lucide="plus" class="w-3.5 h-3.5"></i>Adicionar dia / registro</button>
+          <div class="mb-4">
+            <label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Taxa de serviço da semana (opcional — valor único, não é por dia)</label>
+            <div class="relative w-full sm:w-56"><span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-stone-400">R$</span><input id="week-service-tax" type="number" min="0" step="any" placeholder="0,00" class="input-field text-sm w-full pl-9" oninput="updateWeekTotalsPreview()"></div>
+          </div>
+          <div id="week-totals-preview" class="p-3 rounded-lg bg-stone-50 border border-stone-200 text-sm mb-4"></div>
+          <div class="flex gap-2"><button type="button" onclick="handleSaveWeeklyTimesheet()" class="btn-primary px-5 py-2.5 rounded-lg text-sm font-medium">Salvar Registro Semanal</button></div>
+        </div>
+        <h3 class="font-semibold mb-3 text-stone-800 text-sm">Registros Semanais</h3>
+        <div id="weekly-timesheets-list" class="space-y-3"></div>
+      </div>
     </section>
   </main>
 </div>
@@ -941,6 +976,22 @@
       <div class="flex gap-2">
         <button onclick="confirmRetroactiveStockDeduction()" class="flex-1 px-4 py-2.5 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700">Descontar Estoque</button>
         <button onclick="closeRetroactiveStockModal()" class="flex-1 btn-ghost px-4 py-2.5 rounded-lg text-sm font-medium">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Registrar faturamento retroativo (venda com estoque já descontado, mas sem o valor
+       lançado em Faturamento/DRE — ex: quando a gravação do valor falhou silenciosamente). Só mexe
+       em sale_price/sale_revenue, nunca em estoque, então é seguro repetir sem medo de descontar de novo. -->
+  <div id="retroactive-revenue-modal" class="hidden fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl p-6 w-full max-w-lg shadow-2xl max-h-[85vh] overflow-y-auto">
+      <h3 class="font-bold mb-1 text-stone-800 text-lg">💰 Registrar Faturamento</h3>
+      <p class="text-xs text-stone-500 mb-4">Isso só lança o <strong>valor</strong> da venda em Faturamento/DRE — o estoque não é tocado de novo. Confira/edite o valor total de cada item antes de confirmar.</p>
+      <p id="retroactive-revenue-warning" class="hidden text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">⚠️ Essa venda já parece ter faturamento registrado nesse dia. Confira antes de lançar de novo pra não duplicar.</p>
+      <div id="retroactive-revenue-list" class="space-y-2 max-h-[50vh] overflow-y-auto mb-4"></div>
+      <div class="flex gap-2">
+        <button onclick="confirmRetroactiveRevenue()" class="flex-1 px-4 py-2.5 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">Registrar Faturamento</button>
+        <button onclick="closeRetroactiveRevenueModal()" class="flex-1 btn-ghost px-4 py-2.5 rounded-lg text-sm font-medium">Cancelar</button>
       </div>
     </div>
   </div>
@@ -3296,6 +3347,7 @@ function renderSalesToday() {
       const undone=isMovementUndone(m);
       const isRetro=(m.movement_note||'').includes('🔧 Baixa retroativa');
       const applied=movementStockApplied(m);
+      const revApplied=revenueApplied(m);
       const canApply = !undone && !isRetro;
       return `<div class="p-4 bg-white rounded-xl shadow-sm border border-stone-100 card-hover ${undone?'opacity-50':''}">
         <div class="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-1">
@@ -3303,6 +3355,7 @@ function renderSalesToday() {
           <div class="flex flex-col items-start sm:items-end gap-1 flex-shrink-0">
             <span class="text-xs text-stone-400 whitespace-nowrap">${d.toLocaleDateString('pt-BR')} ${d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</span>
             ${canApply ? `<div class="flex items-center gap-1.5">${applied?'<span class="text-[10px] text-emerald-600">✓ já marcado</span>':''}<button onclick="openApplyStockToSaleModal('${m.id}')" class="text-[11px] text-amber-700 hover:text-amber-800 font-medium flex items-center gap-0.5">🔧 Descontar Estoque</button></div>` : ''}
+            ${canApply && !isRetro ? `<div class="flex items-center gap-1.5">${revApplied?'<span class="text-[10px] text-emerald-600">✓ faturamento marcado</span>':''}<button onclick="openApplyRevenueToSaleModal('${m.id}')" class="text-[11px] text-emerald-700 hover:text-emerald-800 font-medium flex items-center gap-0.5">💰 Registrar Faturamento</button></div>` : ''}
           </div>
         </div>
         <p class="text-sm text-stone-700 mt-1 break-words">${m.movement_product}</p>
@@ -3722,30 +3775,52 @@ async function processBulkSales(priceHints, prebuiltSalesData) {
       throw new Error(batchResult.error || `${batchResult.failedCount||'algumas'} operação(ões) falharam ao gravar em lote`);
     }
     // Se veio da importação de planilha com "Valor Total", aproveita e já registra o valor de venda
-    // (pra alimentar o faturamento e a margem no CMV), sem precisar digitar preço manualmente.
+    // (pra alimentar o Faturamento/DRE e a margem no CMV), sem precisar digitar preço manualmente.
+    // IMPORTANTE: preço médio (sale_price) e faturamento do dia (sale_revenue) vão NUMA VIAGEM SÓ
+    // — antes eram duas chamadas separadas, cada uma engolindo erro em silêncio (só console.error).
+    // Se qualquer uma falhasse (rede, trava concorrente no Apps Script, etc.), a venda aparecia
+    // 100% registrada (estoque descontado, "✓ processada!") mas Faturamento/DRE ficavam sem o
+    // valor, sem nenhum aviso — exatamente o tipo de bug impossível de perceber na hora. Combinando
+    // numa chamada só: ou os dois tipos de registro são gravados juntos, ou nenhum é, E se falhar
+    // isso agora aparece bem visível no resultado (não só no console).
+    let financeSaveFailed = false;
+    let financeSaveError = '';
     if (priceHints && priceHints.length && financeUnlocked) {
       updateLoadingProgress('Salvando valores de venda...');
       const uncontrolledNameSet = new Set(salesData.filter(s=>s.type==='uncontrolled').map(s=>s.name));
       const controlledHints = priceHints.filter(h => !uncontrolledNameSet.has(h.systemName));
-      try { await saveSalePrices(controlledHints); } catch (e) { console.error('Erro ao salvar preços de venda:', e); }
       const hintsWithUnit = priceHints.map(h => {
         const s = salesData.find(sd => sd.name === h.systemName);
         return { ...h, unit: s ? s.unit : '' };
       });
-      try { await saveSaleRevenue(hintsWithUnit, saleDate); } catch (e) { console.error('Erro ao salvar faturamento diário:', e); }
+      const revenueOps = [...buildSalePriceOperations(controlledHints), ...buildSaleRevenueOperations(hintsWithUnit, saleDate)];
+      if (revenueOps.length > 0) {
+        const revenueResult = await financeBatchWrite(revenueOps);
+        if (!revenueResult.isOk) {
+          financeSaveFailed = true;
+          financeSaveError = revenueResult.error || 'falha ao gravar';
+          console.error('Erro ao salvar faturamento/preço de venda:', financeSaveError);
+        }
+      }
     }
     // Uma única renderização no final, em vez de uma a cada insumo descontado — é isso que deixava
     // vendas grandes (muitos itens/insumos) lentas, principalmente com o histórico já grande.
     renderAll();
     const feedbackEl = document.getElementById('bulk-sales-feedback');
     document.getElementById('bulk-feedback-title').textContent = `✓ ${salesData.length} venda(s) registrada(s)${notFound.length>0?` (${notFound.length} não encontrado(s))`:''}`;
-    document.getElementById('bulk-feedback-content').innerHTML = `<div class="p-2 bg-emerald-50 rounded border border-emerald-200"><strong class="text-emerald-700">Processados:</strong> ${salesData.map(s=>`${s.qty} ${s.name}`).join(', ')}</div>${notFound.length>0?`<div class="p-2 bg-red-50 rounded border border-red-200"><strong class="text-red-700">Não encontrados:</strong> ${notFound.join(', ')}</div>`:''}${stockShortfalls.length>0?`<div class="p-2 bg-amber-50 rounded border border-amber-200"><strong class="text-amber-700">⚠️ Foram até zero (venda ocorreu, mas o estoque não tinha o suficiente):</strong><br>${stockShortfalls.join('<br>')}</div>`:''}`;
+    document.getElementById('bulk-feedback-content').innerHTML = `<div class="p-2 bg-emerald-50 rounded border border-emerald-200"><strong class="text-emerald-700">Processados:</strong> ${salesData.map(s=>`${s.qty} ${s.name}`).join(', ')}</div>${notFound.length>0?`<div class="p-2 bg-red-50 rounded border border-red-200"><strong class="text-red-700">Não encontrados:</strong> ${notFound.join(', ')}</div>`:''}${stockShortfalls.length>0?`<div class="p-2 bg-amber-50 rounded border border-amber-200"><strong class="text-amber-700">⚠️ Foram até zero (venda ocorreu, mas o estoque não tinha o suficiente):</strong><br>${stockShortfalls.join('<br>')}</div>`:''}${financeSaveFailed?`<div class="p-2 bg-red-50 rounded border border-red-200"><strong class="text-red-700">⚠️ Faturamento NÃO foi salvo:</strong> estoque descontado normalmente, mas o valor desta venda não entrou em Faturamento/DRE (erro: ${financeSaveError}). Use "💰 Registrar faturamento retroativo" na lista de vendas pra corrigir, sem mexer no estoque de novo.</div>`:''}`;
     feedbackEl.classList.remove('hidden');
     hideLoadingProgress();
     salesSubmitInProgress = false;
     document.getElementById('bulk-sales-textarea').value = '';
     renderSalesToday();
-    if (stockShortfalls.length > 0) {
+    if (financeSaveFailed) {
+      showResultModal('⚠️ Venda registrada, mas o faturamento falhou', [
+        `Estoque descontado normalmente pra ${salesData.length} item(ns) — isso está certo.`,
+        `O valor desta venda NÃO entrou em Faturamento/DRE (erro: ${financeSaveError}).`,
+        'Use "💰 Registrar faturamento retroativo" na lista de vendas (abaixo) pra lançar só o valor, sem descontar o estoque de novo.'
+      ], true);
+    } else if (stockShortfalls.length > 0) {
       showResultModal(`✓ ${salesData.length} venda(s) processada(s), mas ${stockShortfalls.length} insumo(s) foram até zero`, stockShortfalls, false);
     } else {
       showToast(`${salesData.length} venda(s) processada(s)!`);
@@ -4882,12 +4957,40 @@ async function confirmDelete() {
       if (result.ok) { financeData = financeData.filter(r => r.id !== ex.id); renderExpenses(); renderDRE(); showToast('Gasto excluído!'); }
       else showToast('Erro ao excluir', true);
     }
+  } else if (deleteType === 'stock_cost') {
+    const sc = financeData.find(r => r.id === deleteId);
+    if (sc) {
+      const result = await financeApiCall('delete', { id: sc.id });
+      if (result.ok) { financeData = financeData.filter(r => r.id !== sc.id); renderStockCosts(); renderDRE(); showToast('Custo avulso excluído!'); }
+      else showToast('Erro ao excluir', true);
+    }
   } else if (deleteType === 'employee') {
     const emp = financeData.find(r => r.id === deleteId);
     if (emp) {
       const result = await financeApiCall('delete', { id: emp.id });
       if (result.ok) { financeData = financeData.filter(r => r.id !== emp.id); renderEmployees(); showToast('Funcionário excluído!'); }
       else showToast('Erro ao excluir', true);
+    }
+  } else if (deleteType === 'weekly_timesheet') {
+    const w = financeData.find(r => r.id === deleteId);
+    if (w) {
+      // Acha a despesa de CMO gerada junto (mesma spreadsheet_name = correlação criada na hora de
+      // salvar) e apaga as duas — senão a despesa fica órfã no DRE, contando um CMO sem o registro
+      // semanal que deu origem a ele.
+      const linkedExpense = w.spreadsheet_name ? financeData.find(r => r.type==='expense' && r.spreadsheet_name === w.spreadsheet_name) : null;
+      const result = await financeApiCall('delete', { id: w.id });
+      if (result.ok) {
+        financeData = financeData.filter(r => r.id !== w.id);
+        if (linkedExpense) {
+          const result2 = await financeApiCall('delete', { id: linkedExpense.id });
+          if (result2.ok) financeData = financeData.filter(r => r.id !== linkedExpense.id);
+          else showToast('Registro semanal excluído, mas a despesa de CMO vinculada não pôde ser removida — confira em Gastos', true);
+        }
+        renderWeeklyTimesheets();
+        renderExpenses();
+        if (activeFinanceTab === 'dre') renderDRE();
+        showToast('Registro semanal excluído!');
+      } else showToast('Erro ao excluir', true);
     }
   }
   pendingDeleteId = null; pendingDeleteType = null;
@@ -5048,7 +5151,10 @@ function getFinanceSalePrice(productName) {
   const rec = financeData.find(r => r.type==='sale_price' && r.product_name===productName);
   return rec ? { price: rec.sale_price, totalQty: rec.total_qty_sold, totalRevenue: rec.total_revenue, updatedAt: rec.sale_price_updated_at } : null;
 }
-async function saveSalePrices(items) {
+// Monta (sem gravar nada ainda) as operações de atualização do preço médio acumulado por produto.
+// Separado de financeBatchWrite pra poder ser somado com buildSaleRevenueOperations e ir tudo
+// numa viagem só — ver o comentário grande logo abaixo, no ponto onde as duas são combinadas.
+function buildSalePriceOperations(items) {
   const operations = [];
   const nowIso = new Date().toISOString();
   for (const it of items) {
@@ -5058,15 +5164,12 @@ async function saveSalePrices(items) {
     const newTotalRevenue = (existing ? (existing.total_revenue||0) : 0) + it.totalValue;
     const avgPrice = newTotalQty > 0 ? newTotalRevenue / newTotalQty : 0;
     if (existing) {
-      const updated = { ...existing, total_qty_sold:newTotalQty, total_revenue:newTotalRevenue, sale_price:avgPrice, sale_price_updated_at:nowIso };
-      operations.push({ op:'update', data: updated });
-      Object.assign(existing, updated);
+      operations.push({ op:'update', data: { ...existing, total_qty_sold:newTotalQty, total_revenue:newTotalRevenue, sale_price:avgPrice, sale_price_updated_at:nowIso } });
     } else {
-      const data = { type:'sale_price', product_name:it.systemName, total_qty_sold:newTotalQty, total_revenue:newTotalRevenue, sale_price:avgPrice, sale_price_updated_at:nowIso };
-      operations.push({ op:'create', data });
+      operations.push({ op:'create', data: { type:'sale_price', product_name:it.systemName, total_qty_sold:newTotalQty, total_revenue:newTotalRevenue, sale_price:avgPrice, sale_price_updated_at:nowIso } });
     }
   }
-  if (operations.length > 0) await financeBatchWrite(operations);
+  return operations;
 }
 // Registra o faturamento do dia, item a item (inclusive itens não controlados), pra alimentar o
 // gráfico e o detalhamento da aba Faturamento. Reaproveita as colunas já existentes da aba
@@ -5074,13 +5177,13 @@ async function saveSalePrices(items) {
 //   type='sale_revenue' -> {id, product_name, cost_unit (=unidade), sale_price (=preço unitário
 //   dessa venda), total_qty_sold (=qtd vendida NESSA entrada, não acumulado), total_revenue (=valor
 //   total dessa entrada), sale_price_updated_at (=data da venda, formato YYYY-MM-DD)}
+// Mesma ideia de buildSalePriceOperations: só monta, não grava.
 function getSaleRevenueEntries() { return financeData.filter(r => r.type === 'sale_revenue'); }
-async function saveSaleRevenue(items, saleDate) {
+function buildSaleRevenueOperations(items, saleDate) {
   const dateStr = localDateStr(saleDate);
-  const operations = items
+  return items
     .filter(it => it.totalValue && it.totalValue > 0 && it.qty)
     .map(it => ({ op:'create', data: { type:'sale_revenue', product_name:it.systemName, cost_unit:it.unit||'', sale_price: it.totalValue/it.qty, total_qty_sold:it.qty, total_revenue:it.totalValue, sale_price_updated_at:dateStr } }));
-  if (operations.length > 0) await financeBatchWrite(operations);
 }
 // ============================================================
 // ABA FATURAMENTO — gráfico por dia + detalhe do dia selecionado
@@ -5092,6 +5195,7 @@ function faturamentoRangeForFilter(filter) {
   let start = new Date(end);
   if (filter === '30days') start.setDate(end.getDate() - 29);
   else if (filter === 'month') start = new Date(end.getFullYear(), end.getMonth(), 1, 12, 0, 0);
+  else if (filter === 'year') start = new Date(end.getFullYear(), 0, 1, 12, 0, 0);
   else if (filter === 'all') {
     const dates = getSaleRevenueEntries().map(e => e.sale_price_updated_at).filter(Boolean).sort();
     start = dates.length ? parseLocalDate(dates[0]) : new Date(end);
@@ -5354,6 +5458,80 @@ let retroactiveStockMatched = [];
 function movementStockApplied(m) {
   return (m.movement_note||'').includes('🔧[estoque aplicado');
 }
+// ============================================================
+// REGISTRAR FATURAMENTO RETROATIVO — mirror de "Descontar Estoque" retroativo, só que ao contrário:
+// a venda já existe e o estoque já foi descontado (normal, aconteceu certinho), mas o valor não
+// chegou a entrar em sale_price/sale_revenue (Faturamento/DRE) — o caso que o fix acima em
+// processBulkSales existe pra não deixar acontecer de novo, mas isso não conserta vendas antigas
+// que já passaram por esse bug. Só mexe em sale_price/sale_revenue — NUNCA em estoque — então é
+// seguro repetir sem risco de descontar insumo de novo.
+// ============================================================
+function revenueApplied(m) {
+  return (m.movement_note||'').includes('💰[faturamento aplicado');
+}
+let retroactiveRevenueMovementId = null;
+let retroactiveRevenueItems = [];
+function openApplyRevenueToSaleModal(movementId) {
+  const m = allData.find(r => r.id === movementId); if (!m) return;
+  retroactiveRevenueMovementId = movementId;
+  let batchItems = []; try { batchItems = JSON.parse(m.batch_items||'[]'); } catch(e){}
+  retroactiveRevenueItems = batchItems.map(it => {
+    // Pré-preenche com o último preço médio conhecido desse produto, igual Custos Pendentes já
+    // faz com custo de insumo — só um ponto de partida, sempre editável antes de confirmar.
+    const last = getFinanceSalePrice(it.name);
+    const suggested = last && last.price > 0 ? +(last.price * it.qty).toFixed(2) : '';
+    return { name: it.name, qty: it.qty, unit: it.unit || '', value: suggested };
+  });
+  const dayKey = localDateStr(new Date(m.movement_date));
+  const alreadyHasRevenue = getSaleRevenueEntries().some(e => e.sale_price_updated_at === dayKey && retroactiveRevenueItems.some(it => namesMatch(it.name, e.product_name)));
+  document.getElementById('retroactive-revenue-warning').classList.toggle('hidden', !alreadyHasRevenue);
+  renderRetroactiveRevenueList();
+  document.getElementById('retroactive-revenue-modal').classList.remove('hidden');
+  lucide.createIcons();
+}
+function renderRetroactiveRevenueList() {
+  const el = document.getElementById('retroactive-revenue-list'); if (!el) return;
+  el.innerHTML = retroactiveRevenueItems.length === 0
+    ? '<p class="text-sm text-stone-400 text-center py-6">Nenhum item pra lançar aqui.</p>'
+    : retroactiveRevenueItems.map((it, i) => `
+      <div class="p-2.5 rounded-lg border border-stone-200 bg-stone-50 flex items-center justify-between gap-2 text-sm">
+        <span class="min-w-0 truncate">${fmtQty(it.qty,'')}× ${it.name}</span>
+        <div class="relative flex-shrink-0 w-28"><span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-stone-400">R$</span><input type="number" min="0" step="any" value="${it.value}" oninput="retroactiveRevenueItems[${i}].value=this.value" class="input-field text-sm w-full pl-7 py-1.5"></div>
+      </div>`).join('');
+}
+function closeRetroactiveRevenueModal() {
+  document.getElementById('retroactive-revenue-modal').classList.add('hidden');
+  document.getElementById('retroactive-revenue-warning').classList.add('hidden');
+  retroactiveRevenueMovementId = null;
+  retroactiveRevenueItems = [];
+}
+async function confirmRetroactiveRevenue() {
+  const m = allData.find(r => r.id === retroactiveRevenueMovementId);
+  if (!m) { closeRetroactiveRevenueModal(); return; }
+  const saleDate = new Date(m.movement_date);
+  const priceHints = retroactiveRevenueItems
+    .map(it => ({ systemName: it.name, qty: it.qty, totalValue: parseFloat(it.value), unit: it.unit }))
+    .filter(h => !isNaN(h.totalValue) && h.totalValue > 0 && h.qty);
+  if (priceHints.length === 0) { showToast('Preencha o valor de pelo menos um item', true); return; }
+  closeRetroactiveRevenueModal();
+  showLoadingProgress('Registrando faturamento...');
+  try {
+    const revenueOps = [...buildSalePriceOperations(priceHints), ...buildSaleRevenueOperations(priceHints, saleDate)];
+    const result = await financeBatchWrite(revenueOps);
+    if (!result.isOk) throw new Error(result.error || 'falha ao gravar');
+    // Marca a venda como conferida, pra ficar rastreável e não parecer que ainda falta lançar —
+    // mesmo padrão do 🔧[estoque aplicado] já usado no mirror desta feature.
+    assertSaved(await dbUpdate({...m, movement_note: `${m.movement_note||''} 💰[faturamento aplicado ${new Date().toLocaleDateString('pt-BR')}]`}, {silent:true}), 'marcação da venda');
+    renderAll();
+    hideLoadingProgress();
+    renderSalesToday();
+    showToast(`Faturamento registrado pra ${priceHints.length} item(ns)!`);
+  } catch (err) {
+    hideLoadingProgress();
+    console.error('Erro ao registrar faturamento retroativo:', err);
+    showResultModal('Erro ao registrar faturamento', err.message + ' — confira Faturamento/DRE antes de tentar de novo, pode ter ficado parcial.', true);
+  }
+}
 // Botão simples "🔧 Descontar Estoque" no topo da aba Vendas: escolhe o dia, e cai na mesma tela de
 // conferência de itens já usada no Faturamento — mesmo motor, só um jeito mais direto de chegar nela.
 function openPickDayForStockModal() {
@@ -5610,7 +5788,7 @@ function renderFinanceiro() {
   document.getElementById('fpanel-despesas').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='despesas');
   document.getElementById('fpanel-funcionarios').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='funcionarios');
   if (financeUnlocked) {
-    renderFinancePending(); renderFinancePrecos(); renderFinanceCMV();
+    renderFinancePending(); renderStockCosts(); renderFinancePrecos(); renderFinanceCMV();
     if (activeFinanceTab === 'vendas') { renderSalesSelect(); renderSalesToday(); if (currentSalesMode==='bulk') { initBulkSalesDate(); } }
     if (activeFinanceTab === 'faturamento') renderFaturamento();
     if (activeFinanceTab === 'dre') renderDRE();
@@ -5778,7 +5956,7 @@ async function saveFinanceCosts(movementId) {
   }
 }
 // ============================================================
-// Preço Médio de Insumos — mesma estrutura de dado da "Custos Pendentes" (financeData tipo
+// Preço Médio de Insumos — mesma estrutura de dado da "Custos de Estoque" (financeData tipo
 // 'cost', por product_name), só que aqui o preço é lançado/ajustado direto pelo usuário, sem
 // depender de uma entrada de estoque. Como getFinanceCostPrice() lê o mesmo registro
 // independente de onde ele foi criado/atualizado, CMV e DRE continuam funcionando exatamente
@@ -5946,9 +6124,9 @@ document.addEventListener('click', async (e) => {
 // Custo estimado de uma receita a partir do custo dos insumos. Pra cada ingrediente:
 // 1) se for um insumo PRODUZIDO internamente (tem linked_recipe_id, ex: Chocolate Quente que
 //    a gente também vende pronto), calcula o custo pela receita DELE — recursivamente — em vez
-//    de exigir um preço lançado manualmente em Custos Pendentes, já que esse insumo nunca é
+//    de exigir um preço lançado manualmente em Custos de Estoque, já que esse insumo nunca é
 //    comprado. Isso é o mesmo critério já usado na aba Preço Médio > Produzidos.
-// 2) senão, usa o preço médio já lançado (Custos Pendentes / Preço Médio > Comprados).
+// 2) senão, usa o preço médio já lançado (Custos de Estoque / Preço Médio > Comprados).
 // _visited evita loop infinito caso duas receitas acabem se referenciando em círculo.
 function computeRecipeCost(recipe, _visited) {
   const visited = _visited || new Set();
@@ -6056,7 +6234,7 @@ function renderFinanceCMV() {
     </div>
     ${row.hasAllCosts
       ? `<p class="text-sm text-amber-700 font-bold">${fmtCurrency(row.costPerUnit)} / ${row.recipe.recipe_yield_unit} (custo)</p><p class="text-xs text-stone-400">Custo do lote: ${fmtCurrency(row.totalCost)} para ${fmtQty(row.recipe.recipe_yield,row.recipe.recipe_yield_unit)} ${row.recipe.recipe_yield_unit}</p>${marginHtml}`
-      : `<p class="text-xs text-stone-400 italic">Custo incompleto — falta lançar em Custos Pendentes: ${row.missing.length?row.missing.join(', '):'sem ingredientes cadastrados'}</p>`}
+      : `<p class="text-xs text-stone-400 italic">Custo incompleto — falta lançar em Custos de Estoque: ${row.missing.length?row.missing.join(', '):'sem ingredientes cadastrados'}</p>`}
   </div>`;
   }).join('');
 }
@@ -6065,9 +6243,24 @@ function renderFinanceCMV() {
 // GASTOS (DESPESAS)
 // Reaproveita o padrão dinâmico da aba Financeiro: type='expense' -> {id, type,
 // product_name(=descrição), category, total_cost(=valor), expense_date(=data, "yyyy-MM-dd"),
-// linked_employee_id(opcional, quando é folha gerada a partir de um funcionário), updated_at}
+// cost_unit(=grupo no DRE: 'cmo'|'fixa'|'imposto'|'extra' — reaproveitado, não é unidade de
+// medida aqui), linked_employee_id(quando veio do Registro Semanal), movement_id(=id do
+// weekly_timesheet que gerou esse gasto, quando aplicável), updated_at}
+// O "grupo no DRE" é independente da categoria (categoria é só um rótulo livre pra você
+// organizar/filtrar; o grupo é o que decide em qual linha do DRE o valor entra).
 // ============================================================
-const DEFAULT_EXPENSE_CATEGORIES = ['Aluguel','Fornecedores','Mão de obra','Manutenção','Marketing','Taxas e Impostos','Utilidades (água/luz/internet)','Outros'];
+const DEFAULT_EXPENSE_CATEGORIES = ['Aluguel','Descartáveis e Embalagens','Fornecedores','Limpeza','Manutenção','Marketing','Taxas e Impostos','Utilidades (água/luz/internet)','Outros'];
+const DRE_GROUP_LABELS = { cmo:'CMO', fixa:'Despesa Fixa', imposto:'Imposto', extra:'Despesa Extra' };
+// Gastos lançados antes do grupo existir não têm cost_unit preenchido — infere pela categoria,
+// pra não sumir do DRE nem cair tudo genericamente num só grupo sem critério nenhum.
+function inferDreGroup(expense) {
+  if (expense.cost_unit && DRE_GROUP_LABELS[expense.cost_unit]) return expense.cost_unit;
+  const cat = (expense.category || '').toLowerCase();
+  if (cat.includes('mão de obra') || cat.includes('mao de obra')) return 'cmo';
+  if (cat.includes('imposto') || cat.includes('taxa')) return 'imposto';
+  if (cat.includes('aluguel') || cat.includes('utilidades') || cat.includes('água') || cat.includes('luz') || cat.includes('internet')) return 'fixa';
+  return 'extra';
+}
 let expenseFilter = '30days';
 let expenseCategoryFilter = '';
 function getExpenses() { return financeData.filter(r => r.type === 'expense'); }
@@ -6094,12 +6287,13 @@ async function handleAddExpense(e) {
   const desc = document.getElementById('new-expense-desc').value.trim();
   let category = document.getElementById('new-expense-category').value;
   if (category === '__custom__') category = document.getElementById('new-expense-category-custom').value.trim();
+  const dreGroup = document.getElementById('new-expense-dre-group').value;
   const amount = parseFloat(document.getElementById('new-expense-amount').value);
   const date = document.getElementById('new-expense-date').value;
-  if (!desc || !category || !amount || amount <= 0 || !date) { showToast('Preencha todos os campos obrigatórios', true); return; }
+  if (!desc || !category || !dreGroup || !amount || amount <= 0 || !date) { showToast('Preencha todos os campos obrigatórios', true); return; }
   showLoadingProgress('Salvando gasto...');
   try {
-    const payload = { type:'expense', product_name:desc, category, total_cost:amount, expense_date:date, updated_at:new Date().toISOString() };
+    const payload = { type:'expense', product_name:desc, category, cost_unit:dreGroup, total_cost:amount, expense_date:date, updated_at:new Date().toISOString() };
     const r = await financeApiCall('create', { data: payload });
     financeData.push({ id:r.id, ...payload });
     hideLoadingProgress();
@@ -6166,7 +6360,7 @@ function renderExpenses() {
     <div class="p-4 bg-white rounded-xl shadow-sm border border-stone-100 flex justify-between items-center gap-2">
       <div class="min-w-0">
         <p class="text-sm font-medium text-stone-800 truncate">${ex.product_name}</p>
-        <p class="text-xs text-stone-400">${ex.category} · ${parseLocalDate(ex.expense_date).toLocaleDateString('pt-BR')}${ex.linked_employee_id?' · 👤 Folha':''}</p>
+        <p class="text-xs text-stone-400">${ex.category} · <span class="px-1.5 py-0.5 rounded-full bg-stone-100 text-stone-600 font-medium">${DRE_GROUP_LABELS[inferDreGroup(ex)]}</span> · ${parseLocalDate(ex.expense_date).toLocaleDateString('pt-BR')}${ex.linked_employee_id?' · 👤 Registro Semanal':''}</p>
       </div>
       <div class="flex items-center gap-2 flex-shrink-0">
         <span class="text-sm font-bold text-red-700">${fmtCurrency(ex.total_cost)}</span>
@@ -6177,45 +6371,111 @@ function renderExpenses() {
 }
 
 // ============================================================
-// FUNCIONÁRIOS
-// type='employee' -> {id, type, product_name(=nome), employee_pay_type('mensal'|'diaria'|
-// 'comissao'), employee_pay_value, employee_work_days(JSON array 0-6), employee_work_hours,
-// employee_status('ativo'|'inativo'), employee_start_date, employee_notes, updated_at}
-// A folha de pagamento NÃO é calculada automaticamente no DRE — segue o mesmo padrão de "Custos
-// Pendentes" (pré-preenche, mas exige confirmação manual): o botão "Gerar despesa do mês" cria um
-// gasto de verdade em Gastos (categoria "Mão de obra"), com linked_employee_id apontando pra cá.
+// CUSTOS DE ESTOQUE — LANÇAMENTO AVULSO
+// type='stock_cost' -> {id, type, product_name(=descrição), category, total_cost(=valor),
+// expense_date(=data, "yyyy-MM-dd"), updated_at}. Mesmas colunas que 'expense' já usa — a
+// diferença é só o "type", que separa esse lançamento de despesa fixa (Gastos) e de custo de
+// insumo por receita (CMV). Existe pra cobrir custo ligado ao estoque que não vale uma receita
+// nem tem venda pra vincular (taxa de entrega, insumo fora do cardápio, perda não rastreada): ao
+// contrário de 'cost' (que só vira número no DRE proporcional a uma venda), um 'stock_cost'
+// desconta o valor cheio na hora, no período em que a expense_date cai — igual 'expense' já faz.
 // ============================================================
-const EMPLOYEE_PAY_TYPE_LABELS = { mensal:'Mensal fixo (CLT)', diaria:'Diária', comissao:'Comissão' };
-function getEmployees() { return financeData.filter(r => r.type === 'employee'); }
-function updateEmployeePayValueLabel() {
-  const type = document.getElementById('new-emp-pay-type').value;
-  const prefix = document.getElementById('new-emp-pay-value-prefix');
-  const hint = document.getElementById('new-emp-pay-value-hint');
-  if (type === 'comissao') { prefix.textContent = '%'; hint.textContent = 'Percentual de referência — a despesa de comissão em si é lançada manualmente em Gastos.'; }
-  else if (type === 'diaria') { prefix.textContent = 'R$'; hint.textContent = 'Valor pago por dia trabalhado.'; }
-  else if (type === 'mensal') { prefix.textContent = 'R$'; hint.textContent = 'Salário mensal fixo.'; }
-  else { prefix.textContent = 'R$'; hint.textContent = ''; }
+const DEFAULT_STOCK_COST_CATEGORIES = ['Taxa de entrega','Insumo fora do cardápio','Perda/quebra não rastreada','Outros'];
+function getStockCosts() { return financeData.filter(r => r.type === 'stock_cost'); }
+function getAllStockCostCategories() {
+  const used = getStockCosts().map(sc => sc.category).filter(Boolean);
+  return Array.from(new Set([...DEFAULT_STOCK_COST_CATEGORIES, ...used])).sort((a,b)=>a.localeCompare(b));
 }
+function populateStockCostCategorySelect() {
+  const sel = document.getElementById('new-stockcost-category'); if (!sel) return;
+  const val = sel.value;
+  sel.innerHTML = '<option value="">Categoria *</option>' + getAllStockCostCategories().map(c=>`<option value="${c}">${c}</option>`).join('') + '<option value="__custom__">+ Nova categoria...</option>';
+  if (val) sel.value = val;
+}
+function toggleStockCostCustomCategory() {
+  const sel = document.getElementById('new-stockcost-category');
+  const custom = document.getElementById('new-stockcost-category-custom');
+  const isCustom = sel.value === '__custom__';
+  custom.classList.toggle('hidden', !isCustom);
+  custom.required = isCustom;
+}
+async function handleAddStockCost(e) {
+  e.preventDefault();
+  const desc = document.getElementById('new-stockcost-desc').value.trim();
+  let category = document.getElementById('new-stockcost-category').value;
+  if (category === '__custom__') category = document.getElementById('new-stockcost-category-custom').value.trim();
+  const amount = parseFloat(document.getElementById('new-stockcost-amount').value);
+  const date = document.getElementById('new-stockcost-date').value;
+  if (!desc || !category || !amount || amount <= 0 || !date) { showToast('Preencha todos os campos obrigatórios', true); return; }
+  showLoadingProgress('Salvando custo avulso...');
+  try {
+    const payload = { type:'stock_cost', product_name:desc, category, total_cost:amount, expense_date:date, updated_at:new Date().toISOString() };
+    const r = await financeApiCall('create', { data: payload });
+    financeData.push({ id:r.id, ...payload });
+    hideLoadingProgress();
+    showToast('Custo avulso registrado!');
+    e.target.reset();
+    document.getElementById('new-stockcost-date').value = localDateStr(new Date());
+    toggleStockCostCustomCategory();
+    renderStockCosts();
+  } catch (err) {
+    hideLoadingProgress();
+    console.error('Erro ao salvar custo avulso:', err);
+    showToast('Erro ao salvar custo avulso: ' + err.message, true);
+  }
+}
+// Mesmo filtro por string de data usado em getExpensesInRange — expense_date já é "yyyy-MM-dd".
+function getStockCostsInRange(start, end) {
+  return getStockCosts().filter(sc => {
+    if (!sc.expense_date) return false;
+    if (start && sc.expense_date < localDateStr(start)) return false;
+    if (end && sc.expense_date > localDateStr(end)) return false;
+    return true;
+  });
+}
+function requestDeleteStockCost(id) {
+  const sc = financeData.find(r => r.id === id); if (!sc) return;
+  pendingDeleteId = id; pendingDeleteType = 'stock_cost';
+  document.getElementById('delete-confirm-text').textContent = `Deseja excluir o custo avulso "${sc.product_name}" (${fmtCurrency(sc.total_cost)})?`;
+  document.getElementById('delete-confirm-modal').classList.remove('hidden');
+}
+function renderStockCosts() {
+  populateStockCostCategorySelect();
+  if (!document.getElementById('new-stockcost-date').value) document.getElementById('new-stockcost-date').value = localDateStr(new Date());
+  const entries = getStockCosts().slice().sort((a,b) => (b.expense_date||'').localeCompare(a.expense_date||''));
+  const listEl = document.getElementById('stock-costs-list'); if (!listEl) return;
+  listEl.innerHTML = entries.length === 0 ? '<p class="text-stone-400 text-center py-6 text-sm">Nenhum custo avulso registrado</p>' : entries.map(sc => `
+    <div class="p-4 bg-white rounded-xl shadow-sm border border-stone-100 flex justify-between items-center gap-2">
+      <div class="min-w-0">
+        <p class="text-sm font-medium text-stone-800 truncate">${sc.product_name}</p>
+        <p class="text-xs text-stone-400">${sc.category} · ${parseLocalDate(sc.expense_date).toLocaleDateString('pt-BR')}</p>
+      </div>
+      <div class="flex items-center gap-2 flex-shrink-0">
+        <span class="text-sm font-bold text-red-700">${fmtCurrency(sc.total_cost)}</span>
+        <button onclick="requestDeleteStockCost('${sc.id}')" class="text-stone-300 hover:text-red-600"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+      </div>
+    </div>`).join('');
+  lucide.createIcons();
+}
+
+// ============================================================
+// FUNCIONÁRIOS — cadastro simplificado (só o que o registro semanal precisa).
+// type='employee' -> {id, type, product_name(=nome), employee_pay_value(=valor da hora), updated_at}
+// ============================================================
+function getEmployees() { return financeData.filter(r => r.type === 'employee'); }
 async function handleAddEmployee(e) {
   e.preventDefault();
   const name = document.getElementById('new-emp-name').value.trim();
-  const payType = document.getElementById('new-emp-pay-type').value;
   const payValue = parseFloat(document.getElementById('new-emp-pay-value').value);
-  const workDays = Array.from(document.querySelectorAll('.emp-workday-cb:checked')).map(cb => parseInt(cb.value));
-  const workHours = document.getElementById('new-emp-work-hours').value.trim();
-  const startDate = document.getElementById('new-emp-start-date').value;
-  const notes = document.getElementById('new-emp-notes').value.trim();
-  if (!name || !payType || isNaN(payValue) || payValue < 0) { showToast('Preencha todos os campos obrigatórios', true); return; }
+  if (!name || isNaN(payValue) || payValue < 0) { showToast('Preencha todos os campos obrigatórios', true); return; }
   showLoadingProgress('Salvando funcionário...');
   try {
-    const payload = { type:'employee', product_name:name, employee_pay_type:payType, employee_pay_value:payValue, employee_work_days:JSON.stringify(workDays), employee_work_hours:workHours, employee_status:'ativo', employee_start_date:startDate||'', employee_notes:notes, updated_at:new Date().toISOString() };
+    const payload = { type:'employee', product_name:name, employee_pay_value:payValue, updated_at:new Date().toISOString() };
     const r = await financeApiCall('create', { data: payload });
     financeData.push({ id:r.id, ...payload });
     hideLoadingProgress();
     showToast('Funcionário cadastrado!');
     e.target.reset();
-    document.querySelectorAll('.emp-workday-cb').forEach(cb => cb.checked = ['1','2','3','4','5'].includes(cb.value));
-    updateEmployeePayValueLabel();
     renderEmployees();
   } catch (err) {
     hideLoadingProgress();
@@ -6226,90 +6486,181 @@ async function handleAddEmployee(e) {
 function requestDeleteEmployee(id) {
   const emp = financeData.find(r => r.id === id); if (!emp) return;
   pendingDeleteId = id; pendingDeleteType = 'employee';
-  document.getElementById('delete-confirm-text').textContent = `Deseja excluir o funcionário "${emp.product_name}"? Isso não apaga despesas de folha já geradas.`;
+  document.getElementById('delete-confirm-text').textContent = `Deseja excluir o funcionário "${emp.product_name}"? Isso não apaga registros semanais já salvos.`;
   document.getElementById('delete-confirm-modal').classList.remove('hidden');
-}
-async function toggleEmployeeStatus(id) {
-  const emp = financeData.find(r => r.id === id); if (!emp) return;
-  const newStatus = emp.employee_status === 'ativo' ? 'inativo' : 'ativo';
-  try {
-    await financeApiCall('update', { data: { ...emp, employee_status:newStatus } });
-    emp.employee_status = newStatus;
-    renderEmployees();
-    showToast(newStatus==='ativo' ? 'Funcionário reativado!' : 'Funcionário marcado como inativo');
-  } catch (err) {
-    console.error('Erro ao atualizar status:', err);
-    showToast('Erro ao atualizar status: ' + err.message, true);
-  }
-}
-function toggleGeneratePayroll(employeeId) {
-  const el = document.getElementById(`payroll-form-${employeeId}`);
-  if (el) el.classList.toggle('hidden');
-}
-async function confirmGeneratePayroll(employeeId) {
-  const emp = financeData.find(r => r.id === employeeId); if (!emp) return;
-  const amount = parseFloat(document.getElementById(`payroll-amount-${employeeId}`).value);
-  const date = document.getElementById(`payroll-date-${employeeId}`).value;
-  if (isNaN(amount) || amount <= 0 || !date) { showToast('Preencha o valor e a data', true); return; }
-  showLoadingProgress('Gerando despesa de folha...');
-  try {
-    const payload = { type:'expense', product_name:`Folha: ${emp.product_name}`, category:'Mão de obra', total_cost:amount, expense_date:date, linked_employee_id:employeeId, updated_at:new Date().toISOString() };
-    const r = await financeApiCall('create', { data: payload });
-    financeData.push({ id:r.id, ...payload });
-    hideLoadingProgress();
-    showToast('Despesa de folha gerada!');
-    renderEmployees();
-  } catch (err) {
-    hideLoadingProgress();
-    console.error('Erro ao gerar despesa de folha:', err);
-    showToast('Erro ao gerar despesa de folha: ' + err.message, true);
-  }
 }
 function renderEmployees() {
   const el = document.getElementById('employees-list');
-  const employees = getEmployees().sort((a,b) => {
-    if (a.employee_status !== b.employee_status) return a.employee_status === 'ativo' ? -1 : 1;
-    return (a.product_name||'').localeCompare(b.product_name||'');
-  });
-  updateEmployeePayValueLabel();
-  if (employees.length === 0) { el.innerHTML = '<p class="text-stone-400 text-center py-8 text-sm">Nenhum funcionário cadastrado</p>'; lucide.createIcons(); return; }
-  const today = new Date();
-  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-  el.innerHTML = employees.map(emp => {
-    let workDays = []; try { workDays = JSON.parse(emp.employee_work_days || '[]'); } catch(e) {}
-    const daysLabel = workDays.length ? workDays.slice().sort().map(d=>WEEKDAY_SHORT[d]).join(', ') : '—';
-    const payLabel = emp.employee_pay_type === 'comissao' ? `${emp.employee_pay_value}% de comissão` : `${fmtCurrency(emp.employee_pay_value)} ${emp.employee_pay_type==='diaria'?'/ dia':'/ mês'}`;
-    // Pré-preenche um valor sugerido só pra mensal e diária (comissão depende do faturamento
-    // gerado, sem uma estimativa automática confiável — fica em branco pra digitar).
-    let suggestedAmount = '';
-    if (emp.employee_pay_type === 'mensal') suggestedAmount = emp.employee_pay_value;
-    else if (emp.employee_pay_type === 'diaria' && workDays.length) {
-      const daysWorked = countMatchingDays(monthStart, today, new Set(workDays));
-      suggestedAmount = (emp.employee_pay_value * daysWorked).toFixed(2);
+  const employees = getEmployees().sort((a,b) => (a.product_name||'').localeCompare(b.product_name||''));
+  el.innerHTML = employees.length === 0 ? '<p class="text-stone-400 text-center py-6 text-sm">Nenhum funcionário cadastrado</p>' : employees.map(emp => `
+    <div class="p-3 bg-white rounded-xl shadow-sm border border-stone-100 flex justify-between items-center gap-2">
+      <div class="min-w-0"><p class="text-sm font-medium text-stone-800 truncate">${emp.product_name}</p><p class="text-xs text-stone-400">${fmtCurrency(emp.employee_pay_value)} / hora</p></div>
+      <button onclick="requestDeleteEmployee('${emp.id}')" class="text-stone-300 hover:text-red-600 flex-shrink-0"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+    </div>`).join('');
+  renderWeekEmployeeSelect();
+  // Só preenche a data com hoje se ainda estiver vazia — não sobrescreve o que a pessoa já
+  // escolheu ao trocar de aba e voltar. O array de dias é sempre re-renderizado (idempotente,
+  // reflete o estado atual sem resetar nada); só handleSaveWeeklyTimesheet limpa de verdade.
+  const dateInput = document.getElementById('week-ref-date');
+  if (dateInput && !dateInput.value) dateInput.value = localDateStr(new Date());
+  renderWeekDaysContainer();
+  updateWeekTotalsPreview();
+  renderWeeklyTimesheets();
+  lucide.createIcons();
+}
+
+// ============================================================
+// REGISTRO SEMANAL — só histórico de horas/pagamento, sem gerar despesa nem alimentar o DRE
+// automaticamente (rateio e folha continuam numa planilha externa). Reaproveita colunas já
+// existentes na aba Financeiro, sem precisar de coluna nova:
+// type='weekly_timesheet' -> {id, type, product_name(=nome do funcionário, snapshot pra ficar
+// legível mesmo se o cadastro for excluído depois), linked_employee_id, expense_date(=data de
+// referência da semana, "yyyy-MM-dd"), employee_work_days(JSON [{label,hours}, ...] — cada dia ou
+// registro avulso da semana, não só os 5 dias padrão), employee_pay_value(=valor da hora usado
+// nesse cálculo, snapshot — não muda se o cadastro do funcionário mudar depois),
+// total_qty_sold(=total de horas da semana), total_cost(=valor da mão de obra, horas×valor/hora),
+// sale_price(=taxa de serviço da semana, valor único), updated_at}
+// ============================================================
+const DEFAULT_WEEK_DAYS = ['Quarta','Quinta','Sexta','Sábado','Domingo'];
+let weeklyTimesheetDays = DEFAULT_WEEK_DAYS.map(label => ({ label, hours: '' }));
+function getWeeklyTimesheets() { return financeData.filter(r => r.type === 'weekly_timesheet'); }
+function renderWeekEmployeeSelect() {
+  const sel = document.getElementById('week-emp-select'); if (!sel) return;
+  const val = sel.value;
+  sel.innerHTML = '<option value="">Selecione o funcionário *</option>' + getEmployees().sort((a,b)=>(a.product_name||'').localeCompare(b.product_name||'')).map(emp => `<option value="${emp.id}">${emp.product_name}</option>`).join('');
+  sel.value = val;
+}
+function resetWeeklyTimesheetForm() {
+  weeklyTimesheetDays = DEFAULT_WEEK_DAYS.map(label => ({ label, hours: '' }));
+  const sel = document.getElementById('week-emp-select'); if (sel) sel.value = '';
+  const dateInput = document.getElementById('week-ref-date'); if (dateInput) dateInput.value = localDateStr(new Date());
+  const taxInput = document.getElementById('week-service-tax'); if (taxInput) taxInput.value = '';
+  renderWeekDaysContainer();
+  updateWeekTotalsPreview();
+}
+function renderWeekDaysContainer() {
+  const el = document.getElementById('week-days-container'); if (!el) return;
+  el.innerHTML = weeklyTimesheetDays.map((d, i) => `
+    <div class="grid grid-cols-[1fr_110px_auto] gap-2 items-center">
+      <input type="text" value="${d.label}" placeholder="Dia ou registro (ex: Evento, Feriado...)" class="input-field text-sm" oninput="weeklyTimesheetDays[${i}].label=this.value">
+      <input type="number" min="0" step="any" value="${d.hours}" placeholder="Horas" class="input-field text-sm" oninput="weeklyTimesheetDays[${i}].hours=this.value; updateWeekTotalsPreview()">
+      <button type="button" onclick="removeWeekDayRow(${i})" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button>
+    </div>`).join('');
+}
+function addWeekDayRow() {
+  weeklyTimesheetDays.push({ label:'', hours:'' });
+  renderWeekDaysContainer();
+}
+function removeWeekDayRow(i) {
+  weeklyTimesheetDays.splice(i, 1);
+  renderWeekDaysContainer();
+  updateWeekTotalsPreview();
+}
+function computeWeeklyTimesheetTotals() {
+  const empId = document.getElementById('week-emp-select')?.value || '';
+  const emp = financeData.find(r => r.id === empId);
+  const hourlyRate = emp ? (emp.employee_pay_value || 0) : 0;
+  const validDays = weeklyTimesheetDays.filter(d => d.label && d.label.trim() && parseFloat(d.hours) > 0);
+  const totalHours = validDays.reduce((s,d) => s + parseFloat(d.hours), 0);
+  const laborValue = totalHours * hourlyRate;
+  const serviceTax = parseFloat(document.getElementById('week-service-tax')?.value) || 0;
+  return { emp, hourlyRate, validDays, totalHours, laborValue, serviceTax, grandTotal: laborValue + serviceTax };
+}
+function updateWeekTotalsPreview() {
+  const el = document.getElementById('week-totals-preview'); if (!el) return;
+  const t = computeWeeklyTimesheetTotals();
+  if (!t.emp) { el.innerHTML = '<p class="text-stone-400">Selecione um funcionário pra ver o cálculo.</p>'; return; }
+  el.innerHTML = `
+    <div class="flex justify-between py-0.5"><span class="text-stone-500">Total de horas</span><span class="font-medium text-stone-800">${fmtQty(t.totalHours,'')} h</span></div>
+    <div class="flex justify-between py-0.5"><span class="text-stone-500">Mão de obra (${fmtCurrency(t.hourlyRate)}/h)</span><span class="font-medium text-stone-800">${fmtCurrency(t.laborValue)}</span></div>
+    <div class="flex justify-between py-0.5"><span class="text-stone-500">Taxa de serviço</span><span class="font-medium text-stone-800">${fmtCurrency(t.serviceTax)}</span></div>
+    <div class="flex justify-between pt-1.5 mt-1 border-t border-stone-200"><span class="font-semibold text-stone-800">Total da semana</span><span class="font-bold text-emerald-700">${fmtCurrency(t.grandTotal)}</span></div>
+  `;
+}
+async function handleSaveWeeklyTimesheet() {
+  const t = computeWeeklyTimesheetTotals();
+  const dateVal = document.getElementById('week-ref-date').value;
+  if (!t.emp) { showToast('Selecione o funcionário', true); return; }
+  if (t.validDays.length === 0 && t.serviceTax <= 0) { showToast('Preencha ao menos um dia com horas, ou a taxa de serviço', true); return; }
+  showLoadingProgress('Salvando registro semanal...');
+  try {
+    const weekDate = dateVal || localDateStr(new Date());
+    // Chave de correlação gerada no cliente — os dois registros (semana + despesa de CMO) são
+    // criados NA MESMA viagem (financeBatchWrite), então o id de verdade de nenhum dos dois existe
+    // ainda na hora de montar o outro. Fica gravada em spreadsheet_name (não usado por nenhum dos
+    // dois tipos) só pra permitir achar "a despesa desta semana" depois — ex: excluir os dois juntos.
+    const correlationId = 'wk_' + Date.now() + '_' + Math.random().toString(36).slice(2,8);
+    const timesheetPayload = {
+      type: 'weekly_timesheet',
+      product_name: t.emp.product_name,
+      linked_employee_id: t.emp.id,
+      expense_date: weekDate,
+      employee_work_days: JSON.stringify(t.validDays.map(d => ({ label: d.label.trim(), hours: parseFloat(d.hours) }))),
+      employee_pay_value: t.hourlyRate,
+      total_qty_sold: t.totalHours,
+      total_cost: t.laborValue,
+      sale_price: t.serviceTax,
+      spreadsheet_name: correlationId,
+      updated_at: new Date().toISOString(),
+    };
+    // CMO (Custo de Mão de Obra Operacional) — lançado automaticamente como despesa de verdade
+    // (grupo 'cmo'), pra entrar no DRE junto dos outros grupos sem precisar de lançamento manual.
+    // Valor = mão de obra da semana inteira + taxa de serviço (os dois juntos são o custo de ter
+    // esse funcionário trabalhando essa semana).
+    const cmoTotal = t.laborValue + t.serviceTax;
+    const operations = [{ op:'create', data: timesheetPayload }];
+    if (cmoTotal > 0) {
+      operations.push({ op:'create', data: {
+        type: 'expense',
+        product_name: `CMO: ${t.emp.product_name} (semana de ${parseLocalDate(weekDate).toLocaleDateString('pt-BR')})`,
+        category: 'Mão de obra',
+        cost_unit: 'cmo',
+        total_cost: cmoTotal,
+        expense_date: weekDate,
+        linked_employee_id: t.emp.id,
+        spreadsheet_name: correlationId,
+        updated_at: new Date().toISOString(),
+      }});
     }
-    const isInactive = emp.employee_status !== 'ativo';
-    return `<div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 ${isInactive?'opacity-60':''}">
-      <div class="flex justify-between items-start mb-2 gap-2">
+    const result = await financeBatchWrite(operations);
+    if (!result.isOk) throw new Error(result.error || 'falha ao gravar');
+    hideLoadingProgress();
+    showToast('Registro semanal salvo e lançado como CMO no financeiro!');
+    resetWeeklyTimesheetForm();
+    renderWeeklyTimesheets();
+    if (activeFinanceTab === 'dre') renderDRE();
+  } catch (err) {
+    hideLoadingProgress();
+    console.error('Erro ao salvar registro semanal:', err);
+    showResultModal('Erro ao salvar registro semanal', err.message + ' — confira antes de tentar de novo, pode ter ficado parcial.', true);
+  }
+}
+function requestDeleteWeeklyTimesheet(id) {
+  const w = financeData.find(r => r.id === id); if (!w) return;
+  pendingDeleteId = id; pendingDeleteType = 'weekly_timesheet';
+  document.getElementById('delete-confirm-text').textContent = `Deseja excluir o registro semanal de "${w.product_name}" (${parseLocalDate(w.expense_date).toLocaleDateString('pt-BR')})? Isso também remove a despesa de CMO lançada automaticamente com ele.`;
+  document.getElementById('delete-confirm-modal').classList.remove('hidden');
+}
+function renderWeeklyTimesheets() {
+  const el = document.getElementById('weekly-timesheets-list'); if (!el) return;
+  const weeks = getWeeklyTimesheets().slice().sort((a,b) => (b.expense_date||'').localeCompare(a.expense_date||''));
+  el.innerHTML = weeks.length === 0 ? '<p class="text-stone-400 text-center py-6 text-sm">Nenhum registro semanal salvo</p>' : weeks.map(w => {
+    let days = []; try { days = JSON.parse(w.employee_work_days || '[]'); } catch(e) {}
+    const daysHtml = days.map(d => `<span class="inline-block px-2 py-0.5 rounded-full bg-stone-100 text-stone-600 text-[11px] mr-1 mb-1">${d.label}: ${fmtQty(d.hours,'')}h</span>`).join('');
+    return `<div class="p-4 bg-white rounded-xl shadow-sm border border-stone-100">
+      <div class="flex justify-between items-start gap-2 mb-2">
         <div class="min-w-0">
-          <p class="font-semibold text-stone-800 text-sm">${emp.product_name} ${isInactive?'<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-stone-100 text-stone-500 font-semibold align-middle">INATIVO</span>':''}</p>
-          <p class="text-xs text-stone-500 mt-0.5">${EMPLOYEE_PAY_TYPE_LABELS[emp.employee_pay_type]||emp.employee_pay_type} · ${payLabel}</p>
-          <p class="text-xs text-stone-400 mt-0.5">📅 ${daysLabel}${emp.employee_work_hours?` · ${emp.employee_work_hours}`:''}</p>
-          ${emp.employee_notes ? `<p class="text-xs text-stone-400 mt-0.5 italic">${emp.employee_notes}</p>` : ''}
+          <p class="text-sm font-semibold text-stone-800 truncate">${w.product_name}</p>
+          <p class="text-xs text-stone-400">${parseLocalDate(w.expense_date).toLocaleDateString('pt-BR')} · ${fmtQty(w.total_qty_sold,'')}h totais · ${fmtCurrency(w.employee_pay_value)}/h</p>
         </div>
-        <div class="flex items-center gap-1.5 flex-shrink-0">
-          <button onclick="toggleEmployeeStatus('${emp.id}')" class="text-xs px-2 py-1 rounded-lg font-medium ${isInactive?'bg-emerald-50 text-emerald-700 hover:bg-emerald-100':'bg-stone-100 text-stone-500 hover:bg-stone-200'}">${isInactive?'Reativar':'Desativar'}</button>
-          <button onclick="requestDeleteEmployee('${emp.id}')" class="text-stone-300 hover:text-red-600"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
-        </div>
+        <button onclick="requestDeleteWeeklyTimesheet('${w.id}')" class="text-stone-300 hover:text-red-600 flex-shrink-0"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
       </div>
-      <button onclick="toggleGeneratePayroll('${emp.id}')" class="text-xs font-medium text-emerald-700 hover:text-emerald-800 flex items-center gap-1 mt-2"><i data-lucide="banknote" class="w-3.5 h-3.5"></i>Gerar despesa do mês</button>
-      <div id="payroll-form-${emp.id}" class="hidden mt-3 p-3 bg-emerald-50 border border-emerald-100 rounded-lg space-y-2">
-        <p class="text-xs text-emerald-800">Confira e ajuste antes de confirmar — isso cria um gasto em "Mão de obra" vinculado a este funcionário.</p>
-        <div class="grid grid-cols-2 gap-2">
-          <div class="relative"><span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-stone-400">R$</span><input id="payroll-amount-${emp.id}" type="number" min="0.01" step="any" value="${suggestedAmount}" class="input-field text-sm w-full pl-9"></div>
-          <input id="payroll-date-${emp.id}" type="date" value="${localDateStr(new Date())}" class="input-field text-sm">
-        </div>
-        <button onclick="confirmGeneratePayroll('${emp.id}')" class="w-full btn-success px-3 py-2 rounded-lg text-xs font-medium">✓ Confirmar e Gerar Despesa</button>
+      ${daysHtml ? `<div class="mb-2">${daysHtml}</div>` : ''}
+      <div class="flex justify-between items-center pt-2 border-t border-stone-100 text-sm">
+        <span class="text-stone-500">Mão de obra ${fmtCurrency(w.total_cost)}${w.sale_price>0?` + taxa de serviço ${fmtCurrency(w.sale_price)}`:''}</span>
+        <span class="font-bold text-emerald-700">${fmtCurrency((w.total_cost||0)+(w.sale_price||0))}</span>
       </div>
+      <p class="text-[11px] text-emerald-700 mt-1.5">✓ Lançado como CMO no financeiro (Gastos / DRE)</p>
     </div>`;
   }).join('');
   lucide.createIcons();
@@ -6325,7 +6676,13 @@ let dreFilter = '7days';
 // custo/faturamento observada nos itens QUE TÊM custo confirmado — uma extrapolação a partir de
 // dado real, não um número inventado do zero. Sem nenhum item confirmado no período, não estima
 // nada (hasEstimate=false), pra não fabricar uma proporção sem base nenhuma.
-function computeDRE(entries, expenses) {
+// stockCosts (type='stock_cost', lançado em Custos de Estoque) agora entram DENTRO do CMV, não em
+// Despesas Extras — são custo real de insumo/estoque (taxa de entrega, insumo fora do cardápio,
+// perda não rastreada) que só não passa pela receita, mas é CMV de verdade igual o calculado.
+// Como é um valor digitado por você (não uma extrapolação), conta como CMV CONFIRMADO, não
+// estimado. CMO vem de despesas com grupo 'cmo' (lançadas automaticamente pelo Registro Semanal em
+// Funcionários, ou manualmente em Gastos pra casos fora da semana padrão).
+function computeDRE(entries, expenses, stockCosts) {
   const totalRevenue = entries.reduce((s,e)=>s+(e.total_revenue||0), 0);
   let knownCost = 0, knownRevenue = 0, unknownRevenue = 0;
   entries.forEach(e => {
@@ -6336,32 +6693,62 @@ function computeDRE(entries, expenses) {
   const knownCostRatio = knownRevenue > 0 ? (knownCost / knownRevenue) : null;
   const hasEstimate = knownCostRatio !== null && unknownRevenue > 0;
   const estimatedExtraCost = hasEstimate ? unknownRevenue * knownCostRatio : 0;
-  const totalCMV = knownCost + estimatedExtraCost;
-  const totalExpenses = expenses.reduce((s,e)=>s+(e.total_cost||0), 0);
-  const confirmedProfit = knownRevenue - knownCost - totalExpenses;
-  const estimatedProfit = totalRevenue - totalCMV - totalExpenses;
+  // totalCMVConfirmed = custo de receita confirmado + custo de estoque avulso (os dois são reais,
+  // não estimados). totalCMV soma ainda a extrapolação pros itens sem receita confirmada.
+  const totalStockCosts = (stockCosts||[]).reduce((s,sc)=>s+(sc.total_cost||0), 0);
+  const totalCMVConfirmed = knownCost + totalStockCosts;
+  const totalCMV = totalCMVConfirmed + estimatedExtraCost;
+
+  const groups = { cmo:0, fixa:0, imposto:0, extra:0 };
+  expenses.forEach(ex => { groups[inferDreGroup(ex)] += (ex.total_cost||0); });
+  const totalCMO = groups.cmo, totalFixed = groups.fixa, totalTax = groups.imposto, totalExtra = groups.extra;
+  const totalAllExpenses = totalCMO + totalFixed + totalTax + totalExtra;
+
+  // Custo de estoque avulso é confirmado e do período inteiro (não amarrado a uma venda
+  // específica), então desconta nos dois cenários — diferente do CMV por receita, cuja incerteza
+  // só existe pra fatia de faturamento sem custo confirmado (unknownRevenue).
+  const confirmedProfit = knownRevenue - totalCMVConfirmed - totalAllExpenses;
+  const estimatedProfit = totalRevenue - totalCMV - totalAllExpenses;
   const coveragePct = totalRevenue > 0 ? (knownRevenue/totalRevenue)*100 : 0;
-  return { totalRevenue, knownRevenue, unknownRevenue, knownCost, estimatedExtraCost, totalCMV, totalExpenses, confirmedProfit, estimatedProfit, coveragePct, hasEstimate };
+  // % sempre sobre o faturamento total do período — é a "representatividade" de cada linha.
+  const pctOf = (v) => totalRevenue > 0 ? (v/totalRevenue)*100 : 0;
+  return {
+    totalRevenue, knownRevenue, unknownRevenue, knownCost, estimatedExtraCost, totalStockCosts, totalCMVConfirmed, totalCMV,
+    totalCMO, totalFixed, totalTax, totalExtra, totalAllExpenses,
+    confirmedProfit, estimatedProfit, coveragePct, hasEstimate,
+    pct: {
+      cmvConfirmed: pctOf(totalCMVConfirmed), cmvTotal: pctOf(totalCMV), cmo: pctOf(totalCMO),
+      fixa: pctOf(totalFixed), imposto: pctOf(totalTax), extra: pctOf(totalExtra),
+      confirmedProfit: pctOf(confirmedProfit), estimatedProfit: pctOf(estimatedProfit),
+    },
+  };
 }
 function renderDRE() {
   document.querySelectorAll('.dre-filter').forEach(b => { b.className = `dre-filter px-3 py-1.5 rounded-lg text-xs font-medium ${b.dataset.filter===dreFilter?'bg-stone-800 text-white':'bg-stone-100 text-stone-600 hover:bg-stone-200'}`; });
   const { start, end } = faturamentoRangeForFilter(dreFilter);
   const entries = getSaleRevenueEntriesInRange(start, end);
   const expenses = getExpensesInRange(start, end);
-  const dre = computeDRE(entries, expenses);
+  const stockCosts = getStockCostsInRange(start, end);
+  const dre = computeDRE(entries, expenses, stockCosts);
   const el = document.getElementById('dre-content'); if (!el) return;
   const profitColor = (v) => v >= 0 ? 'text-emerald-700' : 'text-red-600';
+  const pctTag = (v) => `<span class="text-stone-400 font-normal">(${v.toFixed(1)}%)</span>`;
+  const line = (label, value, pct, color) => `
+    <div class="flex justify-between items-center py-1.5 border-b border-stone-100">
+      <span class="text-stone-600">${label}</span>
+      <span class="font-semibold ${color}">${fmtCurrency(value)} ${pctTag(pct)}</span>
+    </div>`;
   el.innerHTML = `
     <div class="grid grid-cols-2 gap-3 mb-4">
       <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100">
         <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-1">Lucro confirmado</p>
         <p class="text-xl font-bold ${profitColor(dre.confirmedProfit)}">${fmtCurrency(dre.confirmedProfit)}</p>
-        <p class="text-[11px] text-stone-400 mt-1">Só com custos já validados · ${dre.coveragePct.toFixed(0)}% do faturamento</p>
+        <p class="text-[11px] text-stone-400 mt-1">${dre.pct.confirmedProfit.toFixed(1)}% do faturamento · só com custos já validados (${dre.coveragePct.toFixed(0)}% do faturamento com CMV confirmado)</p>
       </div>
       <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100">
         <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-1">Lucro estimado</p>
         <p class="text-xl font-bold ${profitColor(dre.estimatedProfit)}">${fmtCurrency(dre.estimatedProfit)}</p>
-        <p class="text-[11px] text-stone-400 mt-1">Inclui CMV extrapolado pros itens pendentes</p>
+        <p class="text-[11px] text-stone-400 mt-1">${dre.pct.estimatedProfit.toFixed(1)}% do faturamento · inclui CMV extrapolado pros itens pendentes</p>
       </div>
     </div>
     <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 mb-4">
@@ -6369,32 +6756,30 @@ function renderDRE() {
       <div class="space-y-2 text-sm">
         <div class="flex justify-between items-center py-1.5 border-b border-stone-100">
           <span class="text-stone-600">Faturamento</span>
-          <span class="font-semibold text-stone-800">${fmtCurrency(dre.totalRevenue)}</span>
+          <span class="font-semibold text-stone-800">${fmtCurrency(dre.totalRevenue)} ${pctTag(100)}</span>
         </div>
-        <div class="flex justify-between items-center py-1.5 border-b border-stone-100">
-          <span class="text-stone-600">(–) CMV confirmado</span>
-          <span class="font-semibold text-red-600">${fmtCurrency(dre.knownCost)}</span>
-        </div>
+        ${line('(–) CMV confirmado', dre.totalCMVConfirmed, dre.pct.cmvConfirmed, 'text-red-600')}
         <div class="flex justify-between items-center py-1.5 border-b border-stone-100">
           <span class="text-stone-600">(–) CMV estimado (adicional)</span>
-          <span class="font-semibold text-amber-600">${dre.hasEstimate ? fmtCurrency(dre.estimatedExtraCost) : '—'}</span>
+          <span class="font-semibold text-amber-600">${dre.hasEstimate ? `${fmtCurrency(dre.estimatedExtraCost)} ${pctTag(dre.pct.cmvTotal - dre.pct.cmvConfirmed)}` : '—'}</span>
         </div>
-        <div class="flex justify-between items-center py-1.5 border-b border-stone-100">
-          <span class="text-stone-600">(–) Despesas</span>
-          <span class="font-semibold text-red-600">${fmtCurrency(dre.totalExpenses)}</span>
-        </div>
+        ${line('(–) CMO — Mão de Obra Operacional', dre.totalCMO, dre.pct.cmo, 'text-red-600')}
+        ${line('(–) Despesas Fixas', dre.totalFixed, dre.pct.fixa, 'text-red-600')}
+        ${line('(–) Impostos', dre.totalTax, dre.pct.imposto, 'text-red-600')}
+        ${line('(–) Despesas Extras', dre.totalExtra, dre.pct.extra, 'text-red-600')}
         <div class="flex justify-between items-center py-2 pt-2">
           <span class="font-bold text-stone-800">(=) Lucro confirmado</span>
-          <span class="font-bold ${profitColor(dre.confirmedProfit)}">${fmtCurrency(dre.confirmedProfit)}</span>
+          <span class="font-bold ${profitColor(dre.confirmedProfit)}">${fmtCurrency(dre.confirmedProfit)} ${pctTag(dre.pct.confirmedProfit)}</span>
         </div>
         <div class="flex justify-between items-center py-1">
           <span class="font-bold text-stone-800">(=) Lucro estimado</span>
-          <span class="font-bold ${profitColor(dre.estimatedProfit)}">${fmtCurrency(dre.estimatedProfit)}</span>
+          <span class="font-bold ${profitColor(dre.estimatedProfit)}">${fmtCurrency(dre.estimatedProfit)} ${pctTag(dre.pct.estimatedProfit)}</span>
         </div>
       </div>
-      ${dre.unknownRevenue > 0 && !dre.hasEstimate ? `<p class="text-[11px] text-stone-400 mt-3 pt-3 border-t border-stone-100">${fmtCurrency(dre.unknownRevenue)} em vendas sem nenhum custo de receita confirmado ainda neste período — sem base pra estimar o CMV desses itens (lance os custos em Custos Pendentes).</p>` : ''}
+      ${dre.unknownRevenue > 0 && !dre.hasEstimate ? `<p class="text-[11px] text-stone-400 mt-3 pt-3 border-t border-stone-100">${fmtCurrency(dre.unknownRevenue)} em vendas sem nenhum custo de receita confirmado ainda neste período — sem base pra estimar o CMV desses itens (lance os custos em Custos de Estoque).</p>` : ''}
       ${dre.hasEstimate ? `<p class="text-[11px] text-stone-400 mt-3 pt-3 border-t border-stone-100">${fmtCurrency(dre.unknownRevenue)} em vendas sem custo de receita confirmado — o CMV estimado desses itens usa a proporção custo/faturamento média dos itens que já têm custo confirmado.</p>` : ''}
-      ${entries.length === 0 ? '<p class="text-stone-400 text-center py-4 text-sm">Sem vendas no período</p>' : ''}
+      ${dre.totalStockCosts > 0 ? `<p class="text-[11px] text-stone-400 mt-3 pt-3 border-t border-stone-100">"CMV confirmado" inclui ${fmtCurrency(dre.totalStockCosts)} de Custos de Estoque avulsos (taxa de entrega, insumo fora do cardápio, perda não rastreada) lançados manualmente em Custos de Estoque.</p>` : ''}
+      ${entries.length === 0 && expenses.length === 0 ? '<p class="text-stone-400 text-center py-4 text-sm">Sem vendas nem gastos no período</p>' : ''}
     </div>
   `;
 }
