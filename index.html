@@ -684,9 +684,27 @@
       <div class="bg-white rounded-xl p-5 shadow-sm border border-stone-100 mb-5" id="sales-manual-section">
         <h3 class="font-semibold mb-4 text-stone-800 text-sm">Registrar Vendas</h3>
         <div id="sales-items-container" class="space-y-2 mb-3">
-          <div class="sales-item grid grid-cols-1 sm:grid-cols-3 gap-2 items-end"><select class="sales-product input-field text-sm min-w-0" required><option value="">Selecione o produto</option></select><input type="number" class="sales-qty input-field text-sm min-w-0" placeholder="Quantidade" min="1" step="1" required><button type="button" onclick="removeSalesItem(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button></div>
+          <div class="sales-item bg-stone-50 border border-stone-200 rounded-lg p-3 space-y-2">
+            <select class="sales-product input-field text-sm w-full" required onchange="onSalesProductChange(this)"><option value="">Selecione o produto</option></select>
+            <div class="grid grid-cols-3 gap-2 items-end">
+              <div><label class="text-[10px] font-semibold text-stone-500 uppercase tracking-wide block mb-1">Quantidade</label><input type="number" class="sales-qty input-field text-sm w-full" placeholder="Qtd" min="1" step="1" required oninput="updateSalesRowTotals(this)"></div>
+              <div><label class="text-[10px] font-semibold text-stone-500 uppercase tracking-wide block mb-1">Preço unit.</label><div class="relative"><span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-stone-400">R$</span><input type="number" class="sales-price input-field text-sm w-full pl-7" placeholder="0,00" min="0" step="any" oninput="updateSalesRowTotals(this)"></div></div>
+              <div><label class="text-[10px] font-semibold text-stone-500 uppercase tracking-wide block mb-1">Subtotal</label><div class="sales-subtotal input-field text-sm w-full bg-stone-100 text-stone-600 font-medium">R$ 0,00</div></div>
+            </div>
+            <div class="flex justify-between items-center gap-2">
+              <p class="sales-price-hint text-[11px] text-stone-400 flex-1"></p>
+              <button type="button" onclick="removeSalesItem(this)" class="btn-danger px-3 py-1.5 rounded-lg text-xs font-medium flex-shrink-0">Remover</button>
+            </div>
+          </div>
         </div>
         <button type="button" onclick="addSalesItem()" class="text-sm font-medium flex items-center gap-1 mb-4 btn-ghost px-3 py-1.5 rounded-lg"><i data-lucide="plus" class="w-4 h-4"></i>Adicionar produto</button>
+        <div id="sales-total-preview" class="mb-4 p-3 bg-emerald-50 border border-emerald-100 rounded-lg flex justify-between items-center">
+          <div>
+            <p class="text-[10px] font-bold text-emerald-700 uppercase tracking-wide">Faturamento desta venda</p>
+            <p class="text-[11px] text-emerald-600" id="sales-total-hint"></p>
+          </div>
+          <span class="text-lg font-bold text-emerald-800" id="sales-total-value">R$ 0,00</span>
+        </div>
         <button onclick="confirmSales()" class="px-4 py-2.5 rounded-lg text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 transition-colors flex items-center gap-1.5"><i data-lucide="check" class="w-4 h-4"></i>Confirmar Vendas</button>
       </div>
       <div class="bg-white rounded-xl p-5 shadow-sm border border-stone-100 mb-5 hidden" id="sales-bulk-section">
@@ -992,6 +1010,22 @@
       <div class="flex gap-2">
         <button onclick="confirmRetroactiveRevenue()" class="flex-1 px-4 py-2.5 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">Registrar Faturamento</button>
         <button onclick="closeRetroactiveRevenueModal()" class="flex-1 btn-ghost px-4 py-2.5 rounded-lg text-sm font-medium">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Alterar Data da Venda — corrige lançamento no dia errado, movendo a venda E o
+       faturamento vinculado (Faturamento/DRE) junto, sem tocar em itens/valores/estoque. -->
+  <div id="change-sale-date-modal" class="hidden fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+      <h3 class="font-bold mb-1 text-stone-800 text-lg">📅 Alterar Data da Venda</h3>
+      <p class="text-sm text-stone-500 mb-4" id="change-sale-date-summary"></p>
+      <label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Nova data</label>
+      <input id="change-sale-date-input" type="date" class="w-full input-field text-sm mb-3">
+      <div id="change-sale-date-preview" class="text-xs bg-stone-50 border border-stone-200 rounded-lg p-3 mb-4"></div>
+      <div class="flex gap-2">
+        <button onclick="confirmChangeSaleDate()" class="flex-1 btn-primary px-4 py-2.5 rounded-lg text-sm font-medium">Confirmar Alteração</button>
+        <button onclick="closeChangeSaleDateModal()" class="flex-1 btn-ghost px-4 py-2.5 rounded-lg text-sm font-medium">Cancelar</button>
       </div>
     </div>
   </div>
@@ -3222,26 +3256,95 @@ function renderSalesSelect() {
   const options = [...finished.map(f=>`<option value="finished_${f.id}" data-name="${f.product_name}" data-unit="${f.unit}" data-type="finished">${f.product_name} (${f.unit}) [Pronto]</option>`), ...vendaDireta.map(r=>`<option value="recipe_${r.id}" data-name="${r.recipe_name}" data-unit="${r.recipe_yield_unit}" data-type="venda_direta">${r.recipe_name} (${r.recipe_yield_unit}) [Venda Direta]</option>`)];
   document.querySelectorAll('.sales-product').forEach(sel => { const val = sel.value; sel.innerHTML = '<option value="">Selecione o produto</option>' + options.join(''); sel.value = val; });
 }
+// Uma linha do formulário de Venda Manual — função compartilhada entre addSalesItem() e o reset
+// pós-confirmação, pra nunca desalinhar o HTML dos dois lugares (o mesmo motivo de bug bobo que
+// já vimos em outras telas quando o "reset" tinha uma cópia da linha desatualizada).
+function buildSalesItemRowHtml() {
+  return `<div class="sales-item bg-stone-50 border border-stone-200 rounded-lg p-3 space-y-2">
+    <select class="sales-product input-field text-sm w-full" required onchange="onSalesProductChange(this)"><option value="">Selecione o produto</option></select>
+    <div class="grid grid-cols-3 gap-2 items-end">
+      <div><label class="text-[10px] font-semibold text-stone-500 uppercase tracking-wide block mb-1">Quantidade</label><input type="number" class="sales-qty input-field text-sm w-full" placeholder="Qtd" min="1" step="1" required oninput="updateSalesRowTotals(this)"></div>
+      <div><label class="text-[10px] font-semibold text-stone-500 uppercase tracking-wide block mb-1">Preço unit.</label><div class="relative"><span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-stone-400">R$</span><input type="number" class="sales-price input-field text-sm w-full pl-7" placeholder="0,00" min="0" step="any" oninput="updateSalesRowTotals(this)"></div></div>
+      <div><label class="text-[10px] font-semibold text-stone-500 uppercase tracking-wide block mb-1">Subtotal</label><div class="sales-subtotal input-field text-sm w-full bg-stone-100 text-stone-600 font-medium">R$ 0,00</div></div>
+    </div>
+    <div class="flex justify-between items-center gap-2">
+      <p class="sales-price-hint text-[11px] text-stone-400 flex-1"></p>
+      <button type="button" onclick="removeSalesItem(this)" class="btn-danger px-3 py-1.5 rounded-lg text-xs font-medium flex-shrink-0">Remover</button>
+    </div>
+  </div>`;
+}
 function addSalesItem() {
-  const container = document.getElementById('sales-items-container');
-  const div = document.createElement('div');
-  div.className = 'sales-item grid grid-cols-1 sm:grid-cols-3 gap-2 items-end';
-  div.innerHTML = `<select class="sales-product input-field text-sm min-w-0" required><option value="">Selecione o produto</option></select><input type="number" class="sales-qty input-field text-sm min-w-0" placeholder="Quantidade" min="1" step="1" required><button type="button" onclick="removeSalesItem(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button>`;
-  container.appendChild(div);
+  document.getElementById('sales-items-container').insertAdjacentHTML('beforeend', buildSalesItemRowHtml());
   renderSalesSelect();
 }
-function removeSalesItem(btn) { const parent = btn.closest('.sales-item'); if (parent.parentElement.children.length > 1) parent.remove(); }
+function removeSalesItem(btn) {
+  const parent = btn.closest('.sales-item');
+  if (parent.parentElement.children.length > 1) parent.remove();
+  updateSalesTotalPreview();
+}
+// Ao escolher o produto, pré-preenche o preço com o último preço médio de venda já lançado
+// (getFinanceSalePrice — mesma fonte que "Registrar Faturamento" retroativo já usa), igual à
+// Venda em Lote já faz na conferência de itens. Sempre editável antes de confirmar.
+function onSalesProductChange(selectEl) {
+  const row = selectEl.closest('.sales-item');
+  const opt = selectEl.selectedOptions[0];
+  const priceInput = row.querySelector('.sales-price');
+  const hintEl = row.querySelector('.sales-price-hint');
+  const name = opt ? (opt.dataset.name || '') : '';
+  if (name) {
+    const last = getFinanceSalePrice(name);
+    if (last && last.price > 0) {
+      priceInput.value = last.price.toFixed(2);
+      hintEl.textContent = `💡 Último preço: ${fmtCurrency(last.price)} — confira ou ajuste`;
+    } else {
+      priceInput.value = '';
+      hintEl.textContent = 'Sem preço cadastrado ainda pra esse produto';
+    }
+  } else {
+    priceInput.value = '';
+    hintEl.textContent = '';
+  }
+  updateSalesRowTotals(selectEl);
+}
+function updateSalesRowTotals(el) {
+  const row = el.closest('.sales-item');
+  const qty = parseFloat(row.querySelector('.sales-qty').value) || 0;
+  const price = parseFloat(row.querySelector('.sales-price').value) || 0;
+  row.querySelector('.sales-subtotal').textContent = fmtCurrency(qty * price);
+  updateSalesTotalPreview();
+}
+function updateSalesTotalPreview() {
+  let total = 0, itemsChosen = 0, itemsWithPrice = 0;
+  document.querySelectorAll('#sales-items-container .sales-item').forEach(row => {
+    const hasProduct = !!row.querySelector('.sales-product').value;
+    const qty = parseFloat(row.querySelector('.sales-qty').value) || 0;
+    const price = parseFloat(row.querySelector('.sales-price').value) || 0;
+    if (hasProduct) itemsChosen++;
+    if (hasProduct && qty > 0 && price > 0) { total += qty * price; itemsWithPrice++; }
+  });
+  const totalEl = document.getElementById('sales-total-value'); if (!totalEl) return;
+  totalEl.textContent = fmtCurrency(total);
+  const hintEl = document.getElementById('sales-total-hint');
+  hintEl.textContent = (itemsChosen > 0 && itemsWithPrice < itemsChosen)
+    ? `${itemsChosen - itemsWithPrice} item(ns) sem preço não vão entrar no faturamento`
+    : '';
+}
+function resetSalesForm() {
+  document.getElementById('sales-items-container').innerHTML = buildSalesItemRowHtml();
+  updateSalesTotalPreview();
+}
 let salesSubmitInProgress = false;
 async function confirmSales() {
   if (salesSubmitInProgress) { showToast('Já tem uma venda sendo processada, aguarde...', true); return; }
-  const items = document.querySelectorAll('.sales-item');
+  const itemEls = document.querySelectorAll('.sales-item');
   const salesData = [];
-  for (const item of items) {
+  for (const item of itemEls) {
     const sel = item.querySelector('.sales-product');
     const qty = parseInt(item.querySelector('.sales-qty').value);
+    const price = parseFloat(item.querySelector('.sales-price').value) || 0;
     if (!sel.value||!qty||qty<1) { showToast('Preencha todos os campos', true); return; }
     const opt = sel.selectedOptions[0];
-    salesData.push({value:sel.value, name:opt.dataset.name||'', unit:opt.dataset.unit||'', type:opt.dataset.type||'', qty});
+    salesData.push({value:sel.value, name:opt.dataset.name||'', unit:opt.dataset.unit||'', type:opt.dataset.type||'', qty, price});
   }
   // Só confere se o produto/receita/insumo existe (isso sim impede de processar, não tem como
   // descontar algo que não existe). Estoque insuficiente NÃO trava mais — desconta até zero e
@@ -3266,15 +3369,22 @@ async function confirmSales() {
   salesSubmitInProgress = true;
   const notesParts = [];
   const stockShortfalls = []; // avisa no final, nunca trava a venda no meio
+  const operations = []; // tudo montado na memória primeiro — mesma confiabilidade da Venda em Lote
+  const qtySnapshot = {};
+  function currentQty(product) {
+    if (!(product.id in qtySnapshot)) qtySnapshot[product.id] = product.quantity;
+    return qtySnapshot[product.id];
+  }
   try {
-    let done = 0;
     for (const s of salesData) {
-      updateLoadingProgress(`Processando ${done+1}/${salesData.length}: ${s.name}`);
       if (s.value.startsWith('finished_')) {
         const id = s.value.replace('finished_','');
         const fp = allData.find(r => r.id === id);
-        if (fp.quantity < s.qty) stockShortfalls.push(`${fp.product_name}: faltou ${fmtQty(s.qty-fp.quantity,fp.unit)} ${fp.unit} (tinha ${fmtQty(fp.quantity,fp.unit)}, vendeu ${fmtQty(s.qty,fp.unit)})`);
-        assertSaved(await dbUpdate({...fp, quantity: Math.max(0, fp.quantity - s.qty)}, {silent:true}), s.name);
+        const before = currentQty(fp);
+        if (before < s.qty) stockShortfalls.push(`${fp.product_name}: faltou ${fmtQty(s.qty-before,fp.unit)} ${fp.unit} (tinha ${fmtQty(before,fp.unit)}, vendeu ${fmtQty(s.qty,fp.unit)})`);
+        const after = Math.max(0, before - s.qty);
+        qtySnapshot[fp.id] = after;
+        operations.push({ op:'update', data: {...fp, quantity: after} });
         notesParts.push(`${s.qty} ${s.name}`);
       } else if (s.value.startsWith('recipe_')) {
         const id = s.value.replace('recipe_','');
@@ -3285,8 +3395,11 @@ async function confirmSales() {
           const p = getProducts().find(x => namesMatch(x.product_name, ing.name));
           const storageUnit = p.storage_unit||p.unit;
           const deduct = convertQuantity(ing.qty * s.qty, ing.unit, storageUnit, getCustomConversions(p));
-          if (p.quantity < deduct) stockShortfalls.push(`${p.product_name}: faltou ${fmtQty(deduct-p.quantity,storageUnit)} ${storageUnit} (tinha ${fmtQty(p.quantity,storageUnit)}, precisava ${fmtQty(deduct,storageUnit)} pra ${s.qty}× ${s.name})`);
-          assertSaved(await dbUpdate({...p, quantity: Math.max(0, p.quantity - deduct)}, {silent:true}), ing.name);
+          const before = currentQty(p);
+          if (before < deduct) stockShortfalls.push(`${p.product_name}: faltou ${fmtQty(deduct-before,storageUnit)} ${storageUnit} (tinha ${fmtQty(before,storageUnit)}, precisava ${fmtQty(deduct,storageUnit)} pra ${s.qty}× ${s.name})`);
+          const after = Math.max(0, before - deduct);
+          qtySnapshot[p.id] = after;
+          operations.push({ op:'update', data: {...p, quantity: after} });
           // Guarda o valor EXATO descontado (já na unidade de estoque) direto na venda, pra "desfazer"
           // no futuro devolver certinho mesmo que a receita seja editada depois.
           deductedIngredients.push({ name: ing.name, qty: deduct, unit: storageUnit });
@@ -3294,33 +3407,68 @@ async function confirmSales() {
         s.deductedIngredients = deductedIngredients;
         notesParts.push(`${s.qty} ${s.name}`);
       }
-      done++;
     }
-    updateLoadingProgress('Salvando registro da venda...');
-    assertSaved(await dbCreate({ ...blankRecord(), type:'movement', movement_type:'venda', movement_product:notesParts.join('; '), movement_quantity:salesData.reduce((a,s)=>a+s.qty,0), movement_date:new Date().toISOString(), movement_note:`Venda: ${notesParts.join('; ')}`, batch_items:JSON.stringify(salesData) }, {silent:true}), 'registro da venda');
+
+    // O registro da venda entra NO MESMO PACOTE dos descontos — ou os dois são gravados juntos, ou
+    // nenhum é (mesma garantia que a Venda em Lote já tem — antes, a Venda Manual gravava cada
+    // desconto numa chamada separada, o que deixava uma falha no meio poder parar com estoque
+    // parcialmente descontado e sem o registro da venda).
+    const movementOp = { op:'create', data: { ...blankRecord(), type:'movement', movement_type:'venda', movement_product:notesParts.join('; '), movement_quantity:salesData.reduce((a,s)=>a+s.qty,0), movement_date:new Date().toISOString(), movement_note:`Venda: ${notesParts.join('; ')}`, batch_items:JSON.stringify(salesData) } };
+    operations.push(movementOp);
+
+    updateLoadingProgress(`Salvando ${operations.length} mudança(s) numa viagem só...`);
+    const batchResult = await dbBatchWrite(operations, {silent:true});
+    if (!batchResult.isOk) {
+      throw new Error(batchResult.error || `${batchResult.failedCount||'algumas'} operação(ões) falharam ao gravar em lote`);
+    }
+    const savedMovementId = movementOp.data.id;
+
+    // Faturamento: mesma lógica e confiabilidade da Venda em Lote — preço médio (sale_price) e
+    // faturamento do dia (sale_revenue) NUMA VIAGEM SÓ, com erro visível se falhar (nunca engolido
+    // em silêncio, mesma lição do bug de faturamento sumido corrigido antes). Só entra pros itens
+    // que têm preço preenchido — não inventa valor pra quem ficou em branco.
+    let financeSaveFailed = false;
+    let financeSaveError = '';
+    const priceHints = salesData.filter(s => s.price > 0).map(s => ({ systemName:s.name, qty:s.qty, totalValue: s.price*s.qty, unit: s.unit }));
+    if (priceHints.length > 0 && financeUnlocked) {
+      updateLoadingProgress('Salvando valores de venda...');
+      const revenueOps = [...buildSalePriceOperations(priceHints), ...buildSaleRevenueOperations(priceHints, new Date(), savedMovementId)];
+      const revenueResult = await financeBatchWrite(revenueOps);
+      if (!revenueResult.isOk) {
+        financeSaveFailed = true;
+        financeSaveError = revenueResult.error || 'falha ao gravar';
+        console.error('Erro ao salvar faturamento/preço de venda:', financeSaveError);
+      }
+    }
+
     renderAll();
     hideLoadingProgress();
     salesSubmitInProgress = false;
-    document.getElementById('sales-items-container').innerHTML = '<div class="sales-item grid grid-cols-1 sm:grid-cols-3 gap-2 items-end"><select class="sales-product input-field text-sm min-w-0" required><option value="">Selecione o produto</option></select><input type="number" class="sales-qty input-field text-sm min-w-0" placeholder="Quantidade" min="1" step="1" required><button type="button" onclick="removeSalesItem(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button></div>';
+    resetSalesForm();
     renderSalesSelect();
     renderSalesToday();
-    if (stockShortfalls.length > 0) {
+    if (activeFinanceTab === 'faturamento') renderFaturamento();
+    if (activeFinanceTab === 'dre') renderDRE();
+
+    if (financeSaveFailed) {
+      showResultModal('⚠️ Venda registrada, mas o faturamento falhou', [
+        `Estoque descontado normalmente pra ${salesData.length} item(ns) — isso está certo.`,
+        `O valor desta venda NÃO entrou em Faturamento/DRE (erro: ${financeSaveError}).`,
+        'Use "💰 Registrar Faturamento" na lista de vendas (abaixo) pra lançar só o valor, sem descontar o estoque de novo.'
+      ], true);
+    } else if (stockShortfalls.length > 0) {
       showResultModal('✓ Venda registrada, mas alguns insumos foram até zero', stockShortfalls, false);
     } else {
-      showToast('Vendas registradas!');
+      showToast(priceHints.length > 0 ? 'Vendas registradas e faturamento lançado!' : 'Vendas registradas!');
     }
   } catch (err) {
     hideLoadingProgress();
     salesSubmitInProgress = false;
     console.error('Erro ao registrar vendas:', err);
-    const lines = [`Erro: ${err.message}`];
-    if (notesParts.length > 0) {
-      lines.push(`✓ Isto JÁ FOI descontado do estoque antes da falha:\n${notesParts.join('\n')}`);
-      lines.push('Não repita esses itens ao tentar de novo.');
-    } else {
-      lines.push('Nada chegou a ser descontado ainda — pode tentar de novo com segurança.');
-    }
-    showResultModal('Erro ao registrar vendas', lines, true);
+    showResultModal('Erro ao registrar vendas', [
+      `Erro: ${err.message}`,
+      'Como tudo é enviado numa única viagem, o mais provável é que NADA tenha sido salvo ainda — confira o estoque antes de tentar de novo. Se não tiver mudado nada, pode tentar novamente com segurança, sem risco de duplicar.'
+    ], true);
   }
 }
 let salesHistoryFilter = 'today';
@@ -3356,6 +3504,7 @@ function renderSalesToday() {
             <span class="text-xs text-stone-400 whitespace-nowrap">${d.toLocaleDateString('pt-BR')} ${d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</span>
             ${canApply ? `<div class="flex items-center gap-1.5">${applied?'<span class="text-[10px] text-emerald-600">✓ já marcado</span>':''}<button onclick="openApplyStockToSaleModal('${m.id}')" class="text-[11px] text-amber-700 hover:text-amber-800 font-medium flex items-center gap-0.5">🔧 Descontar Estoque</button></div>` : ''}
             ${canApply && !isRetro ? `<div class="flex items-center gap-1.5">${revApplied?'<span class="text-[10px] text-emerald-600">✓ faturamento marcado</span>':''}<button onclick="openApplyRevenueToSaleModal('${m.id}')" class="text-[11px] text-emerald-700 hover:text-emerald-800 font-medium flex items-center gap-0.5">💰 Registrar Faturamento</button></div>` : ''}
+            ${canApply && !isRetro ? `<button onclick="openChangeSaleDateModal('${m.id}')" class="text-[11px] text-stone-500 hover:text-stone-700 font-medium flex items-center gap-0.5">📅 Alterar Data</button>` : ''}
           </div>
         </div>
         <p class="text-sm text-stone-700 mt-1 break-words">${m.movement_product}</p>
@@ -3767,13 +3916,15 @@ async function processBulkSales(priceHints, prebuiltSalesData) {
 
     // O registro da venda entra NO MESMO PACOTE dos descontos — ou os dois são gravados juntos,
     // ou nenhum é. É isso que garante que o estoque nunca muda sem deixar rastro no Histórico.
-    operations.push({ op:'create', data: { ...blankRecord(), type:'movement', movement_type:'venda', movement_product:notesParts.join('; '), movement_quantity:salesData.reduce((a,s)=>a+s.qty,0), movement_date:saleDate.toISOString(), movement_note:`Venda em lote: ${notesParts.join('; ')}`, batch_items:JSON.stringify(salesData) } });
+    const movementOp = { op:'create', data: { ...blankRecord(), type:'movement', movement_type:'venda', movement_product:notesParts.join('; '), movement_quantity:salesData.reduce((a,s)=>a+s.qty,0), movement_date:saleDate.toISOString(), movement_note:`Venda em lote: ${notesParts.join('; ')}`, batch_items:JSON.stringify(salesData) } };
+    operations.push(movementOp);
 
     updateLoadingProgress(`Salvando ${operations.length} mudança(s) numa viagem só...`);
     const batchResult = await dbBatchWrite(operations, {silent:true});
     if (!batchResult.isOk) {
       throw new Error(batchResult.error || `${batchResult.failedCount||'algumas'} operação(ões) falharam ao gravar em lote`);
     }
+    const savedMovementId = movementOp.data.id;
     // Se veio da importação de planilha com "Valor Total", aproveita e já registra o valor de venda
     // (pra alimentar o Faturamento/DRE e a margem no CMV), sem precisar digitar preço manualmente.
     // IMPORTANTE: preço médio (sale_price) e faturamento do dia (sale_revenue) vão NUMA VIAGEM SÓ
@@ -3793,7 +3944,7 @@ async function processBulkSales(priceHints, prebuiltSalesData) {
         const s = salesData.find(sd => sd.name === h.systemName);
         return { ...h, unit: s ? s.unit : '' };
       });
-      const revenueOps = [...buildSalePriceOperations(controlledHints), ...buildSaleRevenueOperations(hintsWithUnit, saleDate)];
+      const revenueOps = [...buildSalePriceOperations(controlledHints), ...buildSaleRevenueOperations(hintsWithUnit, saleDate, savedMovementId)];
       if (revenueOps.length > 0) {
         const revenueResult = await financeBatchWrite(revenueOps);
         if (!revenueResult.isOk) {
@@ -5176,14 +5327,16 @@ function buildSalePriceOperations(items) {
 // Financeiro (mesmo padrão de "type" diferenciando o que cada linha representa):
 //   type='sale_revenue' -> {id, product_name, cost_unit (=unidade), sale_price (=preço unitário
 //   dessa venda), total_qty_sold (=qtd vendida NESSA entrada, não acumulado), total_revenue (=valor
-//   total dessa entrada), sale_price_updated_at (=data da venda, formato YYYY-MM-DD)}
+//   total dessa entrada), sale_price_updated_at (=data da venda, formato YYYY-MM-DD), movement_id
+//   (=id da venda no Estoque que gerou essa linha, quando conhecido — permite achar com certeza
+//   quais linhas de faturamento pertencem a uma venda específica, ex: pra "Alterar Data")}
 // Mesma ideia de buildSalePriceOperations: só monta, não grava.
 function getSaleRevenueEntries() { return financeData.filter(r => r.type === 'sale_revenue'); }
-function buildSaleRevenueOperations(items, saleDate) {
+function buildSaleRevenueOperations(items, saleDate, movementId) {
   const dateStr = localDateStr(saleDate);
   return items
     .filter(it => it.totalValue && it.totalValue > 0 && it.qty)
-    .map(it => ({ op:'create', data: { type:'sale_revenue', product_name:it.systemName, cost_unit:it.unit||'', sale_price: it.totalValue/it.qty, total_qty_sold:it.qty, total_revenue:it.totalValue, sale_price_updated_at:dateStr } }));
+    .map(it => ({ op:'create', data: { type:'sale_revenue', product_name:it.systemName, cost_unit:it.unit||'', sale_price: it.totalValue/it.qty, total_qty_sold:it.qty, total_revenue:it.totalValue, sale_price_updated_at:dateStr, movement_id: movementId||'' } }));
 }
 // ============================================================
 // ABA FATURAMENTO — gráfico por dia + detalhe do dia selecionado
@@ -5516,7 +5669,7 @@ async function confirmRetroactiveRevenue() {
   closeRetroactiveRevenueModal();
   showLoadingProgress('Registrando faturamento...');
   try {
-    const revenueOps = [...buildSalePriceOperations(priceHints), ...buildSaleRevenueOperations(priceHints, saleDate)];
+    const revenueOps = [...buildSalePriceOperations(priceHints), ...buildSaleRevenueOperations(priceHints, saleDate, m.id)];
     const result = await financeBatchWrite(revenueOps);
     if (!result.isOk) throw new Error(result.error || 'falha ao gravar');
     // Marca a venda como conferida, pra ficar rastreável e não parecer que ainda falta lançar —
@@ -5532,6 +5685,84 @@ async function confirmRetroactiveRevenue() {
     showResultModal('Erro ao registrar faturamento', err.message + ' — confira Faturamento/DRE antes de tentar de novo, pode ter ficado parcial.', true);
   }
 }
+
+// ============================================================
+// ALTERAR DATA DA VENDA — corrige lançamento no dia errado. Move a venda (movement_date, no
+// Estoque) E o faturamento vinculado (sale_revenue.sale_price_updated_at, no Financeiro — o que
+// alimenta Faturamento/DRE/semanal/mensal) juntos, sem tocar em itens/valores/forma de pagamento/
+// estoque. Vendas feitas a partir de agora têm o vínculo direto (sale_revenue.movement_id) —
+// vendas antigas, sem esse vínculo, são achadas por data+nome do produto (aproximado, avisado na
+// tela) e o vínculo é gravado na hora, então uma segunda edição da mesma venda já fica exata.
+// ============================================================
+let changeSaleDateMovementId = null;
+let changeSaleDateMatchedRevenue = []; // [{ entry, exact }]
+function openChangeSaleDateModal(movementId) {
+  const m = allData.find(r => r.id === movementId); if (!m) return;
+  changeSaleDateMovementId = movementId;
+  let items = []; try { items = JSON.parse(m.batch_items||'[]'); } catch(e) {}
+  const itemNames = new Set(items.map(it => it.name));
+  const oldDateKey = localDateStr(new Date(m.movement_date));
+  let matched = getSaleRevenueEntries().filter(r => r.movement_id === movementId);
+  let exact = true;
+  if (matched.length === 0) {
+    matched = getSaleRevenueEntries().filter(r => r.sale_price_updated_at === oldDateKey && itemNames.has(r.product_name));
+    exact = false;
+  }
+  changeSaleDateMatchedRevenue = matched.map(entry => ({ entry, exact }));
+  document.getElementById('change-sale-date-summary').textContent = `${m.movement_product} — atualmente em ${new Date(m.movement_date).toLocaleDateString('pt-BR')}.`;
+  document.getElementById('change-sale-date-input').value = oldDateKey;
+  const totalValue = matched.reduce((s,r)=>s+(r.total_revenue||0),0);
+  const previewEl = document.getElementById('change-sale-date-preview');
+  if (matched.length === 0) {
+    previewEl.innerHTML = `<p class="text-stone-500">Essa venda não tem faturamento vinculado encontrado (venda manual sem preço, ou item não controlado sem registro) — só a data no Histórico será alterada.</p>`;
+  } else {
+    previewEl.innerHTML = `
+      <p class="text-stone-600 mb-1">${matched.length} lançamento(s) de faturamento serão movidos junto, totalizando ${fmtCurrency(totalValue)}.</p>
+      ${!exact ? `<p class="text-amber-700">⚠️ Venda antiga, sem vínculo direto — os lançamentos foram encontrados por data + nome do produto. Se teve mais de uma venda desses itens no mesmo dia, confira antes de confirmar.</p>` : `<p class="text-emerald-700">✓ Vínculo direto — sem ambiguidade.</p>`}
+    `;
+  }
+  document.getElementById('change-sale-date-modal').classList.remove('hidden');
+}
+function closeChangeSaleDateModal() {
+  document.getElementById('change-sale-date-modal').classList.add('hidden');
+  changeSaleDateMovementId = null;
+  changeSaleDateMatchedRevenue = [];
+}
+async function confirmChangeSaleDate() {
+  const m = allData.find(r => r.id === changeSaleDateMovementId);
+  const newDateVal = document.getElementById('change-sale-date-input').value;
+  if (!m || !newDateVal) { showToast('Escolha uma data', true); return; }
+  const oldDate = new Date(m.movement_date);
+  const newDate = parseLocalDate(newDateVal);
+  newDate.setHours(oldDate.getHours(), oldDate.getMinutes(), oldDate.getSeconds(), oldDate.getMilliseconds());
+  if (localDateStr(newDate) === localDateStr(oldDate)) { showToast('Escolha uma data diferente da atual', true); return; }
+  const matched = changeSaleDateMatchedRevenue;
+  closeChangeSaleDateModal();
+  showLoadingProgress('Alterando data da venda...');
+  try {
+    // Financeiro primeiro: se falhar aqui, nada mudou ainda (a venda continua na data antiga,
+    // fácil de tentar de novo). Aproveita pra gravar movement_id nas linhas achadas por
+    // aproximação, deixando o vínculo exato pra qualquer edição futura dessa mesma venda.
+    if (matched.length > 0) {
+      const newDateKey = localDateStr(newDate);
+      const ops = matched.map(({entry}) => ({ op:'update', data: { ...entry, sale_price_updated_at:newDateKey, movement_id:m.id } }));
+      const result = await financeBatchWrite(ops);
+      if (!result.isOk) throw new Error(result.error || 'falha ao mover o faturamento');
+    }
+    assertSaved(await dbUpdate({...m, movement_date:newDate.toISOString()}, {silent:true}), 'data da venda');
+    renderAll();
+    hideLoadingProgress();
+    renderSalesToday();
+    if (activeFinanceTab === 'faturamento') renderFaturamento();
+    if (activeFinanceTab === 'dre') renderDRE();
+    showToast(matched.length > 0 ? `Data alterada — ${matched.length} lançamento(s) de faturamento movido(s) junto!` : 'Data da venda alterada!');
+  } catch (err) {
+    hideLoadingProgress();
+    console.error('Erro ao alterar data da venda:', err);
+    showResultModal('Erro ao alterar data', err.message + ' — confira Faturamento/Histórico antes de tentar de novo, pode ter ficado parcial.', true);
+  }
+}
+
 // Botão simples "🔧 Descontar Estoque" no topo da aba Vendas: escolhe o dia, e cai na mesma tela de
 // conferência de itens já usada no Faturamento — mesmo motor, só um jeito mais direto de chegar nela.
 function openPickDayForStockModal() {
