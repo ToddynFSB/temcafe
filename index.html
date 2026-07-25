@@ -559,6 +559,7 @@
       <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="vendas"><i data-lucide="credit-card" class="w-5 h-5"></i>Vendas</button>
       <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="faturamento"><i data-lucide="trending-up" class="w-5 h-5"></i>Faturamento</button>
       <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="despesas"><i data-lucide="receipt" class="w-5 h-5"></i>Gastos</button>
+      <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="config-gastos"><i data-lucide="settings" class="w-5 h-5"></i>Config. Gastos</button>
       <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="funcionarios"><i data-lucide="users" class="w-5 h-5"></i>Funcionários</button>
     </div>
   </nav>
@@ -820,6 +821,21 @@
         <h2 class="text-lg font-bold text-stone-800 flex items-center gap-2"><i data-lucide="scale" class="w-5 h-5 text-emerald-600"></i>DRE — Resultado do Período</h2>
         <button onclick="lockFinanceiro()" class="text-xs text-stone-400 hover:text-stone-600 flex items-center gap-1"><i data-lucide="lock" class="w-3.5 h-3.5"></i>Bloquear</button>
       </div>
+
+      <!-- Dinheiro em Estoque — instantâneo de agora (patrimônio), não é por período como o resto do
+           DRE (fluxo). Fica separado de propósito, pra não misturar "quanto vale o estoque hoje" com
+           "quanto lucrei nesse período". -->
+      <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 mb-4">
+        <div class="flex items-center justify-between mb-1">
+          <h3 class="font-semibold text-sm text-stone-800 flex items-center gap-2"><i data-lucide="warehouse" class="w-4 h-4 text-emerald-600"></i>Dinheiro em Estoque</h3>
+          <span class="text-[10px] text-stone-400 whitespace-nowrap">Agora — não é por período</span>
+        </div>
+        <p class="text-xl font-bold text-emerald-800 mb-1" id="inventory-value-total">R$ 0,00</p>
+        <p class="text-[11px] text-stone-400 mb-3" id="inventory-value-note"></p>
+        <button type="button" onclick="toggleInventoryValueBreakdown()" class="text-xs font-medium text-emerald-700 hover:text-emerald-800 flex items-center gap-1"><i data-lucide="chevron-down" class="w-3.5 h-3.5 transition-transform" id="inventory-value-chevron"></i>Ver por produto</button>
+        <div id="inventory-value-breakdown" class="hidden space-y-1.5 max-h-64 overflow-y-auto mt-3 pt-3 border-t border-stone-100"></div>
+      </div>
+
       <div class="flex flex-wrap gap-1.5 mb-4">
         <button class="dre-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-800 text-white" data-filter="7days">7 dias</button>
         <button class="dre-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-filter="30days">30 dias</button>
@@ -835,25 +851,22 @@
         <h2 class="text-lg font-bold text-stone-800 flex items-center gap-2"><i data-lucide="receipt" class="w-5 h-5 text-emerald-600"></i>Gastos</h2>
         <button onclick="lockFinanceiro()" class="text-xs text-stone-400 hover:text-stone-600 flex items-center gap-1"><i data-lucide="lock" class="w-3.5 h-3.5"></i>Bloquear</button>
       </div>
-      <div class="bg-white rounded-xl p-5 shadow-sm border border-stone-100 mb-5">
+      <p class="text-xs text-stone-400 mb-3">Grupo, categoria e item são cadastrados em <strong>Config. Gastos</strong> — monte sua estrutura lá primeiro.</p>
+      <div class="flex gap-2 mb-4">
+        <button id="expense-mode-simple-btn" class="expense-mode-btn px-4 py-2 rounded-lg text-sm font-medium bg-emerald-700 text-white" data-mode="simple">Gasto Simples</button>
+        <button id="expense-mode-batch-btn" class="expense-mode-btn px-4 py-2 rounded-lg text-sm font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-mode="batch">Gasto em Lote</button>
+      </div>
+
+      <!-- Gasto Simples -->
+      <div class="bg-white rounded-xl p-5 shadow-sm border border-stone-100 mb-5" id="expense-simple-section">
         <h3 class="font-semibold mb-4 text-stone-800 text-sm">Registrar Gasto</h3>
         <form onsubmit="handleAddExpense(event)">
-          <div class="grid sm:grid-cols-2 gap-3 mb-3">
-            <input id="new-expense-desc" type="text" placeholder="Descrição *" required class="input-field text-sm">
-            <select id="new-expense-category" required class="input-field text-sm" onchange="toggleExpenseCustomCategory()"><option value="">Categoria *</option></select>
+          <div class="grid sm:grid-cols-3 gap-3 mb-3">
+            <select id="new-expense-group" required class="input-field text-sm" onchange="onExpenseGroupChange(this)"><option value="">Grupo DRE *</option></select>
+            <select id="new-expense-category-select" class="input-field text-sm" onchange="onExpenseCategoryChange(this)"><option value="">Categoria (opcional)</option></select>
+            <select id="new-expense-item-select" class="input-field text-sm" onchange="onExpenseItemChange(this)"><option value="">Item (opcional)</option></select>
           </div>
-          <input id="new-expense-category-custom" type="text" placeholder="Nome da nova categoria *" class="input-field text-sm w-full mb-3 hidden">
-          <div class="mb-3">
-            <label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Grupo no DRE *</label>
-            <select id="new-expense-dre-group" required class="input-field text-sm w-full">
-              <option value="">Selecione o grupo *</option>
-              <option value="fixa">Despesa Fixa (aluguel, utilidades...)</option>
-              <option value="imposto">Imposto</option>
-              <option value="extra">Despesa Extra (manutenção, marketing, limpeza...)</option>
-              <option value="cmo">CMO — Mão de Obra</option>
-            </select>
-            <p class="text-[11px] text-stone-400 mt-1">Define em qual linha do DRE esse gasto entra. CMO normalmente não precisa ser lançado aqui à mão — o Registro Semanal em Funcionários já lança automaticamente.</p>
-          </div>
+          <input id="new-expense-desc" type="text" placeholder="Descrição *" required class="input-field text-sm w-full mb-3">
           <div class="grid sm:grid-cols-2 gap-3 mb-4">
             <div class="relative"><span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-stone-400">R$</span><input id="new-expense-amount" type="number" placeholder="Valor" min="0.01" step="any" required class="input-field text-sm w-full pl-9"></div>
             <input id="new-expense-date" type="date" required class="input-field text-sm">
@@ -861,6 +874,24 @@
           <div class="flex gap-2"><button type="submit" class="btn-primary px-5 py-2.5 rounded-lg text-sm font-medium">Salvar Gasto</button></div>
         </form>
       </div>
+
+      <!-- Gasto em Lote -->
+      <div class="bg-white rounded-xl p-5 shadow-sm border border-stone-100 mb-5 hidden" id="expense-batch-section">
+        <h3 class="font-semibold mb-1 text-stone-800 text-sm">Registrar Gasto em Lote</h3>
+        <p class="text-xs text-stone-400 mb-4">Uma nota, vários itens — cada linha vira um lançamento próprio (pra você conseguir ver "quanto gastei com X" depois), mas todos ficam marcados como vindos da mesma nota.</p>
+        <div class="mb-4">
+          <label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Data da compra</label>
+          <input id="expense-batch-date" type="date" class="input-field text-sm">
+        </div>
+        <div id="expense-batch-rows" class="space-y-2 mb-3"></div>
+        <button type="button" onclick="addExpenseBatchRow()" class="text-sm font-medium flex items-center gap-1 mb-4 btn-ghost px-3 py-1.5 rounded-lg"><i data-lucide="plus" class="w-4 h-4"></i>Adicionar item</button>
+        <div class="mb-4 p-3 bg-emerald-50 border border-emerald-100 rounded-lg flex justify-between items-center">
+          <span class="text-sm font-medium text-emerald-800">Total da nota</span>
+          <span class="text-lg font-bold text-emerald-800" id="expense-batch-total-value">R$ 0,00</span>
+        </div>
+        <button onclick="confirmExpenseBatch()" class="px-4 py-2.5 rounded-lg text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 transition-colors flex items-center gap-1.5"><i data-lucide="check" class="w-4 h-4"></i>Confirmar Gastos</button>
+      </div>
+
       <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 mb-4">
         <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-2">Filtrar</p>
         <div class="flex flex-wrap gap-1.5 mb-3">
@@ -871,11 +902,53 @@
         <select id="expense-category-filter" class="input-field text-sm w-full"><option value="">Todas categorias</option></select>
       </div>
       <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 mb-4">
+        <h3 class="font-semibold text-sm mb-3 text-stone-800 flex items-center gap-2"><i data-lucide="layers" class="w-4 h-4 text-emerald-600"></i>Total por grupo do DRE</h3>
+        <div id="expense-group-totals" class="space-y-2.5"></div>
+      </div>
+      <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 mb-4">
         <h3 class="font-semibold text-sm mb-3 text-stone-800 flex items-center gap-2"><i data-lucide="pie-chart" class="w-4 h-4 text-emerald-600"></i>Total por categoria</h3>
         <div id="expense-category-totals" class="space-y-2.5"></div>
       </div>
       <h3 class="font-semibold mb-3 text-stone-800 text-sm">Gastos Registrados</h3>
       <div id="expenses-list" class="space-y-2"></div>
+    </section>
+
+    <!-- Sub-aba: Config. Gastos -->
+    <section id="fpanel-config-gastos" class="hidden fade-in">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-bold text-stone-800 flex items-center gap-2"><i data-lucide="settings" class="w-5 h-5 text-emerald-600"></i>Config. Gastos</h2>
+        <button onclick="lockFinanceiro()" class="text-xs text-stone-400 hover:text-stone-600 flex items-center gap-1"><i data-lucide="lock" class="w-3.5 h-3.5"></i>Bloquear</button>
+      </div>
+      <p class="text-xs text-stone-400 mb-4">Monte sua própria estrutura: Grupo do DRE → Categoria → Item. É isso que alimenta o Gasto em Lote, os filtros de Gastos e as linhas do DRE.</p>
+
+      <div class="bg-white rounded-xl p-5 shadow-sm border border-stone-100 mb-5">
+        <h3 class="font-semibold mb-3 text-stone-800 text-sm flex items-center gap-2"><i data-lucide="layers" class="w-4 h-4 text-emerald-600"></i>Grupos do DRE</h3>
+        <form onsubmit="handleAddDreGroup(event)" class="flex gap-2 mb-3">
+          <input id="new-dre-group-name" type="text" placeholder="Nome do grupo (ex: Despesas Administrativas)" required class="input-field text-sm flex-1">
+          <button type="submit" class="btn-primary px-4 py-2.5 rounded-lg text-sm font-medium flex-shrink-0">Adicionar</button>
+        </form>
+        <div id="dre-group-config-list"></div>
+      </div>
+
+      <div class="bg-white rounded-xl p-5 shadow-sm border border-stone-100 mb-5">
+        <h3 class="font-semibold mb-3 text-stone-800 text-sm flex items-center gap-2"><i data-lucide="folder" class="w-4 h-4 text-emerald-600"></i>Categorias</h3>
+        <form onsubmit="handleAddExpenseCategory(event)" class="grid sm:grid-cols-[1fr_1fr_auto] gap-2 mb-3">
+          <input id="new-expense-category-name" type="text" placeholder="Nome da categoria (ex: Limpeza)" required class="input-field text-sm">
+          <select id="new-expense-category-group" required class="input-field text-sm"><option value="">Grupo DRE *</option></select>
+          <button type="submit" class="btn-primary px-4 py-2.5 rounded-lg text-sm font-medium">Adicionar</button>
+        </form>
+        <div id="expense-category-config-list"></div>
+      </div>
+
+      <div class="bg-white rounded-xl p-5 shadow-sm border border-stone-100 mb-5">
+        <h3 class="font-semibold mb-3 text-stone-800 text-sm flex items-center gap-2"><i data-lucide="package" class="w-4 h-4 text-emerald-600"></i>Itens</h3>
+        <form onsubmit="handleAddExpenseItem(event)" class="grid sm:grid-cols-[1fr_1fr_auto] gap-2 mb-3">
+          <input id="new-expense-item-name" type="text" placeholder="Nome do item (ex: Detergente)" required class="input-field text-sm">
+          <select id="new-expense-item-category" required class="input-field text-sm"><option value="">Categoria *</option></select>
+          <button type="submit" class="btn-primary px-4 py-2.5 rounded-lg text-sm font-medium">Adicionar</button>
+        </form>
+        <div id="expense-item-config-list"></div>
+      </div>
     </section>
 
     <!-- Sub-aba: Funcionários -->
@@ -3250,6 +3323,14 @@ document.addEventListener('click', (e) => {
   document.getElementById('sales-bulk-section').classList.toggle('hidden', currentSalesMode !== 'bulk');
   if (currentSalesMode === 'bulk') { initBulkSalesDate(); }
 });
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.expense-mode-btn'); if (!btn) return;
+  currentExpenseMode = btn.dataset.mode;
+  document.querySelectorAll('.expense-mode-btn').forEach(b => { b.className = `expense-mode-btn px-4 py-2 rounded-lg text-sm font-medium ${b.dataset.mode===currentExpenseMode?'bg-emerald-700 text-white':'bg-stone-100 text-stone-600 hover:bg-stone-200'}`; });
+  document.getElementById('expense-simple-section').classList.toggle('hidden', currentExpenseMode !== 'simple');
+  document.getElementById('expense-batch-section').classList.toggle('hidden', currentExpenseMode !== 'batch');
+  if (currentExpenseMode === 'batch' && document.querySelectorAll('.expense-batch-row').length === 0) resetExpenseBatchForm();
+});
 function renderSalesSelect() {
   const finished = getFinishedProducts();
   const vendaDireta = getRecipes().filter(r => r.recipe_type === 'Venda Direta');
@@ -5115,6 +5196,27 @@ async function confirmDelete() {
       if (result.ok) { financeData = financeData.filter(r => r.id !== sc.id); renderStockCosts(); renderDRE(); showToast('Custo avulso excluído!'); }
       else showToast('Erro ao excluir', true);
     }
+  } else if (deleteType === 'dre_group') {
+    const g = financeData.find(r => r.id === deleteId);
+    if (g) {
+      const result = await financeApiCall('delete', { id: g.id });
+      if (result.ok) { financeData = financeData.filter(r => r.id !== g.id); renderExpenseConfig(); renderExpenses(); if (activeFinanceTab==='dre') renderDRE(); showToast('Grupo excluído!'); }
+      else showToast('Erro ao excluir', true);
+    }
+  } else if (deleteType === 'expense_category') {
+    const c = financeData.find(r => r.id === deleteId);
+    if (c) {
+      const result = await financeApiCall('delete', { id: c.id });
+      if (result.ok) { financeData = financeData.filter(r => r.id !== c.id); renderExpenseConfig(); renderExpenses(); showToast('Categoria excluída!'); }
+      else showToast('Erro ao excluir', true);
+    }
+  } else if (deleteType === 'expense_item') {
+    const it = financeData.find(r => r.id === deleteId);
+    if (it) {
+      const result = await financeApiCall('delete', { id: it.id });
+      if (result.ok) { financeData = financeData.filter(r => r.id !== it.id); renderExpenseConfig(); showToast('Item excluído!'); }
+      else showToast('Erro ao excluir', true);
+    }
   } else if (deleteType === 'employee') {
     const emp = financeData.find(r => r.id === deleteId);
     if (emp) {
@@ -5211,6 +5313,7 @@ document.addEventListener('click', (e) => {
   document.getElementById('fpanel-faturamento').classList.toggle('hidden', activeFinanceTab!=='faturamento');
   document.getElementById('fpanel-dre').classList.toggle('hidden', activeFinanceTab!=='dre');
   document.getElementById('fpanel-despesas').classList.toggle('hidden', activeFinanceTab!=='despesas');
+  document.getElementById('fpanel-config-gastos').classList.toggle('hidden', activeFinanceTab!=='config-gastos');
   document.getElementById('fpanel-funcionarios').classList.toggle('hidden', activeFinanceTab!=='funcionarios');
   if (activeFinanceTab === 'precos') renderFinancePrecos();
   if (activeFinanceTab === 'cmv') renderFinanceCMV();
@@ -5218,6 +5321,7 @@ document.addEventListener('click', (e) => {
   if (activeFinanceTab === 'faturamento') renderFaturamento();
   if (activeFinanceTab === 'dre') renderDRE();
   if (activeFinanceTab === 'despesas') renderExpenses();
+  if (activeFinanceTab === 'config-gastos') renderExpenseConfig();
   if (activeFinanceTab === 'funcionarios') renderEmployees();
   lucide.createIcons();
 });
@@ -6017,6 +6121,7 @@ function renderFinanceiro() {
   document.getElementById('fpanel-faturamento').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='faturamento');
   document.getElementById('fpanel-dre').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='dre');
   document.getElementById('fpanel-despesas').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='despesas');
+  document.getElementById('fpanel-config-gastos').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='config-gastos');
   document.getElementById('fpanel-funcionarios').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='funcionarios');
   if (financeUnlocked) {
     renderFinancePending(); renderStockCosts(); renderFinancePrecos(); renderFinanceCMV();
@@ -6024,6 +6129,7 @@ function renderFinanceiro() {
     if (activeFinanceTab === 'faturamento') renderFaturamento();
     if (activeFinanceTab === 'dre') renderDRE();
     if (activeFinanceTab === 'despesas') renderExpenses();
+    if (activeFinanceTab === 'config-gastos') renderExpenseConfig();
     if (activeFinanceTab === 'funcionarios') renderEmployees();
     lucide.createIcons();
   }
@@ -6044,6 +6150,7 @@ async function unlockFinanceiro() {
       employee_pay_value: r.employee_pay_value !== undefined && r.employee_pay_value !== null ? parseFloat(r.employee_pay_value) || 0 : undefined,
     }));
     financeUnlocked = true;
+    await seedDefaultDreGroupsIfNeeded();
     hideLoadingProgress();
     document.getElementById('finance-password-input').value = '';
     activeFinanceTab = 'dre';
@@ -6471,74 +6578,338 @@ function renderFinanceCMV() {
 }
 
 // ============================================================
-// GASTOS (DESPESAS)
-// Reaproveita o padrão dinâmico da aba Financeiro: type='expense' -> {id, type,
-// product_name(=descrição), category, total_cost(=valor), expense_date(=data, "yyyy-MM-dd"),
-// cost_unit(=grupo no DRE: 'cmo'|'fixa'|'imposto'|'extra' — reaproveitado, não é unidade de
-// medida aqui), linked_employee_id(quando veio do Registro Semanal), movement_id(=id do
-// weekly_timesheet que gerou esse gasto, quando aplicável), updated_at}
-// O "grupo no DRE" é independente da categoria (categoria é só um rótulo livre pra você
-// organizar/filtrar; o grupo é o que decide em qual linha do DRE o valor entra).
+// ESTRUTURA DE GASTOS — Grupo do DRE → Categoria → Item, cadastrada por você em "Config. Gastos".
+// Reaproveita o padrão dinâmico da aba Financeiro, sem coluna nova:
+//   type='dre_group'        -> {id, type, product_name(=nome), skipped(=protegido — true só pro
+//                               grupo "CMO", que o Registro Semanal depende dele existir), updated_at}
+//   type='expense_category' -> {id, type, product_name(=nome), movement_id(=id do grupo), updated_at}
+//   type='expense_item'     -> {id, type, product_name(=nome), movement_id(=id da categoria), updated_at}
+// Isso substitui o antigo par "categoria texto livre + grupo fixo (cmo/fixa/imposto/extra)" por
+// uma estrutura que você monta do seu jeito. Dado antigo continua funcionando (ver
+// resolveExpenseDreGroupId) sem precisar editar nada manualmente.
 // ============================================================
-const DEFAULT_EXPENSE_CATEGORIES = ['Aluguel','Descartáveis e Embalagens','Fornecedores','Limpeza','Manutenção','Marketing','Taxas e Impostos','Utilidades (água/luz/internet)','Outros'];
-const DRE_GROUP_LABELS = { cmo:'CMO', fixa:'Despesa Fixa', imposto:'Imposto', extra:'Despesa Extra' };
-// Gastos lançados antes do grupo existir não têm cost_unit preenchido — infere pela categoria,
-// pra não sumir do DRE nem cair tudo genericamente num só grupo sem critério nenhum.
-function inferDreGroup(expense) {
-  if (expense.cost_unit && DRE_GROUP_LABELS[expense.cost_unit]) return expense.cost_unit;
-  const cat = (expense.category || '').toLowerCase();
-  if (cat.includes('mão de obra') || cat.includes('mao de obra')) return 'cmo';
-  if (cat.includes('imposto') || cat.includes('taxa')) return 'imposto';
-  if (cat.includes('aluguel') || cat.includes('utilidades') || cat.includes('água') || cat.includes('luz') || cat.includes('internet')) return 'fixa';
-  return 'extra';
-}
-let expenseFilter = '30days';
-let expenseCategoryFilter = '';
-function getExpenses() { return financeData.filter(r => r.type === 'expense'); }
-function getAllExpenseCategories() {
-  const used = getExpenses().map(e => e.category).filter(Boolean);
-  return Array.from(new Set([...DEFAULT_EXPENSE_CATEGORIES, ...used])).sort((a,b)=>a.localeCompare(b));
-}
-function populateExpenseCategorySelects() {
-  const categories = getAllExpenseCategories();
-  const formSel = document.getElementById('new-expense-category');
-  if (formSel) { const val = formSel.value; formSel.innerHTML = '<option value="">Categoria *</option>' + categories.map(c=>`<option value="${c}">${c}</option>`).join('') + '<option value="__custom__">+ Nova categoria...</option>'; if (val) formSel.value = val; }
-  const filterSel = document.getElementById('expense-category-filter');
-  if (filterSel) { const val = filterSel.value; filterSel.innerHTML = '<option value="">Todas categorias</option>' + categories.map(c=>`<option value="${c}">${c}</option>`).join(''); filterSel.value = val; }
-}
-function toggleExpenseCustomCategory() {
-  const sel = document.getElementById('new-expense-category');
-  const custom = document.getElementById('new-expense-category-custom');
-  const isCustom = sel.value === '__custom__';
-  custom.classList.toggle('hidden', !isCustom);
-  custom.required = isCustom;
-}
-async function handleAddExpense(e) {
-  e.preventDefault();
-  const desc = document.getElementById('new-expense-desc').value.trim();
-  let category = document.getElementById('new-expense-category').value;
-  if (category === '__custom__') category = document.getElementById('new-expense-category-custom').value.trim();
-  const dreGroup = document.getElementById('new-expense-dre-group').value;
-  const amount = parseFloat(document.getElementById('new-expense-amount').value);
-  const date = document.getElementById('new-expense-date').value;
-  if (!desc || !category || !dreGroup || !amount || amount <= 0 || !date) { showToast('Preencha todos os campos obrigatórios', true); return; }
-  showLoadingProgress('Salvando gasto...');
+function getDreGroups() { return financeData.filter(r => r.type === 'dre_group'); }
+function getExpenseCategories() { return financeData.filter(r => r.type === 'expense_category'); }
+function getExpenseItems() { return financeData.filter(r => r.type === 'expense_item'); }
+function getDreGroupById(id) { return getDreGroups().find(g => g.id === id) || null; }
+function getExpenseCategoryById(id) { return getExpenseCategories().find(c => c.id === id) || null; }
+function getExpenseItemById(id) { return getExpenseItems().find(i => i.id === id) || null; }
+function isDreGroupProtected(g) { return g && (g.skipped === true || g.skipped === 'true'); }
+
+// Semeia os 4 grupos que já existiam como valor fixo no código (CMO/Despesa Fixa/Imposto/Despesa
+// Extra) como registros de verdade, na primeira vez que a Central Financeira é desbloqueada depois
+// dessa mudança — só roda se ainda não existir NENHUM grupo, então nunca duplica nem some com
+// grupos que você já tiver criado/apagado. "CMO" nasce protegido (o Registro Semanal depende dele
+// existir); os outros três nascem como sugestão, livres pra editar/renomear/excluir como quiser.
+let dreGroupsSeedAttempted = false;
+async function seedDefaultDreGroupsIfNeeded() {
+  if (dreGroupsSeedAttempted) return;
+  dreGroupsSeedAttempted = true;
+  if (getDreGroups().length > 0) return;
+  const seed = [
+    { name:'CMO', isSystem:true },
+    { name:'Despesa Fixa', isSystem:false },
+    { name:'Imposto', isSystem:false },
+    { name:'Despesa Extra', isSystem:false },
+  ];
   try {
-    const payload = { type:'expense', product_name:desc, category, cost_unit:dreGroup, total_cost:amount, expense_date:date, updated_at:new Date().toISOString() };
+    const ops = seed.map(g => ({ op:'create', data:{ type:'dre_group', product_name:g.name, skipped:g.isSystem, updated_at:new Date().toISOString() } }));
+    await financeBatchWrite(ops);
+  } catch (e) {
+    console.error('Erro ao semear grupos padrão do DRE:', e);
+    dreGroupsSeedAttempted = false; // permite tentar de novo no próximo desbloqueio
+  }
+}
+// Resolve o grupo do DRE de um gasto, em camadas — pra nunca deixar um gasto "sumir" do DRE:
+// 1) cost_unit já é o id de um grupo (lançamento direto, sem categoria)
+// 2) cost_unit é o id de uma categoria (lançamento estruturado) -> usa o grupo dela
+// 3) cost_unit é uma das chaves antigas fixas ('cmo'|'fixa'|'imposto'|'extra', de antes dessa
+//    reformulação) -> mapeia pro grupo com esse nome
+// 4) nada disso — infere pela categoria em texto livre (gastos bem antigos, sem cost_unit nenhum)
+function resolveExpenseDreGroupId(expense) {
+  if (getDreGroupById(expense.cost_unit)) return expense.cost_unit;
+  const cat = getExpenseCategoryById(expense.cost_unit);
+  if (cat) return cat.movement_id;
+  const legacyNames = { cmo:'CMO', fixa:'Despesa Fixa', imposto:'Imposto', extra:'Despesa Extra' };
+  if (expense.cost_unit && legacyNames[expense.cost_unit]) {
+    const g = getDreGroups().find(g => g.product_name === legacyNames[expense.cost_unit]);
+    if (g) return g.id;
+  }
+  const catText = (expense.category || '').toLowerCase();
+  let guessName = 'Despesa Extra';
+  if (catText.includes('mão de obra') || catText.includes('mao de obra')) guessName = 'CMO';
+  else if (catText.includes('imposto') || catText.includes('taxa')) guessName = 'Imposto';
+  else if (catText.includes('aluguel') || catText.includes('utilidades') || catText.includes('água') || catText.includes('luz') || catText.includes('internet')) guessName = 'Despesa Fixa';
+  const fallback = getDreGroups().find(g => g.product_name === guessName) || getDreGroups()[0];
+  return fallback ? fallback.id : null;
+}
+function resolveExpenseCategoryId(expense) { return getExpenseCategoryById(expense.cost_unit) ? expense.cost_unit : null; }
+
+// Selects compartilhados entre Gasto Simples, Gasto em Lote e os formulários de Config. Gastos.
+function populateExpenseGroupSelect(selectEl, placeholder) {
+  if (!selectEl) return;
+  const val = selectEl.value;
+  selectEl.innerHTML = `<option value="">${placeholder || 'Grupo DRE *'}</option>` + getDreGroups().sort((a,b)=>(a.product_name||'').localeCompare(b.product_name||'')).map(g=>`<option value="${g.id}">${g.product_name}</option>`).join('');
+  if (val) selectEl.value = val;
+}
+function populateExpenseCategorySelectForGroup(selectEl, groupId, placeholder) {
+  if (!selectEl) return;
+  const val = selectEl.value;
+  const cats = groupId ? getExpenseCategories().filter(c => c.movement_id === groupId) : [];
+  selectEl.innerHTML = `<option value="">${placeholder || 'Categoria (opcional)'}</option>` + cats.sort((a,b)=>(a.product_name||'').localeCompare(b.product_name||'')).map(c=>`<option value="${c.id}">${c.product_name}</option>`).join('');
+  if (val) selectEl.value = val;
+}
+function populateExpenseItemSelectForCategory(selectEl, categoryId, placeholder) {
+  if (!selectEl) return;
+  const val = selectEl.value;
+  const items = categoryId ? getExpenseItems().filter(i => i.movement_id === categoryId) : [];
+  selectEl.innerHTML = `<option value="">${placeholder || 'Item (opcional)'}</option>` + items.sort((a,b)=>(a.product_name||'').localeCompare(b.product_name||'')).map(i=>`<option value="${i.id}">${i.product_name}</option>`).join('');
+  if (val) selectEl.value = val;
+}
+
+// ============================================================
+// CONFIG. GASTOS — CRUD de Grupos, Categorias e Itens.
+// ============================================================
+let editingConfigId = null;
+function toggleEditConfigRow(id) { editingConfigId = editingConfigId === id ? null : id; renderExpenseConfig(); }
+
+async function handleAddDreGroup(e) {
+  e.preventDefault();
+  const name = document.getElementById('new-dre-group-name').value.trim();
+  if (!name) { showToast('Digite o nome do grupo', true); return; }
+  if (getDreGroups().some(g => (g.product_name||'').toLowerCase() === name.toLowerCase())) { showToast('Já existe um grupo com esse nome', true); return; }
+  showLoadingProgress('Salvando grupo...');
+  try {
+    const payload = { type:'dre_group', product_name:name, skipped:false, updated_at:new Date().toISOString() };
     const r = await financeApiCall('create', { data: payload });
     financeData.push({ id:r.id, ...payload });
     hideLoadingProgress();
-    showToast('Gasto registrado!');
+    showToast('Grupo criado!');
     e.target.reset();
-    document.getElementById('new-expense-date').value = localDateStr(new Date());
-    toggleExpenseCustomCategory();
-    renderExpenses();
+    renderExpenseConfig();
   } catch (err) {
     hideLoadingProgress();
-    console.error('Erro ao salvar gasto:', err);
-    showToast('Erro ao salvar gasto: ' + err.message, true);
+    console.error('Erro ao criar grupo:', err);
+    showToast('Erro ao criar grupo: ' + err.message, true);
   }
 }
+async function renameDreGroup(id, newName) {
+  const g = financeData.find(r => r.id === id);
+  if (!g || !newName || !newName.trim()) { showToast('Digite um nome válido', true); return; }
+  try {
+    await financeApiCall('update', { data: { ...g, product_name: newName.trim() } });
+    g.product_name = newName.trim();
+    editingConfigId = null;
+    showToast('Grupo renomeado!');
+    renderExpenseConfig();
+    renderExpenses();
+    if (activeFinanceTab === 'dre') renderDRE();
+  } catch (err) {
+    console.error('Erro ao renomear grupo:', err);
+    showToast('Erro ao renomear: ' + err.message, true);
+  }
+}
+function requestDeleteDreGroup(id) {
+  const g = financeData.find(r => r.id === id); if (!g) return;
+  if (isDreGroupProtected(g)) { showToast('Esse grupo é usado automaticamente pelo Registro Semanal (CMO) e não pode ser excluído — mas pode ser renomeado', true); return; }
+  if (getExpenseCategories().some(c => c.movement_id === id)) { showToast('Existem categorias nesse grupo — mova ou exclua as categorias antes de apagar o grupo', true); return; }
+  pendingDeleteId = id; pendingDeleteType = 'dre_group';
+  document.getElementById('delete-confirm-text').textContent = `Deseja excluir o grupo "${g.product_name}"?`;
+  document.getElementById('delete-confirm-modal').classList.remove('hidden');
+}
+
+async function handleAddExpenseCategory(e) {
+  e.preventDefault();
+  const name = document.getElementById('new-expense-category-name').value.trim();
+  const groupId = document.getElementById('new-expense-category-group').value;
+  if (!name || !groupId) { showToast('Preencha o nome e o grupo', true); return; }
+  if (getExpenseCategories().some(c => (c.product_name||'').toLowerCase() === name.toLowerCase())) { showToast('Já existe uma categoria com esse nome', true); return; }
+  showLoadingProgress('Salvando categoria...');
+  try {
+    const payload = { type:'expense_category', product_name:name, movement_id:groupId, updated_at:new Date().toISOString() };
+    const r = await financeApiCall('create', { data: payload });
+    financeData.push({ id:r.id, ...payload });
+    hideLoadingProgress();
+    showToast('Categoria criada!');
+    e.target.reset();
+    renderExpenseConfig();
+  } catch (err) {
+    hideLoadingProgress();
+    console.error('Erro ao criar categoria:', err);
+    showToast('Erro ao criar categoria: ' + err.message, true);
+  }
+}
+async function renameExpenseCategory(id, newName) {
+  const c = financeData.find(r => r.id === id);
+  if (!c || !newName || !newName.trim()) { showToast('Digite um nome válido', true); return; }
+  try {
+    await financeApiCall('update', { data: { ...c, product_name: newName.trim() } });
+    c.product_name = newName.trim();
+    editingConfigId = null;
+    showToast('Categoria renomeada!');
+    renderExpenseConfig();
+    renderExpenses();
+  } catch (err) {
+    console.error('Erro ao renomear categoria:', err);
+    showToast('Erro ao renomear: ' + err.message, true);
+  }
+}
+function requestDeleteExpenseCategory(id) {
+  const c = financeData.find(r => r.id === id); if (!c) return;
+  const inUseByItems = getExpenseItems().some(i => i.movement_id === id);
+  const inUseByExpenses = getExpenses().some(ex => resolveExpenseCategoryId(ex) === id);
+  if (inUseByItems || inUseByExpenses) { showToast('Essa categoria tem itens ou gastos lançados — exclua/mova o que usa ela antes, pra não perder o histórico', true); return; }
+  pendingDeleteId = id; pendingDeleteType = 'expense_category';
+  document.getElementById('delete-confirm-text').textContent = `Deseja excluir a categoria "${c.product_name}"?`;
+  document.getElementById('delete-confirm-modal').classList.remove('hidden');
+}
+
+async function handleAddExpenseItem(e) {
+  e.preventDefault();
+  const name = document.getElementById('new-expense-item-name').value.trim();
+  const categoryId = document.getElementById('new-expense-item-category').value;
+  if (!name || !categoryId) { showToast('Preencha o nome e a categoria', true); return; }
+  showLoadingProgress('Salvando item...');
+  try {
+    const payload = { type:'expense_item', product_name:name, movement_id:categoryId, updated_at:new Date().toISOString() };
+    const r = await financeApiCall('create', { data: payload });
+    financeData.push({ id:r.id, ...payload });
+    hideLoadingProgress();
+    showToast('Item criado!');
+    e.target.reset();
+    renderExpenseConfig();
+  } catch (err) {
+    hideLoadingProgress();
+    console.error('Erro ao criar item:', err);
+    showToast('Erro ao criar item: ' + err.message, true);
+  }
+}
+async function renameExpenseItem(id, newName) {
+  const it = financeData.find(r => r.id === id);
+  if (!it || !newName || !newName.trim()) { showToast('Digite um nome válido', true); return; }
+  try {
+    await financeApiCall('update', { data: { ...it, product_name: newName.trim() } });
+    it.product_name = newName.trim();
+    editingConfigId = null;
+    showToast('Item renomeado!');
+    renderExpenseConfig();
+  } catch (err) {
+    console.error('Erro ao renomear item:', err);
+    showToast('Erro ao renomear: ' + err.message, true);
+  }
+}
+function requestDeleteExpenseItem(id) {
+  const it = financeData.find(r => r.id === id); if (!it) return;
+  if (getExpenses().some(ex => ex.movement_id === id)) { showToast('Esse item tem gastos lançados — exclua/mova o que usa ele antes, pra não perder o histórico', true); return; }
+  pendingDeleteId = id; pendingDeleteType = 'expense_item';
+  document.getElementById('delete-confirm-text').textContent = `Deseja excluir o item "${it.product_name}"?`;
+  document.getElementById('delete-confirm-modal').classList.remove('hidden');
+}
+
+function renderExpenseConfig() {
+  const groupEl = document.getElementById('dre-group-config-list');
+  if (groupEl) {
+    const groups = getDreGroups().slice().sort((a,b)=>(a.product_name||'').localeCompare(b.product_name||''));
+    groupEl.innerHTML = groups.length === 0 ? '<p class="text-stone-400 text-center py-4 text-sm">Nenhum grupo cadastrado</p>' : groups.map(g => {
+      const catCount = getExpenseCategories().filter(c=>c.movement_id===g.id).length;
+      if (editingConfigId === g.id) {
+        return `<div class="flex items-center gap-2 p-2 bg-stone-50 rounded-lg mb-1">
+          <input type="text" id="edit-dre-group-input-${g.id}" value="${g.product_name}" class="input-field text-sm flex-1 py-1.5">
+          <button onclick="renameDreGroup('${g.id}', document.getElementById('edit-dre-group-input-${g.id}').value)" class="text-emerald-600 hover:text-emerald-800 flex-shrink-0"><i data-lucide="check" class="w-4 h-4"></i></button>
+          <button onclick="toggleEditConfigRow('${g.id}')" class="text-stone-400 hover:text-stone-600 flex-shrink-0"><i data-lucide="x" class="w-4 h-4"></i></button>
+        </div>`;
+      }
+      return `<div class="flex items-center justify-between gap-2 p-2 hover:bg-stone-50 rounded-lg mb-1">
+        <span class="text-sm text-stone-700 min-w-0 truncate">${g.product_name}${isDreGroupProtected(g)?' <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-stone-100 text-stone-500 font-semibold whitespace-nowrap">automático · CMO</span>':''}</span>
+        <div class="flex items-center gap-1.5 flex-shrink-0">
+          <span class="text-[11px] text-stone-400 whitespace-nowrap">${catCount} categoria(s)</span>
+          <button onclick="toggleEditConfigRow('${g.id}')" class="text-stone-400 hover:text-stone-600"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
+          <button onclick="requestDeleteDreGroup('${g.id}')" class="text-stone-300 hover:text-red-600"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+  const catConfigEl = document.getElementById('expense-category-config-list');
+  if (catConfigEl) {
+    const groups = getDreGroups().slice().sort((a,b)=>(a.product_name||'').localeCompare(b.product_name||''));
+    catConfigEl.innerHTML = groups.length === 0 ? '<p class="text-stone-400 text-center py-4 text-sm">Cadastre um grupo primeiro</p>' : groups.map(g => {
+      const cats = getExpenseCategories().filter(c => c.movement_id === g.id).sort((a,b)=>(a.product_name||'').localeCompare(b.product_name||''));
+      return `<div class="mb-3">
+        <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-1.5">${g.product_name}</p>
+        ${cats.length===0 ? '<p class="text-xs text-stone-400 pl-1 mb-1">Nenhuma categoria ainda</p>' : cats.map(c => {
+          const itemCount = getExpenseItems().filter(i=>i.movement_id===c.id).length;
+          if (editingConfigId === c.id) {
+            return `<div class="flex items-center gap-2 p-2 bg-stone-50 rounded-lg mb-1">
+              <input type="text" id="edit-expense-category-input-${c.id}" value="${c.product_name}" class="input-field text-sm flex-1 py-1.5">
+              <button onclick="renameExpenseCategory('${c.id}', document.getElementById('edit-expense-category-input-${c.id}').value)" class="text-emerald-600 hover:text-emerald-800 flex-shrink-0"><i data-lucide="check" class="w-4 h-4"></i></button>
+              <button onclick="toggleEditConfigRow('${c.id}')" class="text-stone-400 hover:text-stone-600 flex-shrink-0"><i data-lucide="x" class="w-4 h-4"></i></button>
+            </div>`;
+          }
+          return `<div class="flex items-center justify-between gap-2 p-2 hover:bg-stone-50 rounded-lg mb-1">
+            <span class="text-sm text-stone-700 min-w-0 truncate">${c.product_name}</span>
+            <div class="flex items-center gap-1.5 flex-shrink-0">
+              <span class="text-[11px] text-stone-400 whitespace-nowrap">${itemCount} item(ns)</span>
+              <button onclick="toggleEditConfigRow('${c.id}')" class="text-stone-400 hover:text-stone-600"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
+              <button onclick="requestDeleteExpenseCategory('${c.id}')" class="text-stone-300 hover:text-red-600"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>`;
+    }).join('');
+  }
+  const itemConfigEl = document.getElementById('expense-item-config-list');
+  if (itemConfigEl) {
+    const cats = getExpenseCategories().slice().sort((a,b)=>(a.product_name||'').localeCompare(b.product_name||''));
+    itemConfigEl.innerHTML = cats.length === 0 ? '<p class="text-stone-400 text-center py-4 text-sm">Cadastre uma categoria primeiro</p>' : cats.map(c => {
+      const its = getExpenseItems().filter(i => i.movement_id === c.id).sort((a,b)=>(a.product_name||'').localeCompare(b.product_name||''));
+      return `<div class="mb-3">
+        <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-1.5">${c.product_name}</p>
+        ${its.length===0 ? '<p class="text-xs text-stone-400 pl-1 mb-1">Nenhum item ainda</p>' : its.map(it => {
+          if (editingConfigId === it.id) {
+            return `<div class="flex items-center gap-2 p-2 bg-stone-50 rounded-lg mb-1">
+              <input type="text" id="edit-expense-item-input-${it.id}" value="${it.product_name}" class="input-field text-sm flex-1 py-1.5">
+              <button onclick="renameExpenseItem('${it.id}', document.getElementById('edit-expense-item-input-${it.id}').value)" class="text-emerald-600 hover:text-emerald-800 flex-shrink-0"><i data-lucide="check" class="w-4 h-4"></i></button>
+              <button onclick="toggleEditConfigRow('${it.id}')" class="text-stone-400 hover:text-stone-600 flex-shrink-0"><i data-lucide="x" class="w-4 h-4"></i></button>
+            </div>`;
+          }
+          return `<div class="flex items-center justify-between gap-2 p-2 hover:bg-stone-50 rounded-lg mb-1">
+            <span class="text-sm text-stone-700 min-w-0 truncate">${it.product_name}</span>
+            <div class="flex items-center gap-1.5 flex-shrink-0">
+              <button onclick="toggleEditConfigRow('${it.id}')" class="text-stone-400 hover:text-stone-600"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
+              <button onclick="requestDeleteExpenseItem('${it.id}')" class="text-stone-300 hover:text-red-600"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>`;
+    }).join('');
+  }
+  populateExpenseGroupSelect(document.getElementById('new-expense-category-group'), 'Grupo DRE *');
+  populateExpenseCategorySelectForGroup(document.getElementById('new-expense-item-category'), null, 'Categoria *');
+  // O select de categoria do form de item precisa listar TODAS as categorias (não filtradas por
+  // grupo, já que esse formulário não tem seletor de grupo) — repovoa direto, sem passar groupId.
+  const itemCatSel = document.getElementById('new-expense-item-category');
+  if (itemCatSel) {
+    const val = itemCatSel.value;
+    itemCatSel.innerHTML = '<option value="">Categoria *</option>' + getExpenseCategories().slice().sort((a,b)=>(a.product_name||'').localeCompare(b.product_name||'')).map(c=>`<option value="${c.id}">${c.product_name}</option>`).join('');
+    if (val) itemCatSel.value = val;
+  }
+  lucide.createIcons();
+}
+
+// ============================================================
+// GASTOS — Gasto Simples e Gasto em Lote (mesma ideia de Venda Manual/Venda em Lote).
+// type='expense' -> {id, type, product_name(=descrição), category(=nome da categoria, só pra
+// exibição rápida), cost_unit(=id da categoria OU id do grupo direto — ver
+// resolveExpenseDreGroupId), movement_id(=id do item do catálogo, quando veio de lá),
+// total_cost(=valor), expense_date(=data, "yyyy-MM-dd"), spreadsheet_name(=id de lote, quando veio
+// de Gasto em Lote — agrupa visualmente os itens da mesma nota sem perder o detalhe individual de
+// cada um), linked_employee_id(quando veio do Registro Semanal — ver handleSaveWeeklyTimesheet),
+// updated_at}
+// ============================================================
+let expenseFilter = '30days';
+let expenseCategoryFilter = '';
+let currentExpenseMode = 'simple';
+function getExpenses() { return financeData.filter(r => r.type === 'expense'); }
 function expenseRangeForFilter(filter) {
   const end = new Date(); end.setHours(12,0,0,0);
   let start = new Date(end);
@@ -6561,18 +6932,209 @@ function requestDeleteExpense(id) {
   document.getElementById('delete-confirm-text').textContent = `Deseja excluir o gasto "${ex.product_name}" (${fmtCurrency(ex.total_cost)})?`;
   document.getElementById('delete-confirm-modal').classList.remove('hidden');
 }
+
+// --- Gasto Simples: cascata Grupo -> Categoria (opcional) -> Item (opcional) ---
+function onExpenseGroupChange(sel) {
+  const catSel = document.getElementById('new-expense-category-select');
+  populateExpenseCategorySelectForGroup(catSel, sel.value);
+  catSel.value = '';
+  onExpenseCategoryChange(catSel);
+}
+function onExpenseCategoryChange(sel) {
+  const itemSel = document.getElementById('new-expense-item-select');
+  populateExpenseItemSelectForCategory(itemSel, sel.value);
+  itemSel.value = '';
+}
+function onExpenseItemChange(sel) {
+  const opt = sel.selectedOptions[0];
+  if (opt && opt.value) document.getElementById('new-expense-desc').value = opt.textContent;
+}
+async function handleAddExpense(e) {
+  e.preventDefault();
+  const desc = document.getElementById('new-expense-desc').value.trim();
+  const groupId = document.getElementById('new-expense-group').value;
+  const categoryId = document.getElementById('new-expense-category-select').value;
+  const itemId = document.getElementById('new-expense-item-select').value;
+  const amount = parseFloat(document.getElementById('new-expense-amount').value);
+  const date = document.getElementById('new-expense-date').value;
+  if (!desc || !groupId || !amount || amount <= 0 || !date) { showToast('Preencha grupo, descrição, valor e data', true); return; }
+  const category = categoryId ? getExpenseCategoryById(categoryId) : null;
+  // Categoria só vale se ela realmente pertence ao grupo escolhido no formulário (evita ficar uma
+  // categoria "presa" num select desatualizado depois de trocar o grupo).
+  const effectiveCategoryId = (category && category.movement_id === groupId) ? categoryId : '';
+  showLoadingProgress('Salvando gasto...');
+  try {
+    const payload = {
+      type:'expense', product_name:desc,
+      category: effectiveCategoryId ? category.product_name : '',
+      cost_unit: effectiveCategoryId || groupId,
+      movement_id: itemId || '',
+      total_cost:amount, expense_date:date, updated_at:new Date().toISOString(),
+    };
+    const r = await financeApiCall('create', { data: payload });
+    financeData.push({ id:r.id, ...payload });
+    hideLoadingProgress();
+    showToast('Gasto registrado!');
+    e.target.reset();
+    document.getElementById('new-expense-date').value = localDateStr(new Date());
+    populateExpenseGroupSelect(document.getElementById('new-expense-group'));
+    onExpenseGroupChange(document.getElementById('new-expense-group'));
+    renderExpenses();
+    if (activeFinanceTab === 'dre') renderDRE();
+  } catch (err) {
+    hideLoadingProgress();
+    console.error('Erro ao salvar gasto:', err);
+    showToast('Erro ao salvar gasto: ' + err.message, true);
+  }
+}
+
+// --- Gasto em Lote: várias linhas (cada uma com seu próprio Grupo/Categoria/Item), uma nota só ---
+function buildExpenseBatchRowHtml() {
+  return `<div class="expense-batch-row bg-stone-50 border border-stone-200 rounded-lg p-3 space-y-2">
+    <div class="grid grid-cols-3 gap-2">
+      <select class="expense-batch-group input-field text-sm" onchange="onExpenseBatchGroupChange(this)"><option value="">Grupo *</option></select>
+      <select class="expense-batch-category input-field text-sm" onchange="onExpenseBatchCategoryChange(this)"><option value="">Categoria</option></select>
+      <select class="expense-batch-item input-field text-sm" onchange="onExpenseBatchItemChange(this)"><option value="">Item</option></select>
+    </div>
+    <div class="grid grid-cols-[1fr_120px_auto] gap-2 items-end">
+      <input type="text" class="expense-batch-desc input-field text-sm" placeholder="Descrição *">
+      <div class="relative"><span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-stone-400">R$</span><input type="number" class="expense-batch-value input-field text-sm w-full pl-7" placeholder="0,00" min="0.01" step="any" oninput="updateExpenseBatchTotal()"></div>
+      <button type="button" onclick="removeExpenseBatchRow(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button>
+    </div>
+  </div>`;
+}
+function addExpenseBatchRow() {
+  document.getElementById('expense-batch-rows').insertAdjacentHTML('beforeend', buildExpenseBatchRowHtml());
+  const rows = document.querySelectorAll('.expense-batch-row');
+  populateExpenseGroupSelect(rows[rows.length-1].querySelector('.expense-batch-group'), 'Grupo *');
+}
+function removeExpenseBatchRow(btn) {
+  const parent = btn.closest('.expense-batch-row');
+  if (parent.parentElement.children.length > 1) parent.remove();
+  updateExpenseBatchTotal();
+}
+function onExpenseBatchGroupChange(sel) {
+  const row = sel.closest('.expense-batch-row');
+  const catSel = row.querySelector('.expense-batch-category');
+  populateExpenseCategorySelectForGroup(catSel, sel.value, 'Categoria');
+  catSel.value = '';
+  onExpenseBatchCategoryChange(catSel);
+}
+function onExpenseBatchCategoryChange(sel) {
+  const row = sel.closest('.expense-batch-row');
+  const itemSel = row.querySelector('.expense-batch-item');
+  populateExpenseItemSelectForCategory(itemSel, sel.value, 'Item');
+  itemSel.value = '';
+}
+function onExpenseBatchItemChange(sel) {
+  const row = sel.closest('.expense-batch-row');
+  const opt = sel.selectedOptions[0];
+  if (opt && opt.value) row.querySelector('.expense-batch-desc').value = opt.textContent;
+}
+function updateExpenseBatchTotal() {
+  let total = 0;
+  document.querySelectorAll('.expense-batch-value').forEach(inp => { total += parseFloat(inp.value) || 0; });
+  const el = document.getElementById('expense-batch-total-value'); if (el) el.textContent = fmtCurrency(total);
+}
+function resetExpenseBatchForm() {
+  document.getElementById('expense-batch-rows').innerHTML = buildExpenseBatchRowHtml();
+  populateExpenseGroupSelect(document.querySelector('.expense-batch-group'), 'Grupo *');
+  document.getElementById('expense-batch-date').value = localDateStr(new Date());
+  updateExpenseBatchTotal();
+}
+// Cria um gasto POR ITEM (histórico individual — é isso que permite responder "quanto gastei com
+// guardanapo") mas todos numa viagem atômica só, marcados com o mesmo spreadsheet_name (id de
+// lote) pra ficarem visualmente reconhecíveis como "vieram da mesma nota fiscal".
+async function confirmExpenseBatch() {
+  const rows = document.querySelectorAll('.expense-batch-row');
+  const date = document.getElementById('expense-batch-date').value || localDateStr(new Date());
+  const items = [];
+  for (const row of rows) {
+    const groupId = row.querySelector('.expense-batch-group').value;
+    const categoryId = row.querySelector('.expense-batch-category').value;
+    const itemId = row.querySelector('.expense-batch-item').value;
+    const desc = row.querySelector('.expense-batch-desc').value.trim();
+    const value = parseFloat(row.querySelector('.expense-batch-value').value);
+    if (!groupId || !desc || !value || value <= 0) continue; // linha em branco/incompleta é só ignorada
+    items.push({ groupId, categoryId, itemId, desc, value });
+  }
+  if (items.length === 0) { showToast('Preencha ao menos um item com grupo, descrição e valor', true); return; }
+  showLoadingProgress('Salvando gastos em lote...');
+  try {
+    const batchId = 'exb_' + Date.now() + '_' + Math.random().toString(36).slice(2,8);
+    const ops = items.map(it => {
+      const category = it.categoryId ? getExpenseCategoryById(it.categoryId) : null;
+      const effectiveCategoryId = (category && category.movement_id === it.groupId) ? it.categoryId : '';
+      return { op:'create', data: {
+        type:'expense', product_name: it.desc,
+        category: effectiveCategoryId ? category.product_name : '',
+        cost_unit: effectiveCategoryId || it.groupId,
+        movement_id: it.itemId || '',
+        total_cost: it.value, expense_date: date,
+        spreadsheet_name: batchId,
+        updated_at: new Date().toISOString(),
+      }};
+    });
+    const result = await financeBatchWrite(ops);
+    if (!result.isOk) throw new Error(result.error || 'falha ao gravar');
+    hideLoadingProgress();
+    showToast(`${items.length} gasto(s) registrado(s) da mesma nota!`);
+    resetExpenseBatchForm();
+    renderExpenses();
+    if (activeFinanceTab === 'dre') renderDRE();
+  } catch (err) {
+    hideLoadingProgress();
+    console.error('Erro ao salvar gastos em lote:', err);
+    showResultModal('Erro ao salvar gastos em lote', [
+      `Erro: ${err.message}`,
+      'Como tudo é enviado numa única viagem, o mais provável é que NADA tenha sido salvo ainda — pode tentar de novo com segurança.'
+    ], true);
+  }
+}
+
+function populateExpenseCategoryFilterSelect() {
+  const sel = document.getElementById('expense-category-filter'); if (!sel) return;
+  const val = sel.value;
+  sel.innerHTML = '<option value="">Todas categorias</option>' + getExpenseCategories().slice().sort((a,b)=>(a.product_name||'').localeCompare(b.product_name||'')).map(c=>`<option value="${c.id}">${c.product_name}</option>`).join('');
+  if (val) sel.value = val;
+}
 function renderExpenses() {
-  populateExpenseCategorySelects();
+  // Formulário de Gasto Simples: só popula do zero se ainda estiver vazio, pra não atrapalhar
+  // quem já está no meio de um preenchimento (ex: trocando de aba e voltando).
+  const groupSel = document.getElementById('new-expense-group');
+  if (groupSel && groupSel.options.length <= 1) { populateExpenseGroupSelect(groupSel); onExpenseGroupChange(groupSel); }
   if (!document.getElementById('new-expense-date').value) document.getElementById('new-expense-date').value = localDateStr(new Date());
+  if (document.querySelectorAll('.expense-batch-row').length === 0) resetExpenseBatchForm();
+
+  populateExpenseCategoryFilterSelect();
   document.querySelectorAll('.expense-filter').forEach(b => { b.className = `expense-filter px-3 py-1.5 rounded-lg text-xs font-medium ${b.dataset.filter===expenseFilter?'bg-stone-800 text-white':'bg-stone-100 text-stone-600 hover:bg-stone-200'}`; });
   const { start, end } = expenseRangeForFilter(expenseFilter);
   let entries = getExpensesInRange(start, end);
-  if (expenseCategoryFilter) entries = entries.filter(e => e.category === expenseCategoryFilter);
+  if (expenseCategoryFilter) entries = entries.filter(e => resolveExpenseCategoryId(e) === expenseCategoryFilter);
   entries.sort((a,b) => (b.expense_date||'').localeCompare(a.expense_date||''));
 
-  const byCategory = {};
-  entries.forEach(e => { byCategory[e.category] = (byCategory[e.category]||0) + (e.total_cost||0); });
   const total = entries.reduce((s,e)=>s+(e.total_cost||0),0);
+
+  // Total por grupo do DRE
+  const byGroup = {};
+  entries.forEach(e => { const gid = resolveExpenseDreGroupId(e) || '__sem_grupo__'; byGroup[gid] = (byGroup[gid]||0) + (e.total_cost||0); });
+  const groupRows = Object.entries(byGroup).sort((a,b)=>b[1]-a[1]);
+  const groupEl = document.getElementById('expense-group-totals');
+  if (groupEl) groupEl.innerHTML = groupRows.length === 0 ? '<p class="text-stone-400 text-center py-4 text-sm">Sem gastos no período</p>' : groupRows.map(([gid,val]) => {
+    const pct = total>0 ? (val/total)*100 : 0;
+    const label = gid === '__sem_grupo__' ? 'Sem grupo' : (getDreGroupById(gid)?.product_name || 'Sem grupo');
+    return `<div>
+      <div class="flex justify-between items-center mb-1 gap-2">
+        <span class="text-sm text-stone-700 truncate">${label}</span>
+        <span class="text-sm font-semibold text-stone-800 whitespace-nowrap">${fmtCurrency(val)} <span class="text-stone-400 font-normal">(${pct.toFixed(0)}%)</span></span>
+      </div>
+      <div class="h-1.5 bg-stone-100 rounded-full overflow-hidden"><div class="h-full bg-amber-400 rounded-full" style="width:${Math.max(2,pct)}%"></div></div>
+    </div>`;
+  }).join('');
+
+  // Total por categoria
+  const byCategory = {};
+  entries.forEach(e => { const label = e.category || 'Sem categoria'; byCategory[label] = (byCategory[label]||0) + (e.total_cost||0); });
   const catRows = Object.entries(byCategory).sort((a,b)=>b[1]-a[1]);
   const catEl = document.getElementById('expense-category-totals');
   catEl.innerHTML = catRows.length === 0 ? '<p class="text-stone-400 text-center py-4 text-sm">Sem gastos no período</p>' : catRows.map(([cat,val]) => {
@@ -6587,17 +7149,19 @@ function renderExpenses() {
   }).join('');
 
   const listEl = document.getElementById('expenses-list');
-  listEl.innerHTML = entries.length === 0 ? '<p class="text-stone-400 text-center py-8 text-sm">Nenhum gasto registrado</p>' : entries.map(ex => `
-    <div class="p-4 bg-white rounded-xl shadow-sm border border-stone-100 flex justify-between items-center gap-2">
+  listEl.innerHTML = entries.length === 0 ? '<p class="text-stone-400 text-center py-8 text-sm">Nenhum gasto registrado</p>' : entries.map(ex => {
+    const groupLabel = getDreGroupById(resolveExpenseDreGroupId(ex))?.product_name || 'Sem grupo';
+    return `<div class="p-4 bg-white rounded-xl shadow-sm border border-stone-100 flex justify-between items-center gap-2">
       <div class="min-w-0">
         <p class="text-sm font-medium text-stone-800 truncate">${ex.product_name}</p>
-        <p class="text-xs text-stone-400">${ex.category} · <span class="px-1.5 py-0.5 rounded-full bg-stone-100 text-stone-600 font-medium">${DRE_GROUP_LABELS[inferDreGroup(ex)]}</span> · ${parseLocalDate(ex.expense_date).toLocaleDateString('pt-BR')}${ex.linked_employee_id?' · 👤 Registro Semanal':''}</p>
+        <p class="text-xs text-stone-400">${ex.category ? ex.category+' · ' : ''}<span class="px-1.5 py-0.5 rounded-full bg-stone-100 text-stone-600 font-medium">${groupLabel}</span> · ${parseLocalDate(ex.expense_date).toLocaleDateString('pt-BR')}${ex.linked_employee_id?' · 👤 Registro Semanal':''}${ex.spreadsheet_name?' · 🧾 lote':''}</p>
       </div>
       <div class="flex items-center gap-2 flex-shrink-0">
         <span class="text-sm font-bold text-red-700">${fmtCurrency(ex.total_cost)}</span>
         <button onclick="requestDeleteExpense('${ex.id}')" class="text-stone-300 hover:text-red-600"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
   lucide.createIcons();
 }
 
@@ -6834,18 +7398,20 @@ async function handleSaveWeeklyTimesheet() {
       spreadsheet_name: correlationId,
       updated_at: new Date().toISOString(),
     };
-    // CMO (Custo de Mão de Obra Operacional) — lançado automaticamente como despesa de verdade
-    // (grupo 'cmo'), pra entrar no DRE junto dos outros grupos sem precisar de lançamento manual.
+    // CMO (Custo de Mão de Obra Operacional) — lançado automaticamente como despesa de verdade no
+    // grupo "CMO" (busca pelo nome — o id muda por planilha, o nome não; 'cmo' como fallback cobre
+    // o caso raro do grupo ainda não ter sido semeado), pra entrar no DRE sem lançamento manual.
     // Valor = mão de obra da semana inteira + taxa de serviço (os dois juntos são o custo de ter
     // esse funcionário trabalhando essa semana).
     const cmoTotal = t.laborValue + t.serviceTax;
+    const cmoGroup = getDreGroups().find(g => g.product_name === 'CMO');
     const operations = [{ op:'create', data: timesheetPayload }];
     if (cmoTotal > 0) {
       operations.push({ op:'create', data: {
         type: 'expense',
         product_name: `CMO: ${t.emp.product_name} (semana de ${parseLocalDate(weekDate).toLocaleDateString('pt-BR')})`,
         category: 'Mão de obra',
-        cost_unit: 'cmo',
+        cost_unit: cmoGroup ? cmoGroup.id : 'cmo',
         total_cost: cmoTotal,
         expense_date: weekDate,
         linked_employee_id: t.emp.id,
@@ -6898,6 +7464,68 @@ function renderWeeklyTimesheets() {
 }
 
 // ============================================================
+// DINHEIRO EM ESTOQUE — quanto capital está imobilizado no estoque agora (instantâneo, não é por
+// período). = soma de (quantidade atual × custo médio) de cada insumo/produto pronto com estoque
+// E custo conhecidos. Reaproveita 100% o mesmo motor de custo do CMV — getFinanceCostPrice pros
+// insumos comprados, computeRecipeCost (recursivo) pros produzidos internamente via
+// linked_recipe_id — não cria cálculo de custo paralelo nenhum. Sem custo conhecido, o item fica
+// de fora do total (não inventa valor) e entra na contagem de "sem custo" pra avisar na tela.
+// Isso é só um NÚMERO — comprar estoque não vira despesa/CMV na hora (isso só acontece na venda,
+// via getProductCMV, exatamente como já funcionava antes dessa mudança).
+// ============================================================
+function computeInventoryValue() {
+  const rows = [];
+  let total = 0, unknownCount = 0;
+  const stockable = [...getProducts(), ...getFinishedProducts()];
+  stockable.forEach(p => {
+    if (!p.quantity || p.quantity <= 0) return; // sem estoque, sem valor imobilizado
+    let unitCost = null;
+    if (p.linked_recipe_id) {
+      const recipe = getRecipes().find(r => r.id === p.linked_recipe_id);
+      if (recipe) {
+        const cost = computeRecipeCost(recipe);
+        if (cost.hasAllCosts) unitCost = cost.costPerUnit;
+      }
+    } else {
+      const costRec = getFinanceCostPrice(p.product_name);
+      if (costRec) unitCost = costRec.price;
+    }
+    if (unitCost == null) { unknownCount++; return; }
+    const unit = p.storage_unit || p.unit;
+    const value = p.quantity * unitCost;
+    rows.push({ name: p.product_name, quantity: p.quantity, unit, unitCost, value });
+    total += value;
+  });
+  rows.sort((a,b) => b.value - a.value);
+  return { rows, total, unknownCount };
+}
+let inventoryValueBreakdownOpen = false;
+function toggleInventoryValueBreakdown() {
+  inventoryValueBreakdownOpen = !inventoryValueBreakdownOpen;
+  renderInventoryValue();
+}
+function renderInventoryValue() {
+  const totalEl = document.getElementById('inventory-value-total'); if (!totalEl) return;
+  const inv = computeInventoryValue();
+  totalEl.textContent = fmtCurrency(inv.total);
+  document.getElementById('inventory-value-note').textContent = inv.unknownCount > 0
+    ? `Quantidade em estoque × custo médio de cada item. ${inv.unknownCount} insumo(s)/produto(s) com estoque mas sem custo conhecido ainda não entram nesse total (lance o custo em Custos Pendentes ou Preço Médio).`
+    : 'Quantidade em estoque × custo médio de cada insumo/produto.';
+  const chevron = document.getElementById('inventory-value-chevron');
+  if (chevron) chevron.style.transform = inventoryValueBreakdownOpen ? 'rotate(180deg)' : '';
+  const breakdownEl = document.getElementById('inventory-value-breakdown');
+  breakdownEl.classList.toggle('hidden', !inventoryValueBreakdownOpen);
+  if (inventoryValueBreakdownOpen) {
+    breakdownEl.innerHTML = inv.rows.length === 0 ? '<p class="text-stone-400 text-center py-4 text-sm">Nenhum insumo/produto com estoque e custo conhecido</p>' : inv.rows.map(r => `
+      <div class="flex justify-between items-center text-sm py-1">
+        <div class="min-w-0 pr-2"><p class="text-stone-700 truncate">${r.name}</p><p class="text-[11px] text-stone-400">${fmtQty(r.quantity, r.unit)} ${r.unit} × ${fmtCurrency(r.unitCost)}</p></div>
+        <span class="font-semibold text-stone-800 flex-shrink-0">${fmtCurrency(r.value)}</span>
+      </div>`).join('');
+  }
+  lucide.createIcons();
+}
+
+// ============================================================
 // DRE — Demonstração de Resultado do período. Reaproveita 100% o cálculo de custo por receita já
 // existente (computeRecipeCost/getProductCMV — os mesmos usados na aba CMV e no Faturamento), não
 // cria uma lógica de custo paralela.
@@ -6907,12 +7535,13 @@ let dreFilter = '7days';
 // custo/faturamento observada nos itens QUE TÊM custo confirmado — uma extrapolação a partir de
 // dado real, não um número inventado do zero. Sem nenhum item confirmado no período, não estima
 // nada (hasEstimate=false), pra não fabricar uma proporção sem base nenhuma.
-// stockCosts (type='stock_cost', lançado em Custos de Estoque) agora entram DENTRO do CMV, não em
-// Despesas Extras — são custo real de insumo/estoque (taxa de entrega, insumo fora do cardápio,
+// stockCosts (type='stock_cost', lançado em Custos de Estoque) entram DENTRO do CMV, não nos
+// grupos de Gastos — são custo real de insumo/estoque (taxa de entrega, insumo fora do cardápio,
 // perda não rastreada) que só não passa pela receita, mas é CMV de verdade igual o calculado.
 // Como é um valor digitado por você (não uma extrapolação), conta como CMV CONFIRMADO, não
-// estimado. CMO vem de despesas com grupo 'cmo' (lançadas automaticamente pelo Registro Semanal em
-// Funcionários, ou manualmente em Gastos pra casos fora da semana padrão).
+// estimado. Os grupos de despesa (CMO, e todo grupo que você cadastrar em Config. Gastos) são
+// dinâmicos — o DRE não conhece mais uma lista fixa, só soma cada gasto no grupo que
+// resolveExpenseDreGroupId() encontrar pra ele.
 function computeDRE(entries, expenses, stockCosts) {
   const totalRevenue = entries.reduce((s,e)=>s+(e.total_revenue||0), 0);
   let knownCost = 0, knownRevenue = 0, unknownRevenue = 0;
@@ -6930,10 +7559,12 @@ function computeDRE(entries, expenses, stockCosts) {
   const totalCMVConfirmed = knownCost + totalStockCosts;
   const totalCMV = totalCMVConfirmed + estimatedExtraCost;
 
-  const groups = { cmo:0, fixa:0, imposto:0, extra:0 };
-  expenses.forEach(ex => { groups[inferDreGroup(ex)] += (ex.total_cost||0); });
-  const totalCMO = groups.cmo, totalFixed = groups.fixa, totalTax = groups.imposto, totalExtra = groups.extra;
-  const totalAllExpenses = totalCMO + totalFixed + totalTax + totalExtra;
+  const groupTotals = {}; // id do grupo -> valor
+  expenses.forEach(ex => {
+    const gid = resolveExpenseDreGroupId(ex) || '__sem_grupo__';
+    groupTotals[gid] = (groupTotals[gid]||0) + (ex.total_cost||0);
+  });
+  const totalAllExpenses = Object.values(groupTotals).reduce((s,v)=>s+v, 0);
 
   // Custo de estoque avulso é confirmado e do período inteiro (não amarrado a uma venda
   // específica), então desconta nos dois cenários — diferente do CMV por receita, cuja incerteza
@@ -6943,18 +7574,27 @@ function computeDRE(entries, expenses, stockCosts) {
   const coveragePct = totalRevenue > 0 ? (knownRevenue/totalRevenue)*100 : 0;
   // % sempre sobre o faturamento total do período — é a "representatividade" de cada linha.
   const pctOf = (v) => totalRevenue > 0 ? (v/totalRevenue)*100 : 0;
+
+  // Uma linha por grupo que teve gasto no período (grupo zerado não aparece, pra não poluir),
+  // do maior pro menor valor. "Sem grupo" só aparece se sobrar algum gasto realmente irresolúvel.
+  const groupLines = getDreGroups()
+    .map(g => ({ id:g.id, name:g.product_name, value: groupTotals[g.id]||0 }))
+    .filter(l => l.value > 0)
+    .sort((a,b) => b.value - a.value);
+  if (groupTotals['__sem_grupo__'] > 0) groupLines.push({ id:'__sem_grupo__', name:'Sem grupo', value: groupTotals['__sem_grupo__'] });
+
   return {
     totalRevenue, knownRevenue, unknownRevenue, knownCost, estimatedExtraCost, totalStockCosts, totalCMVConfirmed, totalCMV,
-    totalCMO, totalFixed, totalTax, totalExtra, totalAllExpenses,
-    confirmedProfit, estimatedProfit, coveragePct, hasEstimate,
+    totalAllExpenses, groupLines,
+    confirmedProfit, estimatedProfit, coveragePct, hasEstimate, pctOf,
     pct: {
-      cmvConfirmed: pctOf(totalCMVConfirmed), cmvTotal: pctOf(totalCMV), cmo: pctOf(totalCMO),
-      fixa: pctOf(totalFixed), imposto: pctOf(totalTax), extra: pctOf(totalExtra),
+      cmvConfirmed: pctOf(totalCMVConfirmed), cmvTotal: pctOf(totalCMV),
       confirmedProfit: pctOf(confirmedProfit), estimatedProfit: pctOf(estimatedProfit),
     },
   };
 }
 function renderDRE() {
+  renderInventoryValue();
   document.querySelectorAll('.dre-filter').forEach(b => { b.className = `dre-filter px-3 py-1.5 rounded-lg text-xs font-medium ${b.dataset.filter===dreFilter?'bg-stone-800 text-white':'bg-stone-100 text-stone-600 hover:bg-stone-200'}`; });
   const { start, end } = faturamentoRangeForFilter(dreFilter);
   const entries = getSaleRevenueEntriesInRange(start, end);
@@ -6969,6 +7609,7 @@ function renderDRE() {
       <span class="text-stone-600">${label}</span>
       <span class="font-semibold ${color}">${fmtCurrency(value)} ${pctTag(pct)}</span>
     </div>`;
+  const groupLinesHtml = dre.groupLines.map(g => line(`(–) ${g.name}`, g.value, dre.pctOf(g.value), 'text-red-600')).join('');
   el.innerHTML = `
     <div class="grid grid-cols-2 gap-3 mb-4">
       <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100">
@@ -6994,10 +7635,7 @@ function renderDRE() {
           <span class="text-stone-600">(–) CMV estimado (adicional)</span>
           <span class="font-semibold text-amber-600">${dre.hasEstimate ? `${fmtCurrency(dre.estimatedExtraCost)} ${pctTag(dre.pct.cmvTotal - dre.pct.cmvConfirmed)}` : '—'}</span>
         </div>
-        ${line('(–) CMO — Mão de Obra Operacional', dre.totalCMO, dre.pct.cmo, 'text-red-600')}
-        ${line('(–) Despesas Fixas', dre.totalFixed, dre.pct.fixa, 'text-red-600')}
-        ${line('(–) Impostos', dre.totalTax, dre.pct.imposto, 'text-red-600')}
-        ${line('(–) Despesas Extras', dre.totalExtra, dre.pct.extra, 'text-red-600')}
+        ${groupLinesHtml || '<p class="text-xs text-stone-400 py-2">Nenhum gasto lançado neste período.</p>'}
         <div class="flex justify-between items-center py-2 pt-2">
           <span class="font-bold text-stone-800">(=) Lucro confirmado</span>
           <span class="font-bold ${profitColor(dre.confirmedProfit)}">${fmtCurrency(dre.confirmedProfit)} ${pctTag(dre.pct.confirmedProfit)}</span>
