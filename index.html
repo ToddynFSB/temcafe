@@ -7053,6 +7053,36 @@ function computeRecipeCost(recipe, _visited) {
   const hasAllCosts = missing.length===0 && ingredients.length>0;
   return { totalCost, costPerUnit, missing, hasAllCosts, yieldUnit: recipe.recipe_yield_unit };
 }
+// Detalhamento de 1º NÍVEL dos ingredientes de uma receita — mesma lógica de custo de
+// computeRecipeCost, só que devolve uma linha por ingrediente em vez de só o total somado.
+// Ingrediente que é ele mesmo uma receita/pré-preparo (linked_recipe_id) aparece com o custo total
+// dele (via computeRecipeCost do sub-preparo), SEM abrir os insumos que o compõem — isso é
+// intencional (pedido explícito: só o primeiro nível, sem árvore recursiva).
+function computeRecipeIngredientBreakdown(recipe) {
+  let ingredients = []; try { ingredients = JSON.parse(recipe.recipe_ingredients); } catch(e) {}
+  return ingredients.map(ing => {
+    const product = getProducts().find(p => namesMatch(p.product_name, ing.name));
+    let storageUnit = product ? (product.storage_unit||product.unit) : ing.unit;
+    let unitPrice = null, known = true, isSubRecipe = false;
+    if (product && product.linked_recipe_id) {
+      isSubRecipe = true;
+      const subRecipe = getRecipes().find(r => r.id === product.linked_recipe_id);
+      if (!subRecipe) { known = false; }
+      else {
+        const subCost = computeRecipeCost(subRecipe);
+        if (!subCost.hasAllCosts) { known = false; }
+        else { unitPrice = subCost.costPerUnit; storageUnit = subCost.yieldUnit || storageUnit; }
+      }
+    } else {
+      const costRec = getFinanceCostPrice(ing.name);
+      if (!costRec) { known = false; }
+      else { unitPrice = costRec.price; if (!product) storageUnit = costRec.unit; }
+    }
+    const qtyInStorageUnit = (known && product) ? convertQuantity(ing.qty, ing.unit, storageUnit, getCustomConversions(product)) : ing.qty;
+    const totalCost = known ? qtyInStorageUnit * unitPrice : null;
+    return { name: ing.name, qty: ing.qty, unit: ing.unit, isSubRecipe, known, totalCost };
+  });
+}
 // Resolve o nome de um item vendido (sale_revenue.product_name) pra uma receita com custo
 // conhecido: ou é o nome de uma receita diretamente (ex: Venda Direta), ou é um produto pronto
 // (finished_product) com receita vinculada (linked_recipe_id). Se não achar receita ou faltar
@@ -7127,8 +7157,31 @@ function renderFinanceCMV() {
     ${row.hasAllCosts
       ? `<p class="text-sm text-amber-700 font-bold">${fmtCurrency(row.costPerUnit)} / ${row.recipe.recipe_yield_unit} (custo)</p><p class="text-xs text-stone-400">Custo do lote: ${fmtCurrency(row.totalCost)} para ${fmtQty(row.recipe.recipe_yield,row.recipe.recipe_yield_unit)} ${row.recipe.recipe_yield_unit}</p>${marginHtml}`
       : `<p class="text-xs text-stone-400 italic">Custo incompleto — falta lançar em Custos de Estoque: ${row.missing.length?row.missing.join(', '):'sem ingredientes cadastrados'}</p>`}
+    <button onclick="toggleCmvDetails('${row.recipe.id}')" class="mt-2 text-xs font-medium text-blue-600 hover:text-blue-800 flex items-center gap-1">
+      <i data-lucide="chevron-down" class="w-3.5 h-3.5 transition-transform" id="cmv-details-icon-${row.recipe.id}"></i>Ver detalhes
+    </button>
+    <div id="cmv-details-${row.recipe.id}" class="hidden mt-2 pt-2 border-t border-stone-100 space-y-1.5"></div>
   </div>`;
   }).join('');
+  lucide.createIcons();
+}
+function toggleCmvDetails(recipeId) {
+  const wrap = document.getElementById(`cmv-details-${recipeId}`);
+  const icon = document.getElementById(`cmv-details-icon-${recipeId}`);
+  if (!wrap) return;
+  const willOpen = wrap.classList.contains('hidden');
+  wrap.classList.toggle('hidden', !willOpen);
+  if (icon) icon.style.transform = willOpen ? 'rotate(180deg)' : '';
+  if (willOpen) {
+    const recipe = getRecipes().find(r => r.id === recipeId);
+    if (!recipe) return;
+    const breakdown = computeRecipeIngredientBreakdown(recipe);
+    wrap.innerHTML = breakdown.length === 0 ? '<p class="text-xs text-stone-400 italic">Sem ingredientes cadastrados</p>' : breakdown.map(it => `
+      <div class="flex justify-between items-center gap-2">
+        <span class="text-xs text-stone-600 truncate">${it.name}${it.isSubRecipe?' <span class="text-stone-400">(pré-preparo)</span>':''} — ${fmtQty(it.qty,it.unit)} ${it.unit}</span>
+        <span class="text-xs font-semibold ${it.known?'text-stone-700':'text-red-500'} whitespace-nowrap">${it.known?fmtCurrency(it.totalCost):'sem custo'}</span>
+      </div>`).join('');
+  }
 }
 
 // ============================================================
