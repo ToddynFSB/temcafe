@@ -792,34 +792,49 @@
         <h2 class="text-lg font-bold text-stone-800 flex items-center gap-2"><i data-lucide="trending-up" class="w-5 h-5 text-emerald-600"></i>Faturamento</h2>
         <button onclick="lockFinanceiro()" class="text-xs text-stone-400 hover:text-stone-600 flex items-center gap-1"><i data-lucide="lock" class="w-3.5 h-3.5"></i>Bloquear</button>
       </div>
-      <div class="flex flex-wrap gap-1.5 mb-4">
+      <div class="flex flex-wrap gap-1.5 mb-2">
         <button class="faturamento-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-800 text-white" data-filter="7days">7 dias</button>
         <button class="faturamento-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-filter="30days">30 dias</button>
         <button class="faturamento-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-filter="month">Este mês</button>
         <button class="faturamento-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-filter="all">Tudo</button>
+        <button class="faturamento-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-filter="custom">📅 Período Personalizado</button>
+      </div>
+      <div id="fat-custom-date-form" class="hidden mb-4 p-3 bg-white rounded-xl border border-stone-200 flex flex-wrap items-end gap-2">
+        <div><label class="text-[10px] font-semibold text-stone-500 uppercase tracking-wide block mb-1">De</label><input id="fat-custom-date-from" type="date" class="input-field text-sm"></div>
+        <div><label class="text-[10px] font-semibold text-stone-500 uppercase tracking-wide block mb-1">Até</label><input id="fat-custom-date-to" type="date" class="input-field text-sm"></div>
+        <button onclick="applyFaturamentoCustomRange()" class="btn-primary px-4 py-2 rounded-lg text-sm font-medium">Aplicar</button>
       </div>
 
-      <!-- Total do período + comparação com período anterior + gráfico por dia -->
+      <!-- Os 4 indicadores principais da tela: quanto vendeu, quanto custou, quanto sobrou e a
+           margem — cada um com cor própria pra bater o olho e entender rápido, sem precisar ler
+           os rótulos com atenção. -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+        <div class="rounded-xl p-4 shadow-sm border-2 border-emerald-200 bg-emerald-50">
+          <p class="text-[10px] font-bold text-emerald-700 uppercase tracking-wide mb-1">Faturamento</p>
+          <p class="text-2xl font-extrabold text-emerald-800 leading-tight" id="fat-kpi-revenue">R$ 0,00</p>
+          <p class="text-[11px] font-medium mt-1 h-8" id="fat-kpi-revenue-note"></p>
+        </div>
+        <div class="rounded-xl p-4 shadow-sm border-2 border-red-200 bg-red-50">
+          <p class="text-[10px] font-bold text-red-700 uppercase tracking-wide mb-1">CMV</p>
+          <p class="text-2xl font-extrabold text-red-700 leading-tight" id="fat-kpi-cmv">R$ 0,00</p>
+          <p class="text-[11px] text-red-500 mt-1 h-8" id="fat-kpi-cmv-note"></p>
+        </div>
+        <div class="rounded-xl p-4 shadow-sm border-2 border-blue-200 bg-blue-50">
+          <p class="text-[10px] font-bold text-blue-700 uppercase tracking-wide mb-1">Lucro Bruto</p>
+          <p class="text-2xl font-extrabold text-blue-800 leading-tight" id="fat-kpi-profit">R$ 0,00</p>
+          <p class="text-[11px] text-blue-600 mt-1 h-8" id="fat-kpi-profit-note"></p>
+        </div>
+        <div class="rounded-xl p-4 shadow-sm border-2 border-amber-200 bg-amber-50">
+          <p class="text-[10px] font-bold text-amber-700 uppercase tracking-wide mb-1">Margem Bruta</p>
+          <p class="text-2xl font-extrabold text-amber-800 leading-tight" id="fat-kpi-margin">0%</p>
+          <p class="text-[11px] text-amber-600 mt-1 h-8" id="fat-kpi-margin-note"></p>
+        </div>
+      </div>
+
+      <!-- Evolução no período (faturamento × lucro por dia) -->
       <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 mb-4">
-        <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-1">Faturamento no período</p>
-        <p class="text-xl font-bold text-emerald-800 mb-1" id="fat-period-total">R$ 0,00</p>
-        <p class="text-xs font-medium mb-3 h-4" id="fat-period-comparison"></p>
         <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-2">Por dia (toque numa barra pra ver o detalhe)</p>
         <div id="fat-chart"></div>
-      </div>
-
-      <!-- Lucro e CMV estimados (reaproveita o custo de receita já calculado na aba CMV) -->
-      <div class="grid grid-cols-2 gap-3 mb-4">
-        <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100">
-          <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-1">Lucro estimado</p>
-          <p class="text-lg font-bold text-stone-800" id="fat-profit-total">R$ 0,00</p>
-          <p class="text-[11px] text-stone-400 mt-1" id="fat-profit-note"></p>
-        </div>
-        <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100">
-          <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-1">CMV estimado</p>
-          <p class="text-lg font-bold text-stone-800" id="fat-cmv-total">R$ 0,00</p>
-          <p class="text-[11px] text-stone-400 mt-1" id="fat-cmv-note"></p>
-        </div>
       </div>
 
       <!-- Ranking de produtos por faturamento e por lucro bruto, lado a lado -->
@@ -843,7 +858,10 @@
 
       <!-- Margem por produto -->
       <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 mb-4">
-        <h3 class="font-semibold text-sm mb-3 text-stone-800 flex items-center gap-2"><i data-lucide="percent" class="w-4 h-4 text-emerald-600"></i>Margem por produto</h3>
+        <div class="flex items-center justify-between mb-3 gap-2 flex-wrap">
+          <h3 class="font-semibold text-sm text-stone-800 flex items-center gap-2"><i data-lucide="percent" class="w-4 h-4 text-emerald-600"></i>Margem por produto</h3>
+          <select id="fat-margin-category-filter" class="input-field text-xs py-1.5"><option value="">Todas categorias</option></select>
+        </div>
         <div id="fat-margin-content"></div>
       </div>
 
@@ -5668,6 +5686,11 @@ document.addEventListener('change', (e) => {
   inventoryCategoryFilter = e.target.value;
   renderInventoryPanel();
 });
+document.addEventListener('change', (e) => {
+  if (e.target.id !== 'fat-margin-category-filter') return;
+  faturamentoMarginCategoryFilter = e.target.value;
+  renderFaturamentoMargin(getSaleRevenueEntriesInRange(...Object.values(getFaturamentoRange())));
+});
 
 function fmtCurrency(v) {
   return (v||0).toLocaleString('pt-BR', { style:'currency', currency:'BRL' });
@@ -5775,6 +5798,19 @@ function buildSaleRevenueOperations(items, saleDate, movementId) {
 // ============================================================
 let faturamentoFilter = '7days';
 let faturamentoSelectedDay = null;
+let faturamentoCustomFrom = '';
+let faturamentoCustomTo = '';
+// Resolve o range ativo da tela de Faturamento — trata "custom" à parte (datas escolhidas à mão),
+// os outros filtros continuam usando faturamentoRangeForFilter normalmente. Único ponto usado por
+// renderFaturamento() e pelo toggle de dia da semana, pra não duplicar essa decisão em dois lugares.
+function getFaturamentoRange() {
+  if (faturamentoFilter === 'custom' && faturamentoCustomFrom && faturamentoCustomTo) {
+    const start = parseLocalDate(faturamentoCustomFrom); start.setHours(12,0,0,0);
+    const end = parseLocalDate(faturamentoCustomTo); end.setHours(12,0,0,0);
+    if (start <= end) return { start, end };
+  }
+  return faturamentoRangeForFilter(faturamentoFilter === 'custom' ? '7days' : faturamentoFilter);
+}
 function faturamentoRangeForFilter(filter) {
   const end = new Date(); end.setHours(12,0,0,0);
   let start = new Date(end);
@@ -5836,7 +5872,7 @@ function computeMarginRanking(entries) {
     const avgPrice = r.revenue / r.qty;
     const margin = avgPrice - cmv.costPerUnit;
     const marginPct = avgPrice > 0 ? (margin/avgPrice)*100 : 0;
-    withCost.push({ ...r, avgPrice, cost: cmv.costPerUnit, margin, marginPct });
+    withCost.push({ ...r, avgPrice, cost: cmv.costPerUnit, margin, marginPct, category: getProductSector(r.name) });
   });
   withCost.sort((a,b)=>b.marginPct-a.marginPct);
   return { withCost, withoutCost };
@@ -5960,9 +5996,9 @@ function buildFaturamentoChartSVG(dailyMap, startDate, endDate, profitDailyMap) 
   </svg></div>`;
 }
 function renderFaturamento() {
-  document.querySelectorAll('.faturamento-filter').forEach(b => { b.className = `faturamento-filter px-3 py-1.5 rounded-lg text-xs font-medium ${b.dataset.filter===faturamentoFilter?'bg-stone-800 text-white':'bg-stone-100 text-stone-600 hover:bg-stone-200'}`; });
+  renderFaturamentoFilterButtons();
 
-  const { start, end } = faturamentoRangeForFilter(faturamentoFilter);
+  const { start, end } = getFaturamentoRange();
   const startKey = localDateStr(start), endKey = localDateStr(end);
   const entries = getSaleRevenueEntriesInRange(start, end);
 
@@ -5978,38 +6014,45 @@ function renderFaturamento() {
   });
 
   const periodTotal = entries.reduce((s,e)=>s+(e.total_revenue||0), 0);
-  document.getElementById('fat-period-total').textContent = fmtCurrency(periodTotal);
   document.getElementById('fat-chart').innerHTML = buildFaturamentoChartSVG(dailyMap, start, end, profitDailyMap);
 
-  // Comparação com o período anterior (mesmo número de dias, imediatamente antes)
+  // Comparação com o período anterior (mesmo número de dias, imediatamente antes) — mora dentro do
+  // card de Faturamento, que é o KPI que ela se refere.
   const prevRange = faturamentoPreviousRange(start, end);
   const prevTotal = getSaleRevenueEntriesInRange(prevRange.start, prevRange.end).reduce((s,e)=>s+(e.total_revenue||0), 0);
-  const cmpEl = document.getElementById('fat-period-comparison');
+  const cmpEl = document.getElementById('fat-kpi-revenue-note');
   if (prevTotal > 0) {
     const diffPct = ((periodTotal - prevTotal) / prevTotal) * 100;
     const up = diffPct >= 0;
-    cmpEl.className = `text-xs font-medium mb-3 h-4 ${up ? 'text-emerald-700' : 'text-red-600'}`;
+    cmpEl.className = `text-[11px] font-semibold mt-1 h-8 ${up ? 'text-emerald-700' : 'text-red-600'}`;
     cmpEl.textContent = `${up ? '▲' : '▼'} ${Math.abs(diffPct).toFixed(1)}% vs período anterior (${fmtCurrency(prevTotal)})`;
   } else if (periodTotal > 0) {
-    cmpEl.className = 'text-xs font-medium mb-3 h-4 text-stone-400';
-    cmpEl.textContent = 'Sem faturamento registrado no período anterior pra comparar';
+    cmpEl.className = 'text-[11px] font-medium mt-1 h-8 text-emerald-600';
+    cmpEl.textContent = 'Sem faturamento no período anterior pra comparar';
   } else {
-    cmpEl.className = 'text-xs font-medium mb-3 h-4 text-stone-400';
+    cmpEl.className = 'text-[11px] font-medium mt-1 h-8 text-emerald-600';
     cmpEl.textContent = '';
   }
+  document.getElementById('fat-kpi-revenue').textContent = fmtCurrency(periodTotal);
 
-  // Lucro / CMV estimados (reaproveita o custo de receita da aba CMV)
+  // Os outros 3 KPIs (CMV, Lucro Bruto, Margem Bruta) reaproveitam o custo de receita já calculado
+  // na aba CMV — mesmo dado de sempre, só que agora em destaque visual equivalente ao Faturamento.
   const resumo = computeFaturamentoResumo(entries);
-  const profitEl = document.getElementById('fat-profit-total');
-  profitEl.textContent = fmtCurrency(resumo.profit);
-  profitEl.className = `text-lg font-bold ${resumo.profit >= 0 ? 'text-emerald-700' : 'text-red-600'}`;
-  document.getElementById('fat-profit-note').textContent = resumo.knownRevenue > 0
-    ? `Margem de ${((resumo.profit/resumo.knownRevenue)*100).toFixed(0)}% · baseado em ${resumo.coveragePct.toFixed(0)}% do faturamento com custo lançado`
-    : 'Nenhum produto vendido no período tem custo de receita lançado ainda';
-  document.getElementById('fat-cmv-total').textContent = fmtCurrency(resumo.knownCost);
-  document.getElementById('fat-cmv-note').textContent = resumo.knownRevenue > 0
+  const marginPct = resumo.knownRevenue > 0 ? (resumo.profit/resumo.knownRevenue)*100 : 0;
+  document.getElementById('fat-kpi-cmv').textContent = fmtCurrency(resumo.knownCost);
+  document.getElementById('fat-kpi-cmv-note').textContent = resumo.knownRevenue > 0
     ? `${((resumo.knownCost/resumo.knownRevenue)*100).toFixed(0)}% do faturamento com custo conhecido`
-    : '—';
+    : 'Sem custo de receita lançado ainda';
+  const profitKpiEl = document.getElementById('fat-kpi-profit');
+  profitKpiEl.textContent = fmtCurrency(resumo.profit);
+  profitKpiEl.className = `text-2xl font-extrabold leading-tight ${resumo.profit >= 0 ? 'text-blue-800' : 'text-red-600'}`;
+  document.getElementById('fat-kpi-profit-note').textContent = resumo.knownRevenue > 0
+    ? `Baseado em ${resumo.coveragePct.toFixed(0)}% do faturamento com custo lançado`
+    : 'Nenhum produto vendido no período tem custo de receita lançado ainda';
+  const marginKpiEl = document.getElementById('fat-kpi-margin');
+  marginKpiEl.textContent = `${marginPct.toFixed(0)}%`;
+  marginKpiEl.className = `text-2xl font-extrabold leading-tight ${marginPct >= 0 ? 'text-amber-800' : 'text-red-600'}`;
+  document.getElementById('fat-kpi-margin-note').textContent = resumo.knownRevenue > 0 ? 'Lucro Bruto ÷ Faturamento' : '—';
 
   renderFaturamentoRanking(entries, periodTotal);
   renderFaturamentoProfitRanking(entries);
@@ -6080,10 +6123,21 @@ function renderFaturamentoCategoryProfit(entries) {
       <div class="h-2 bg-stone-100 rounded-full overflow-hidden"><div class="h-full bg-emerald-500 rounded-full" style="width:${Math.max(2,c.pct)}%"></div></div>
     </div>`).join('');
 }
+let faturamentoMarginCategoryFilter = '';
+function populateFaturamentoMarginCategoryFilter(rows) {
+  const sel = document.getElementById('fat-margin-category-filter'); if (!sel) return;
+  const val = sel.value;
+  const cats = Array.from(new Set(rows.map(r=>r.category))).sort((a,b)=>a.localeCompare(b));
+  sel.innerHTML = '<option value="">Todas categorias</option>' + cats.map(c=>`<option value="${c}">${c}</option>`).join('');
+  if (val && cats.includes(val)) sel.value = val; else faturamentoMarginCategoryFilter = '';
+}
 function renderFaturamentoMargin(entries) {
   const el = document.getElementById('fat-margin-content'); if (!el) return;
   if (entries.length === 0) { el.innerHTML = '<p class="text-stone-400 text-center py-4 text-sm">Sem vendas no período</p>'; return; }
-  const { withCost, withoutCost } = computeMarginRanking(entries);
+  const ranking = computeMarginRanking(entries);
+  populateFaturamentoMarginCategoryFilter(ranking.withCost);
+  const withCost = faturamentoMarginCategoryFilter ? ranking.withCost.filter(r => r.category === faturamentoMarginCategoryFilter) : ranking.withCost;
+  const withoutCost = ranking.withoutCost;
   if (withCost.length === 0) {
     el.innerHTML = '<p class="text-stone-400 text-center py-4 text-sm">Nenhum produto vendido no período tem custo de receita lançado ainda pra calcular margem</p>';
     return;
@@ -6146,7 +6200,7 @@ function selectFaturamentoDay(dateKey) {
 document.addEventListener('click', (e) => {
   const btn = e.target.closest('.fat-weekday-metric-btn'); if (!btn) return;
   faturamentoWeekdayMetric = btn.dataset.metric;
-  const entries = getSaleRevenueEntriesInRange(...Object.values(faturamentoRangeForFilter(faturamentoFilter)));
+  const entries = getSaleRevenueEntriesInRange(...Object.values(getFaturamentoRange()));
   renderFaturamentoWeekday(entries);
 });
 // ============================================================
@@ -6565,8 +6619,31 @@ document.addEventListener('click', (e) => {
   const btn = e.target.closest('.faturamento-filter'); if (!btn) return;
   faturamentoFilter = btn.dataset.filter;
   faturamentoSelectedDay = null;
+  const customForm = document.getElementById('fat-custom-date-form');
+  if (faturamentoFilter === 'custom') {
+    customForm.classList.remove('hidden');
+    if (!faturamentoCustomFrom) document.getElementById('fat-custom-date-from').value = localDateStr(faturamentoRangeForFilter('7days').start);
+    if (!faturamentoCustomTo) document.getElementById('fat-custom-date-to').value = localDateStr(new Date());
+    if (!faturamentoCustomFrom || !faturamentoCustomTo) { renderFaturamentoFilterButtons(); return; } // espera "Aplicar"
+  } else {
+    customForm.classList.add('hidden');
+  }
   renderFaturamento();
 });
+function renderFaturamentoFilterButtons() {
+  document.querySelectorAll('.faturamento-filter').forEach(b => { b.className = `faturamento-filter px-3 py-1.5 rounded-lg text-xs font-medium ${b.dataset.filter===faturamentoFilter?'bg-stone-800 text-white':'bg-stone-100 text-stone-600 hover:bg-stone-200'}`; });
+}
+function applyFaturamentoCustomRange() {
+  const from = document.getElementById('fat-custom-date-from').value;
+  const to = document.getElementById('fat-custom-date-to').value;
+  if (!from || !to) { showToast('Selecione as duas datas', true); return; }
+  if (from > to) { showToast('A data inicial precisa ser antes da data final', true); return; }
+  faturamentoCustomFrom = from;
+  faturamentoCustomTo = to;
+  faturamentoFilter = 'custom';
+  faturamentoSelectedDay = null;
+  renderFaturamento();
+}
 
 function renderFinanceiro() {
   const lockScreen = document.getElementById('finance-lock-screen');
