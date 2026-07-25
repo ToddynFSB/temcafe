@@ -553,6 +553,7 @@
   <nav id="finance-nav" class="max-w-7xl mx-auto px-4 pt-3 pb-1 hidden">
     <div class="nav-grid">
       <button class="finance-tab-btn finance-tab-active px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="dre"><i data-lucide="scale" class="w-5 h-5"></i>DRE</button>
+      <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="estoque-valor"><i data-lucide="warehouse" class="w-5 h-5"></i>Dinheiro em Estoque</button>
       <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="custos"><i data-lucide="banknote" class="w-5 h-5"></i>Custos de Estoque</button>
       <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="precos"><i data-lucide="tags" class="w-5 h-5"></i>Preço Médio</button>
       <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="cmv"><i data-lucide="percent" class="w-5 h-5"></i>CMV</button>
@@ -821,21 +822,6 @@
         <h2 class="text-lg font-bold text-stone-800 flex items-center gap-2"><i data-lucide="scale" class="w-5 h-5 text-emerald-600"></i>DRE — Resultado do Período</h2>
         <button onclick="lockFinanceiro()" class="text-xs text-stone-400 hover:text-stone-600 flex items-center gap-1"><i data-lucide="lock" class="w-3.5 h-3.5"></i>Bloquear</button>
       </div>
-
-      <!-- Dinheiro em Estoque — instantâneo de agora (patrimônio), não é por período como o resto do
-           DRE (fluxo). Fica separado de propósito, pra não misturar "quanto vale o estoque hoje" com
-           "quanto lucrei nesse período". -->
-      <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 mb-4">
-        <div class="flex items-center justify-between mb-1">
-          <h3 class="font-semibold text-sm text-stone-800 flex items-center gap-2"><i data-lucide="warehouse" class="w-4 h-4 text-emerald-600"></i>Dinheiro em Estoque</h3>
-          <span class="text-[10px] text-stone-400 whitespace-nowrap">Agora — não é por período</span>
-        </div>
-        <p class="text-xl font-bold text-emerald-800 mb-1" id="inventory-value-total">R$ 0,00</p>
-        <p class="text-[11px] text-stone-400 mb-3" id="inventory-value-note"></p>
-        <button type="button" onclick="toggleInventoryValueBreakdown()" class="text-xs font-medium text-emerald-700 hover:text-emerald-800 flex items-center gap-1"><i data-lucide="chevron-down" class="w-3.5 h-3.5 transition-transform" id="inventory-value-chevron"></i>Ver por produto</button>
-        <div id="inventory-value-breakdown" class="hidden space-y-1.5 max-h-64 overflow-y-auto mt-3 pt-3 border-t border-stone-100"></div>
-      </div>
-
       <div class="flex flex-wrap gap-1.5 mb-4">
         <button class="dre-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-800 text-white" data-filter="7days">7 dias</button>
         <button class="dre-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-filter="30days">30 dias</button>
@@ -843,6 +829,50 @@
         <button class="dre-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-filter="year">Este ano</button>
       </div>
       <div id="dre-content"></div>
+    </section>
+
+    <!-- Sub-aba: Dinheiro em Estoque — painel patrimonial, separado do DRE de propósito: é um
+         instantâneo de agora (quanto capital está imobilizado no estoque), não um resultado de
+         período como o resto do DRE (fluxo de faturamento/custo/lucro). -->
+    <section id="fpanel-estoque-valor" class="hidden fade-in">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-bold text-stone-800 flex items-center gap-2"><i data-lucide="warehouse" class="w-5 h-5 text-emerald-600"></i>Dinheiro em Estoque</h2>
+        <button onclick="lockFinanceiro()" class="text-xs text-stone-400 hover:text-stone-600 flex items-center gap-1"><i data-lucide="lock" class="w-3.5 h-3.5"></i>Bloquear</button>
+      </div>
+      <p class="text-xs text-stone-400 mb-4">Quantidade em estoque × custo médio de cada insumo/produto — quanto capital está parado em mercadoria agora. Comprar estoque não vira despesa aqui nem no DRE; o CMV só é reconhecido quando a venda acontece.</p>
+
+      <div class="grid grid-cols-2 gap-3 mb-2">
+        <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100">
+          <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-1">Valor total investido</p>
+          <p class="text-xl font-bold text-emerald-800" id="inv-kpi-total">R$ 0,00</p>
+        </div>
+        <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100">
+          <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-1">Valor médio por produto</p>
+          <p class="text-xl font-bold text-stone-800" id="inv-kpi-avg">R$ 0,00</p>
+        </div>
+        <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100">
+          <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-1">Itens com estoque</p>
+          <p class="text-xl font-bold text-stone-800" id="inv-kpi-stocked-count">0</p>
+        </div>
+        <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100">
+          <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-1">Produtos cadastrados</p>
+          <p class="text-xl font-bold text-stone-800" id="inv-kpi-catalog-count">0</p>
+        </div>
+      </div>
+      <p class="text-[11px] text-amber-700 mb-4" id="inv-kpi-unknown-note"></p>
+
+      <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 mb-4">
+        <h3 class="font-semibold text-sm mb-3 text-stone-800 flex items-center gap-2"><i data-lucide="pie-chart" class="w-4 h-4 text-emerald-600"></i>Onde está o dinheiro (por categoria)</h3>
+        <div id="inventory-category-breakdown" class="space-y-2.5"></div>
+      </div>
+
+      <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 mb-4">
+        <div class="flex items-center justify-between mb-3 gap-2 flex-wrap">
+          <h3 class="font-semibold text-sm text-stone-800 flex items-center gap-2"><i data-lucide="bar-chart-2" class="w-4 h-4 text-emerald-600"></i>Ranking por produto</h3>
+          <select id="inventory-category-filter" class="input-field text-xs py-1.5"><option value="">Todas categorias</option></select>
+        </div>
+        <div id="inventory-ranking-list"></div>
+      </div>
     </section>
 
     <!-- Sub-aba: Gastos -->
@@ -5312,6 +5342,7 @@ document.addEventListener('click', (e) => {
   document.getElementById('fpanel-vendas').classList.toggle('hidden', activeFinanceTab!=='vendas');
   document.getElementById('fpanel-faturamento').classList.toggle('hidden', activeFinanceTab!=='faturamento');
   document.getElementById('fpanel-dre').classList.toggle('hidden', activeFinanceTab!=='dre');
+  document.getElementById('fpanel-estoque-valor').classList.toggle('hidden', activeFinanceTab!=='estoque-valor');
   document.getElementById('fpanel-despesas').classList.toggle('hidden', activeFinanceTab!=='despesas');
   document.getElementById('fpanel-config-gastos').classList.toggle('hidden', activeFinanceTab!=='config-gastos');
   document.getElementById('fpanel-funcionarios').classList.toggle('hidden', activeFinanceTab!=='funcionarios');
@@ -5320,6 +5351,7 @@ document.addEventListener('click', (e) => {
   if (activeFinanceTab === 'vendas') { renderSalesSelect(); renderSalesToday(); if (currentSalesMode==='bulk') { initBulkSalesDate(); } }
   if (activeFinanceTab === 'faturamento') renderFaturamento();
   if (activeFinanceTab === 'dre') renderDRE();
+  if (activeFinanceTab === 'estoque-valor') renderInventoryPanel();
   if (activeFinanceTab === 'despesas') renderExpenses();
   if (activeFinanceTab === 'config-gastos') renderExpenseConfig();
   if (activeFinanceTab === 'funcionarios') renderEmployees();
@@ -5339,6 +5371,11 @@ document.addEventListener('change', (e) => {
   if (e.target.id !== 'expense-category-filter') return;
   expenseCategoryFilter = e.target.value;
   renderExpenses();
+});
+document.addEventListener('change', (e) => {
+  if (e.target.id !== 'inventory-category-filter') return;
+  inventoryCategoryFilter = e.target.value;
+  renderInventoryPanel();
 });
 
 function fmtCurrency(v) {
@@ -6120,6 +6157,7 @@ function renderFinanceiro() {
   document.getElementById('fpanel-vendas').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='vendas');
   document.getElementById('fpanel-faturamento').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='faturamento');
   document.getElementById('fpanel-dre').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='dre');
+  document.getElementById('fpanel-estoque-valor').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='estoque-valor');
   document.getElementById('fpanel-despesas').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='despesas');
   document.getElementById('fpanel-config-gastos').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='config-gastos');
   document.getElementById('fpanel-funcionarios').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='funcionarios');
@@ -6128,6 +6166,7 @@ function renderFinanceiro() {
     if (activeFinanceTab === 'vendas') { renderSalesSelect(); renderSalesToday(); if (currentSalesMode==='bulk') { initBulkSalesDate(); } }
     if (activeFinanceTab === 'faturamento') renderFaturamento();
     if (activeFinanceTab === 'dre') renderDRE();
+    if (activeFinanceTab === 'estoque-valor') renderInventoryPanel();
     if (activeFinanceTab === 'despesas') renderExpenses();
     if (activeFinanceTab === 'config-gastos') renderExpenseConfig();
     if (activeFinanceTab === 'funcionarios') renderEmployees();
@@ -7472,56 +7511,127 @@ function renderWeeklyTimesheets() {
 // de fora do total (não inventa valor) e entra na contagem de "sem custo" pra avisar na tela.
 // Isso é só um NÚMERO — comprar estoque não vira despesa/CMV na hora (isso só acontece na venda,
 // via getProductCMV, exatamente como já funcionava antes dessa mudança).
+//
+// BUG CORRIGIDO: a versão anterior multiplicava quantidade × custo direto, sem checar se a
+// UNIDADE do custo batia com a unidade real do estoque do produto. O custo de uma receita é por
+// recipe_yield_unit (ex: "kg"), e o custo de um insumo comprado é por cost_unit (a unidade salva
+// junto do preço, ex: "kg" ou "L") — se o produto guarda estoque numa unidade diferente dessas
+// (ex: "unidade" ou "g"), multiplicar direto dá um valor completamente errado (às vezes ordens de
+// grandeza maior). Agora converte pra unidade real do estoque com o mesmo motor usado no resto do
+// app (convertQuantity/canConvert, incluindo conversão personalizada do produto) — e se não der
+// pra converter entre as duas unidades, NÃO inventa um número: o item fica marcado como "sem custo
+// conhecido" em vez de inflar o total.
 // ============================================================
 function computeInventoryValue() {
   const rows = [];
   let total = 0, unknownCount = 0;
-  const stockable = [...getProducts(), ...getFinishedProducts()];
-  stockable.forEach(p => {
+  const stockable = [
+    ...getProducts().map(p => ({ p, isFinished:false })),
+    ...getFinishedProducts().map(p => ({ p, isFinished:true })),
+  ];
+  stockable.forEach(({ p, isFinished }) => {
     if (!p.quantity || p.quantity <= 0) return; // sem estoque, sem valor imobilizado
+    const targetUnit = p.storage_unit || p.unit;
+    const customConversions = getCustomConversions(p);
+    // Converte 1 targetUnit pra sourceUnit (a unidade em que o custo está expresso) — se as
+    // unidades já forem iguais, o fator é 1 (sem mudar nada). Se não der pra converter (grupos de
+    // unidade incompatíveis e sem conversão personalizada cobrindo isso), devolve null — quem
+    // chama decide não usar esse custo, em vez de multiplicar errado.
+    function unitFactorTo(sourceUnit) {
+      if (!sourceUnit) return null;
+      if (namesMatch(sourceUnit, targetUnit)) return 1;
+      const hasCustom = customConversions.some(c => namesMatch(c.unit, targetUnit) || namesMatch(c.unit, sourceUnit));
+      if (!canConvert(targetUnit, sourceUnit) && !hasCustom) return null;
+      const factor = convertQuantity(1, targetUnit, sourceUnit, customConversions);
+      return (factor > 0 && isFinite(factor)) ? factor : null;
+    }
     let unitCost = null;
     if (p.linked_recipe_id) {
       const recipe = getRecipes().find(r => r.id === p.linked_recipe_id);
       if (recipe) {
         const cost = computeRecipeCost(recipe);
-        if (cost.hasAllCosts) unitCost = cost.costPerUnit;
+        if (cost.hasAllCosts) {
+          const factor = unitFactorTo(cost.yieldUnit);
+          if (factor != null) unitCost = cost.costPerUnit * factor;
+        }
       }
     } else {
       const costRec = getFinanceCostPrice(p.product_name);
-      if (costRec) unitCost = costRec.price;
+      if (costRec) {
+        const factor = unitFactorTo(costRec.unit);
+        if (factor != null) unitCost = costRec.price * factor;
+      }
     }
     if (unitCost == null) { unknownCount++; return; }
-    const unit = p.storage_unit || p.unit;
     const value = p.quantity * unitCost;
-    rows.push({ name: p.product_name, quantity: p.quantity, unit, unitCost, value });
+    rows.push({
+      name: p.product_name, quantity: p.quantity, unit: targetUnit, unitCost, value,
+      category: isFinished ? 'Produtos Prontos' : (p.category || 'Sem categoria'),
+    });
     total += value;
   });
+  rows.forEach(r => { r.pct = total > 0 ? (r.value/total)*100 : 0; });
   rows.sort((a,b) => b.value - a.value);
-  return { rows, total, unknownCount };
+  return { rows, total, unknownCount, stockedCount: rows.length };
 }
-let inventoryValueBreakdownOpen = false;
-function toggleInventoryValueBreakdown() {
-  inventoryValueBreakdownOpen = !inventoryValueBreakdownOpen;
-  renderInventoryValue();
+let inventoryCategoryFilter = '';
+function computeInventoryCategoryTotals(rows) {
+  const byCategory = {};
+  rows.forEach(r => { byCategory[r.category] = (byCategory[r.category]||0) + r.value; });
+  const total = rows.reduce((s,r)=>s+r.value, 0);
+  return Object.entries(byCategory)
+    .map(([category,value]) => ({ category, value, pct: total>0 ? (value/total)*100 : 0 }))
+    .sort((a,b)=>b.value-a.value);
 }
-function renderInventoryValue() {
-  const totalEl = document.getElementById('inventory-value-total'); if (!totalEl) return;
+function populateInventoryCategoryFilter(rows) {
+  const sel = document.getElementById('inventory-category-filter'); if (!sel) return;
+  const val = sel.value;
+  const cats = Array.from(new Set(rows.map(r=>r.category))).sort((a,b)=>a.localeCompare(b));
+  sel.innerHTML = '<option value="">Todas categorias</option>' + cats.map(c=>`<option value="${c}">${c}</option>`).join('');
+  if (val && cats.includes(val)) sel.value = val; else inventoryCategoryFilter = '';
+}
+function renderInventoryPanel() {
+  const totalEl = document.getElementById('inv-kpi-total'); if (!totalEl) return;
   const inv = computeInventoryValue();
+  const totalCatalog = getProducts().length + getFinishedProducts().length;
+  const avgValue = inv.stockedCount > 0 ? inv.total / inv.stockedCount : 0;
+
   totalEl.textContent = fmtCurrency(inv.total);
-  document.getElementById('inventory-value-note').textContent = inv.unknownCount > 0
-    ? `Quantidade em estoque × custo médio de cada item. ${inv.unknownCount} insumo(s)/produto(s) com estoque mas sem custo conhecido ainda não entram nesse total (lance o custo em Custos Pendentes ou Preço Médio).`
-    : 'Quantidade em estoque × custo médio de cada insumo/produto.';
-  const chevron = document.getElementById('inventory-value-chevron');
-  if (chevron) chevron.style.transform = inventoryValueBreakdownOpen ? 'rotate(180deg)' : '';
-  const breakdownEl = document.getElementById('inventory-value-breakdown');
-  breakdownEl.classList.toggle('hidden', !inventoryValueBreakdownOpen);
-  if (inventoryValueBreakdownOpen) {
-    breakdownEl.innerHTML = inv.rows.length === 0 ? '<p class="text-stone-400 text-center py-4 text-sm">Nenhum insumo/produto com estoque e custo conhecido</p>' : inv.rows.map(r => `
-      <div class="flex justify-between items-center text-sm py-1">
-        <div class="min-w-0 pr-2"><p class="text-stone-700 truncate">${r.name}</p><p class="text-[11px] text-stone-400">${fmtQty(r.quantity, r.unit)} ${r.unit} × ${fmtCurrency(r.unitCost)}</p></div>
-        <span class="font-semibold text-stone-800 flex-shrink-0">${fmtCurrency(r.value)}</span>
-      </div>`).join('');
-  }
+  document.getElementById('inv-kpi-stocked-count').textContent = inv.stockedCount;
+  document.getElementById('inv-kpi-catalog-count').textContent = totalCatalog;
+  document.getElementById('inv-kpi-avg').textContent = fmtCurrency(avgValue);
+  document.getElementById('inv-kpi-unknown-note').textContent = inv.unknownCount > 0
+    ? `⚠️ ${inv.unknownCount} insumo(s)/produto(s) com estoque, mas sem custo conhecido (ou numa unidade que não dá pra converter pro custo lançado) — não entram nesses números. Lance o custo em Custos Pendentes ou Preço Médio, ou confira a unidade cadastrada do item.`
+    : '';
+
+  populateInventoryCategoryFilter(inv.rows);
+
+  // Distribuição por categoria SEMPRE usa todos os itens (é o "mapa geral") — o filtro de
+  // categoria só recorta o ranking abaixo, não essa visão de conjunto.
+  const catTotals = computeInventoryCategoryTotals(inv.rows);
+  const catEl = document.getElementById('inventory-category-breakdown');
+  catEl.innerHTML = catTotals.length === 0 ? '<p class="text-stone-400 text-center py-4 text-sm">Nenhum item com valor conhecido em estoque ainda</p>' : catTotals.map(c => `
+    <div>
+      <div class="flex justify-between items-center mb-1 gap-2">
+        <span class="text-sm text-stone-700 truncate">${c.category}</span>
+        <span class="text-sm font-semibold text-stone-800 whitespace-nowrap">${fmtCurrency(c.value)} <span class="text-stone-400 font-normal">(${c.pct.toFixed(1)}%)</span></span>
+      </div>
+      <div class="h-2 bg-stone-100 rounded-full overflow-hidden"><div class="h-full bg-emerald-500 rounded-full" style="width:${Math.max(2,c.pct)}%"></div></div>
+    </div>`).join('');
+
+  // Ranking — respeita o filtro de categoria. % sempre em relação ao total geral do estoque (não
+  // recalcula em cima do filtro), pra manter o mesmo número não importa como você esteja olhando.
+  const filtered = inventoryCategoryFilter ? inv.rows.filter(r => r.category === inventoryCategoryFilter) : inv.rows;
+  const rankEl = document.getElementById('inventory-ranking-list');
+  rankEl.innerHTML = filtered.length === 0 ? '<p class="text-stone-400 text-center py-6 text-sm">Nenhum item nessa categoria</p>' : filtered.map((r,i) => `
+    <div class="flex justify-between items-center py-2 border-b border-stone-50 last:border-b-0 gap-2">
+      <div class="flex items-center gap-2 min-w-0">
+        <span class="text-xs font-bold text-stone-300 w-6 flex-shrink-0">${i+1}º</span>
+        <div class="min-w-0"><p class="text-sm text-stone-700 truncate">${r.name}</p><p class="text-[11px] text-stone-400">${r.category} · ${fmtQty(r.quantity,r.unit)} ${r.unit} × ${fmtCurrency(r.unitCost)}</p></div>
+      </div>
+      <span class="text-sm font-bold text-stone-800 flex-shrink-0 whitespace-nowrap">${fmtCurrency(r.value)} <span class="text-stone-400 font-normal text-xs">(${r.pct.toFixed(1)}%)</span></span>
+    </div>`).join('');
+
   lucide.createIcons();
 }
 
@@ -7594,7 +7704,6 @@ function computeDRE(entries, expenses, stockCosts) {
   };
 }
 function renderDRE() {
-  renderInventoryValue();
   document.querySelectorAll('.dre-filter').forEach(b => { b.className = `dre-filter px-3 py-1.5 rounded-lg text-xs font-medium ${b.dataset.filter===dreFilter?'bg-stone-800 text-white':'bg-stone-100 text-stone-600 hover:bg-stone-200'}`; });
   const { start, end } = faturamentoRangeForFilter(dreFilter);
   const entries = getSaleRevenueEntriesInRange(start, end);
