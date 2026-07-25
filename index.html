@@ -6793,6 +6793,11 @@ async function saveFinanceCosts(movementId) {
   try {
     let done = 0;
     let grandTotal = 0;
+    // Compras de Limpeza/Utensílios sem controle de estoque não entram em receita nenhuma (CMV é
+    // só receita vendida) — então, sem isso, o dinheiro gasto nunca apareceria em lugar nenhum da
+    // área financeira. Em vez disso, viram Despesa de verdade (fora do CMV) na hora da compra,
+    // igual o CMO já faz pro Registro Semanal — mesmo padrão, grupo achado/criado por nome.
+    const opExpenseCandidates = [];
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
       const totalCost = values[i];
@@ -6815,15 +6820,27 @@ async function saveFinanceCosts(movementId) {
         const r = await financeApiCall('create', { data: { type:'cost', product_name: item.name, cost_price: newAvgCost, cost_unit: storageUnit, cost_updated_at: new Date().toISOString() } });
         financeData.push({ id: r.id, type:'cost', product_name: item.name, cost_price: newAvgCost, cost_unit: storageUnit, cost_updated_at: new Date().toISOString() });
       }
+      if (product && !productControlsStock(product) && (product.category === 'Limpeza' || product.category === 'Utensílios')) {
+        opExpenseCandidates.push({ name: item.name, category: product.category, totalCost });
+      }
       done++;
     }
     updateLoadingProgress('Marcando entrada como custeada...');
     const rEntry = await financeApiCall('create', { data: { type:'costed_entry', movement_id: movementId, total_cost: grandTotal, costed_at: new Date().toISOString() } });
     financeData.push({ id: rEntry.id, type:'costed_entry', movement_id: movementId, total_cost: grandTotal, costed_at: new Date().toISOString() });
+    for (const cand of opExpenseCandidates) {
+      updateLoadingProgress(`Lançando despesa: ${cand.name}`);
+      const group = await resolveOrCreateDreGroup(cand.category);
+      const payload = { type:'expense', product_name: cand.name, category: cand.category, cost_unit: group.id, total_cost: cand.totalCost, movement_id: movementId, expense_date: localDateStr(new Date()), updated_at: new Date().toISOString() };
+      const rExp = await financeApiCall('create', { data: payload });
+      financeData.push({ id: rExp.id, ...payload });
+    }
     hideLoadingProgress();
-    showToast('Custos salvos!');
+    showToast(opExpenseCandidates.length > 0 ? 'Custos salvos e despesa de Limpeza/Utensílios lançada!' : 'Custos salvos!');
     renderFinancePending();
     renderFinanceCMV();
+    if (activeFinanceTab === 'despesas') renderExpenses();
+    if (activeFinanceTab === 'dre') renderDRE();
   } catch (err) {
     hideLoadingProgress();
     console.error('Erro ao salvar custos:', err);
@@ -7126,6 +7143,18 @@ function renderFinanceCMV() {
 // resolveExpenseDreGroupId) sem precisar editar nada manualmente.
 // ============================================================
 function getDreGroups() { return financeData.filter(r => r.type === 'dre_group'); }
+// Acha um Grupo DRE pelo nome, ou cria na hora se ainda não existir — mesma ideia do grupo "CMO"
+// (achado por nome, criado sob demanda), usado por qualquer fluxo que precise lançar despesa
+// automaticamente num grupo "conhecido" sem depender de configuração prévia manual do usuário.
+async function resolveOrCreateDreGroup(name) {
+  let group = getDreGroups().find(g => g.product_name === name);
+  if (group) return group;
+  const payload = { type:'dre_group', product_name:name, skipped:false, updated_at:new Date().toISOString() };
+  const r = await financeApiCall('create', { data: payload });
+  group = { id:r.id, ...payload };
+  financeData.push(group);
+  return group;
+}
 function getExpenseCategories() { return financeData.filter(r => r.type === 'expense_category'); }
 function getExpenseItems() { return financeData.filter(r => r.type === 'expense_item'); }
 function getDreGroupById(id) { return getDreGroups().find(g => g.id === id) || null; }
