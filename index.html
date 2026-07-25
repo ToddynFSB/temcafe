@@ -227,7 +227,11 @@
           <select id="new-prod-category" required class="input-field text-sm"><option value="">Categoria *</option><option value="Café">Café</option><option value="Cozinha">Cozinha</option><option value="Drinks">Drinks</option><option value="Limpeza">Limpeza</option><option value="Utensílios">Utensílios</option></select>
           <input id="new-prod-qty" type="number" placeholder="Quantidade inicial" min="0" step="any" value="0" class="input-field text-sm">
         </div>
-        <div class="bg-stone-50 rounded-lg p-4 mb-4 border border-stone-200">
+        <label class="flex items-start gap-2 mb-4 p-3 bg-stone-50 rounded-lg border border-stone-200 cursor-pointer">
+          <input id="new-prod-controls-stock" type="checkbox" checked class="w-4 h-4 mt-0.5" onchange="toggleNewProdStockLevels()">
+          <span class="text-sm text-stone-700">Controla estoque (entradas/saídas com quantidade)<br><span class="text-xs text-stone-400">Desligue pra insumos de compra frequente e quantidade variável (rúcula, alface, chás...) — continua contando em Entradas, Preço Médio e receitas, só não exige bater saldo nem nível de estoque.</span></span>
+        </label>
+        <div class="bg-stone-50 rounded-lg p-4 mb-4 border border-stone-200" id="new-prod-stock-levels">
           <p class="text-xs font-bold text-stone-600 uppercase tracking-wide mb-4">Níveis de Estoque</p>
           <div class="space-y-3">
             <div class="border-l-4 border-red-600 pl-3"><label class="text-xs font-bold text-stone-700 block mb-1">🔴 Crítico</label><input id="new-prod-critical" type="number" placeholder="Qtd" min="0" step="any" value="1" class="w-full input-field text-sm"></div>
@@ -259,6 +263,10 @@
             <div class="manual-exit-unit-wrap"><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Medida</label><select class="manual-exit-unit input-field text-sm w-full"></select></div>
             <button type="button" onclick="removeManualExitItem(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button>
           </div>
+          <div class="grid sm:grid-cols-2 gap-2">
+            <div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Motivo</label><select class="manual-exit-motivo input-field text-sm w-full" onchange="toggleManualExitEventName(this)"><option value="consumo_interno">Consumo Interno</option><option value="uso_evento">Uso em Evento</option><option value="outros">Outros</option></select></div>
+            <div class="manual-exit-event-name-wrap hidden"><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Nome do evento</label><input type="text" class="manual-exit-event-name input-field text-sm w-full" placeholder="Ex: Aniversário Maria"></div>
+          </div>
         </div>
       </div>
       <button type="button" onclick="addManualExitItem()" class="text-sm font-medium flex items-center gap-1 mb-4 btn-ghost px-3 py-1.5 rounded-lg"><i data-lucide="plus" class="w-4 h-4"></i>Adicionar outro item</button>
@@ -269,7 +277,7 @@
         <button onclick="cancelManualExit()" class="btn-ghost px-4 py-2.5 rounded-lg text-sm font-medium">Cancelar</button>
       </div>
     </div>
-    <h3 class="font-semibold mb-3 text-stone-800 text-sm">Histórico de Saídas Manuais</h3>
+    <h3 class="font-semibold mb-3 text-stone-800 text-sm">Últimas Saídas Manuais</h3>
     <div id="manual-exits-list" class="space-y-2"></div>
   </section>
 
@@ -299,7 +307,7 @@
         </div>
       </div>
     </div>
-    <h3 class="font-semibold mb-3 text-stone-800 text-sm">Histórico de Entradas</h3>
+    <h3 class="font-semibold mb-3 text-stone-800 text-sm">Últimas Entradas</h3>
     <div id="entries-list" class="space-y-2"></div>
   </section>
 
@@ -395,7 +403,10 @@
         <div class="flex gap-2"><button type="submit" class="btn-success px-5 py-2.5 rounded-lg text-sm font-medium flex items-center gap-1.5"><i data-lucide="check" class="w-4 h-4"></i>Registrar Perda</button><button type="button" onclick="resetLossForm()" class="btn-ghost px-5 py-2.5 rounded-lg text-sm font-medium">Limpar</button></div>
       </form>
     </div>
-    <h3 class="font-semibold mb-3 text-stone-800 text-sm">Histórico de Perdas</h3>
+    <div class="flex items-center justify-between mb-3">
+      <h3 class="font-semibold text-stone-800 text-sm">Últimas Perdas</h3>
+      <p class="text-xs text-stone-500" id="losses-total-value"></p>
+    </div>
     <div id="losses-list" class="space-y-2"></div>
   </section>
 
@@ -553,10 +564,7 @@
   <nav id="finance-nav" class="max-w-7xl mx-auto px-4 pt-3 pb-1 hidden">
     <div class="nav-grid">
       <button class="finance-tab-btn finance-tab-active px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="dre"><i data-lucide="scale" class="w-5 h-5"></i>DRE</button>
-      <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="estoque-valor"><i data-lucide="warehouse" class="w-5 h-5"></i>Dinheiro em Estoque</button>
-      <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="custos"><i data-lucide="banknote" class="w-5 h-5"></i>Custos de Estoque</button>
-      <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="precos"><i data-lucide="tags" class="w-5 h-5"></i>Preço Médio</button>
-      <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="cmv"><i data-lucide="percent" class="w-5 h-5"></i>CMV</button>
+      <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="estoque-custos"><i data-lucide="banknote" class="w-5 h-5"></i>Estoque &amp; Custos</button>
       <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="vendas"><i data-lucide="credit-card" class="w-5 h-5"></i>Vendas</button>
       <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="faturamento"><i data-lucide="trending-up" class="w-5 h-5"></i>Faturamento</button>
       <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="despesas"><i data-lucide="receipt" class="w-5 h-5"></i>Gastos</button>
@@ -576,12 +584,23 @@
       <button onclick="unlockFinanceiro()" class="w-full px-4 py-2.5 rounded-lg text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 transition-colors">Entrar</button>
     </div>
 
+    <!-- Grupo "Estoque & Custos": consolida Custos Pendentes, Preço Médio, CMV e Dinheiro em
+         Estoque atrás de uma única entrada de navegação, com sub-abas internas — as 4 telas
+         continuam existindo exatamente como antes, só deixam de ocupar 4 espaços na nav principal. -->
+    <div id="estoque-custos-header" class="hidden flex items-center justify-between mb-4">
+      <h2 class="text-lg font-bold text-stone-800 flex items-center gap-2"><i data-lucide="banknote" class="w-5 h-5 text-emerald-600"></i>Estoque &amp; Custos</h2>
+      <button onclick="lockFinanceiro()" class="text-xs text-stone-400 hover:text-stone-600 flex items-center gap-1"><i data-lucide="lock" class="w-3.5 h-3.5"></i>Bloquear</button>
+    </div>
+    <div id="custos-subnav" class="hidden flex gap-2 mb-4 overflow-x-auto pb-1">
+      <button class="custos-sub-tab-btn px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap" data-sub="custos">Custos Pendentes</button>
+      <button class="custos-sub-tab-btn px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap" data-sub="precos">Preço Médio</button>
+      <button class="custos-sub-tab-btn px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap" data-sub="cmv">CMV</button>
+      <button class="custos-sub-tab-btn px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap" data-sub="estoque-valor">Dinheiro em Estoque</button>
+      <button class="custos-sub-tab-btn px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap" data-sub="saidas-sem-venda">Saídas sem Venda</button>
+    </div>
     <!-- Sub-aba: Custos de Estoque -->
     <section id="fpanel-custos" class="hidden fade-in">
-      <div class="flex items-center justify-between mb-4">
-        <h2 class="text-lg font-bold text-stone-800 flex items-center gap-2"><i data-lucide="banknote" class="w-5 h-5 text-emerald-600"></i>Custos de Estoque</h2>
-        <button onclick="lockFinanceiro()" class="text-xs text-stone-400 hover:text-stone-600 flex items-center gap-1"><i data-lucide="lock" class="w-3.5 h-3.5"></i>Bloquear</button>
-      </div>
+      <h3 class="font-semibold text-stone-800 text-base mb-1 flex items-center gap-2"><i data-lucide="banknote" class="w-4 h-4 text-emerald-600"></i>Custos Pendentes</h3>
       <p class="text-xs text-stone-400 mb-4">Entradas de estoque recentes que ainda não têm o preço pago lançado. Preencha com base na nota fiscal — se você já lançou esse insumo antes, o valor já vem pré-preenchido com o último preço.</p>
       <div id="finance-pending-list" class="space-y-4"></div>
       <div id="finance-pending-empty" class="hidden text-stone-400 text-center py-10 text-sm">🎉 Nenhuma entrada pendente de custo</div>
@@ -612,10 +631,7 @@
 
     <!-- Sub-aba: Preço Médio de Insumos -->
     <section id="fpanel-precos" class="hidden fade-in">
-      <div class="flex items-center justify-between mb-4">
-        <h2 class="text-lg font-bold text-stone-800 flex items-center gap-2"><i data-lucide="tags" class="w-5 h-5 text-emerald-600"></i>Preço Médio de Insumos</h2>
-        <button onclick="lockFinanceiro()" class="text-xs text-stone-400 hover:text-stone-600 flex items-center gap-1"><i data-lucide="lock" class="w-3.5 h-3.5"></i>Bloquear</button>
-      </div>
+      <h3 class="font-semibold text-stone-800 text-base mb-1 flex items-center gap-2"><i data-lucide="tags" class="w-4 h-4 text-emerald-600"></i>Preço Médio de Insumos</h3>
       <p class="text-xs text-stone-400 mb-4">Insumos comprados: lance ou ajuste o preço médio direto aqui, sem esperar uma entrada de estoque. Insumos produzidos internamente: o custo é calculado automaticamente pela receita, então ficam numa categoria separada, só pra consulta.</p>
 
       <div class="flex gap-2 mb-4">
@@ -649,10 +665,7 @@
 
     <!-- Sub-aba: CMV -->
     <section id="fpanel-cmv" class="hidden fade-in">
-      <div class="flex items-center justify-between mb-4">
-        <h2 class="text-lg font-bold text-stone-800 flex items-center gap-2"><i data-lucide="percent" class="w-5 h-5 text-emerald-600"></i>CMV por Receita</h2>
-        <button onclick="lockFinanceiro()" class="text-xs text-stone-400 hover:text-stone-600 flex items-center gap-1"><i data-lucide="lock" class="w-3.5 h-3.5"></i>Bloquear</button>
-      </div>
+      <h3 class="font-semibold text-stone-800 text-base mb-1 flex items-center gap-2"><i data-lucide="percent" class="w-4 h-4 text-emerald-600"></i>CMV por Receita</h3>
       <p class="text-xs text-stone-400 mb-4">Custo estimado de cada receita, com base no custo médio já lançado dos insumos (ou no custo calculado da receita, pra insumos produzidos internamente).</p>
 
       <div class="grid grid-cols-3 gap-2 mb-4" id="cmv-stats"></div>
@@ -682,6 +695,7 @@
       <div class="flex gap-2 mb-4">
         <button id="sales-mode-manual-btn" class="sales-mode-btn px-4 py-2 rounded-lg text-sm font-medium bg-emerald-700 text-white" data-mode="manual">Venda Manual</button>
         <button id="sales-mode-bulk-btn" class="sales-mode-btn px-4 py-2 rounded-lg text-sm font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-mode="bulk">Vendas em Lote</button>
+        <button id="sales-mode-events-btn" class="sales-mode-btn px-4 py-2 rounded-lg text-sm font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-mode="events">🎉 Eventos</button>
       </div>
       <div class="bg-white rounded-xl p-5 shadow-sm border border-stone-100 mb-5" id="sales-manual-section">
         <h3 class="font-semibold mb-4 text-stone-800 text-sm">Registrar Vendas</h3>
@@ -744,6 +758,21 @@
         <div id="bulk-sales-feedback" class="hidden p-4 rounded-lg border"><p class="text-xs font-semibold mb-2" id="bulk-feedback-title"></p><div id="bulk-feedback-content" class="space-y-1 text-xs"></div></div>
       </div>
 
+      <div class="hidden" id="sales-events-section">
+        <div class="bg-white rounded-xl p-5 shadow-sm border border-stone-100 mb-5">
+          <h3 class="font-semibold mb-1 text-stone-800 text-sm flex items-center gap-2"><i data-lucide="party-popper" class="w-4 h-4 text-amber-600"></i>Eventos Pendentes de Faturamento</h3>
+          <p class="text-xs text-stone-400 mb-4">Estoque já baixado (Saída Manual, motivo Uso em Evento) — some o custo automático do estoque, adicione custos extras (decoração, etc.) e lance o valor cobrado pra fechar o lucro do evento. Entra no DRE separado do faturamento do dia a dia.</p>
+          <div id="pending-events-list" class="space-y-4"></div>
+          <p id="pending-events-empty" class="hidden text-stone-400 text-center py-6 text-sm">Nenhum evento pendente. Registre uma Saída Manual com motivo "Uso em Evento" pra começar um.</p>
+        </div>
+        <div class="bg-white rounded-xl p-5 shadow-sm border border-stone-100 mb-5">
+          <h3 class="font-semibold mb-1 text-stone-800 text-sm flex items-center gap-2"><i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-600"></i>Histórico de Eventos</h3>
+          <p class="text-xs text-stone-400 mb-4">Eventos já com faturamento lançado, com o lucro final de cada um.</p>
+          <div id="priced-events-list" class="space-y-2"></div>
+          <p id="priced-events-empty" class="hidden text-stone-400 text-center py-6 text-sm">Nenhum evento faturado ainda</p>
+        </div>
+      </div>
+
       <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
         <h3 class="font-semibold text-stone-800 text-sm">Histórico de Vendas</h3>
         <div class="flex gap-1.5 flex-wrap items-center">
@@ -793,10 +822,23 @@
         </div>
       </div>
 
-      <!-- Ranking de produtos por faturamento -->
+      <!-- Ranking de produtos por faturamento e por lucro bruto, lado a lado -->
+      <div class="grid sm:grid-cols-2 gap-4 mb-4">
+        <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100">
+          <h3 class="font-semibold text-sm mb-3 text-stone-800 flex items-center gap-2"><i data-lucide="bar-chart-2" class="w-4 h-4 text-emerald-600"></i>Produtos que mais faturam</h3>
+          <div id="fat-ranking-list" class="space-y-2.5"></div>
+        </div>
+        <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100">
+          <h3 class="font-semibold text-sm mb-1 text-stone-800 flex items-center gap-2"><i data-lucide="coins" class="w-4 h-4 text-emerald-600"></i>Produtos que mais lucraram</h3>
+          <p class="text-[11px] text-stone-400 mb-3">Faturamento − CMV, em valor absoluto</p>
+          <div id="fat-profit-ranking-list" class="space-y-3"></div>
+        </div>
+      </div>
+
+      <!-- Categorias mais lucrativas -->
       <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 mb-4">
-        <h3 class="font-semibold text-sm mb-3 text-stone-800 flex items-center gap-2"><i data-lucide="bar-chart-2" class="w-4 h-4 text-emerald-600"></i>Produtos que mais faturam</h3>
-        <div id="fat-ranking-list" class="space-y-2.5"></div>
+        <h3 class="font-semibold text-sm mb-3 text-stone-800 flex items-center gap-2"><i data-lucide="pie-chart" class="w-4 h-4 text-emerald-600"></i>Categorias mais lucrativas</h3>
+        <div id="fat-category-profit-content"></div>
       </div>
 
       <!-- Margem por produto -->
@@ -805,9 +847,15 @@
         <div id="fat-margin-content"></div>
       </div>
 
-      <!-- Faturamento por dia da semana -->
+      <!-- Faturamento/Lucro por dia da semana -->
       <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 mb-4">
-        <h3 class="font-semibold text-sm mb-3 text-stone-800 flex items-center gap-2"><i data-lucide="calendar" class="w-4 h-4 text-emerald-600"></i>Por dia da semana</h3>
+        <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+          <h3 class="font-semibold text-sm text-stone-800 flex items-center gap-2"><i data-lucide="calendar" class="w-4 h-4 text-emerald-600"></i>Por dia da semana</h3>
+          <div class="flex gap-1.5">
+            <button class="fat-weekday-metric-btn px-2.5 py-1 rounded-lg text-xs font-medium bg-stone-800 text-white" data-metric="revenue">Faturamento</button>
+            <button class="fat-weekday-metric-btn px-2.5 py-1 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-metric="profit">Lucro</button>
+          </div>
+        </div>
         <div id="fat-weekday-content"></div>
       </div>
 
@@ -835,10 +883,7 @@
          instantâneo de agora (quanto capital está imobilizado no estoque), não um resultado de
          período como o resto do DRE (fluxo de faturamento/custo/lucro). -->
     <section id="fpanel-estoque-valor" class="hidden fade-in">
-      <div class="flex items-center justify-between mb-4">
-        <h2 class="text-lg font-bold text-stone-800 flex items-center gap-2"><i data-lucide="warehouse" class="w-5 h-5 text-emerald-600"></i>Dinheiro em Estoque</h2>
-        <button onclick="lockFinanceiro()" class="text-xs text-stone-400 hover:text-stone-600 flex items-center gap-1"><i data-lucide="lock" class="w-3.5 h-3.5"></i>Bloquear</button>
-      </div>
+      <h3 class="font-semibold text-stone-800 text-base mb-1 flex items-center gap-2"><i data-lucide="warehouse" class="w-4 h-4 text-emerald-600"></i>Dinheiro em Estoque</h3>
       <p class="text-xs text-stone-400 mb-4">Quantidade em estoque × custo médio de cada insumo/produto — quanto capital está parado em mercadoria agora. Comprar estoque não vira despesa aqui nem no DRE; o CMV só é reconhecido quando a venda acontece.</p>
 
       <div class="grid grid-cols-2 gap-3 mb-2">
@@ -872,6 +917,45 @@
           <select id="inventory-category-filter" class="input-field text-xs py-1.5"><option value="">Todas categorias</option></select>
         </div>
         <div id="inventory-ranking-list"></div>
+      </div>
+    </section>
+
+    <!-- Sub-aba: Saídas sem Venda (Perda / Consumo Interno / Uso em Evento / Outros) -->
+    <section id="fpanel-saidas-sem-venda" class="hidden fade-in">
+      <h3 class="font-semibold text-stone-800 text-base mb-1 flex items-center gap-2"><i data-lucide="log-out" class="w-4 h-4 text-emerald-600"></i>Saídas sem Venda</h3>
+      <p class="text-xs text-stone-400 mb-4">Estoque que saiu sem virar faturamento — perda, consumo interno da equipe/donos, ou uso em evento (até o valor do evento ser lançado em Vendas). Mesmo motor de custo do CMV/Dinheiro em Estoque.</p>
+      <div class="flex gap-2 mb-4">
+        <button class="ssv-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-800 text-white" data-filter="7days">7 dias</button>
+        <button class="ssv-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-filter="30days">30 dias</button>
+        <button class="ssv-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-filter="month">Este mês</button>
+        <button class="ssv-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-filter="year">Este ano</button>
+      </div>
+      <div class="grid grid-cols-2 gap-3 mb-4">
+        <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100">
+          <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-1">Perda</p>
+          <p class="text-xl font-bold text-red-600" id="ssv-kpi-perda">R$ 0,00</p>
+        </div>
+        <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100">
+          <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-1">Consumo Interno</p>
+          <p class="text-xl font-bold text-amber-700" id="ssv-kpi-consumo">R$ 0,00</p>
+        </div>
+        <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100">
+          <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-1">Uso em Evento (custo)</p>
+          <p class="text-xl font-bold text-blue-700" id="ssv-kpi-evento">R$ 0,00</p>
+          <p class="text-[10px] text-stone-400 mt-1" id="ssv-kpi-evento-note"></p>
+        </div>
+        <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100">
+          <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-1">Total saído sem venda</p>
+          <p class="text-xl font-bold text-stone-800" id="ssv-kpi-total">R$ 0,00</p>
+        </div>
+      </div>
+      <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 mb-4">
+        <h3 class="font-semibold text-sm mb-3 text-stone-800 flex items-center gap-2"><i data-lucide="pie-chart" class="w-4 h-4 text-emerald-600"></i>Por motivo</h3>
+        <div id="ssv-motivo-breakdown" class="space-y-2.5"></div>
+      </div>
+      <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 mb-4">
+        <h3 class="font-semibold text-sm mb-3 text-stone-800 flex items-center gap-2"><i data-lucide="bar-chart-2" class="w-4 h-4 text-emerald-600"></i>Ranking por produto</h3>
+        <div id="ssv-ranking-list"></div>
       </div>
     </section>
 
@@ -1141,6 +1225,11 @@
         <div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-2">Nome do Insumo *</label><input id="edit-levels-product-name-input" type="text" class="w-full input-field text-sm" required></div>
         <div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-2">Categoria:</label><select id="edit-levels-category" class="w-full input-field text-sm"><option value="Café">Café</option><option value="Cozinha">Cozinha</option><option value="Drinks">Drinks</option><option value="Limpeza">Limpeza</option><option value="Utensílios">Utensílios</option></select></div>
       </div>
+      <label class="flex items-start gap-2 mb-5 p-3 bg-stone-50 rounded-lg border border-stone-200 cursor-pointer">
+        <input id="edit-levels-controls-stock" type="checkbox" class="w-4 h-4 mt-0.5" onchange="toggleEditLevelsStockSection()">
+        <span class="text-sm text-stone-700">Controla estoque (entradas/saídas com quantidade)<br><span class="text-xs text-stone-400">Desligue pra insumos de compra frequente e quantidade variável (rúcula, alface, chás...) — continua contando em Entradas, Preço Médio e receitas, só não exige bater saldo nem nível de estoque, e some da Lista de Compras e de Dinheiro em Estoque.</span></span>
+      </label>
+      <div id="edit-levels-stock-section">
       <div class="mb-5 pb-5 border-b border-stone-200">
         <p class="text-xs font-bold text-stone-600 uppercase tracking-wide mb-4">Ajuste Manual de Estoque</p>
         <div class="grid sm:grid-cols-2 gap-4">
@@ -1191,6 +1280,7 @@
           <select id="edit-levels-linked-recipe" class="w-full input-field text-sm"><option value="">Nenhuma receita vinculada</option></select>
           <p class="text-xs text-stone-500 italic mt-2">Receita tipo "Insumo" que produz este item.</p>
         </div>
+      </div>
       </div>
       <div class="bg-blue-50 rounded-lg p-4 mb-5 border border-blue-200">
         <div class="flex items-center justify-between mb-1">
@@ -1774,6 +1864,13 @@ function blankRecord() {
     production_recipe_id:'', production_real_yield:0, linked_recipe_id:'', loss_reason:'', loss_type:'', custom_conversions:'[]' };
 }
 
+// Reaproveita o campo recipe_type (nunca usado em records type='product') pra marcar insumos de
+// compra recorrente mas sem controle de estoque granular (ex: rúcula, alface, chás — quantidade
+// varia demais pra valer a pena bater entrada/saída). Continuam com nome, categoria, unidade,
+// Preço Médio, Entradas (custo) e uso em receita normalmente — só ficam de fora de Lista de
+// Compras, Dinheiro em Estoque, Perdas, Saída Manual direta, e nunca travam produção/venda por
+// "estoque insuficiente" quando usados como ingrediente.
+function productControlsStock(p) { return !p || p.recipe_type !== 'sem_controle_estoque'; }
 function getStockBadge(qty, critical, min, comfortable) {
   if (qty === 0) return '<span class="ml-2 text-[10px] px-2 py-0.5 rounded-full font-semibold badge-out">Acabou</span>';
   if (qty <= critical) return '<span class="ml-2 text-[10px] px-2 py-0.5 rounded-full font-semibold badge-critical">Crítico</span>';
@@ -1822,6 +1919,19 @@ document.getElementById('tab-nav').addEventListener('click', (e) => {
   const panel = document.getElementById('panel-' + currentTab);
   if (panel) panel.classList.remove('hidden');
 });
+// Atalho usado pelas listas locais (Entradas/Saídas/Perdas) — em vez de manter uma lista completa
+// duplicada em cada tela, mostram só os últimos lançamentos e linkam pro Histórico central já
+// filtrado pelo tipo certo, que tem busca, período e exportação de verdade.
+function goToHistoryFiltered(movementType) {
+  currentTab = 'historico';
+  document.querySelectorAll('[data-tab]').forEach(b => b.classList.toggle('tab-active', b.dataset.tab === 'historico'));
+  document.querySelectorAll('[id^="panel-"]').forEach(p => p.classList.add('hidden'));
+  document.getElementById('panel-historico').classList.remove('hidden');
+  const sel = document.getElementById('filter-type');
+  if (sel) sel.value = movementType;
+  renderHistory();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
 
 // ============================================================
 // RENDER ALL
@@ -1929,6 +2039,7 @@ function renderProductionSuggestions() {
       for (const ing of ingredients) {
         const p = allProds.find(x => x.product_name === ing.name);
         if (!p) { shortages.push(`${ing.name} (não cadastrado)`); continue; }
+        if (!productControlsStock(p)) continue;
         const needed = convertQuantity(ing.qty * recipesNeeded, ing.unit, p.storage_unit || p.unit, getCustomConversions(p));
         if (p.quantity < needed) {
           const short = needed - p.quantity;
@@ -2009,7 +2120,7 @@ async function confirmInsumoProduction(recipe, times, realYieldOverride) {
     const p = getProducts().find(x => namesMatch(x.product_name, ing.name));
     if (!p) return { ok:false, error:`${ing.name} não encontrado` };
     const su = p.storage_unit || p.unit;
-    if (p.quantity < convertQuantity(ing.qty * times, ing.unit, su, getCustomConversions(p))) return { ok:false, error:`falta ${ing.name}` };
+    if (productControlsStock(p) && p.quantity < convertQuantity(ing.qty * times, ing.unit, su, getCustomConversions(p))) return { ok:false, error:`falta ${ing.name}` };
   }
   for (const ing of ingredients) {
     const p = getProducts().find(x => namesMatch(x.product_name, ing.name));
@@ -2100,7 +2211,7 @@ async function sendNToProduction(recipeId, times) {
     if (!p) { showToast(`Insumo ${ing.name} não encontrado`, true); return; }
     const storageUnit = p.storage_unit || p.unit;
     const consumptionQty = convertQuantity(ing.qty * times, ing.unit, storageUnit, getCustomConversions(p));
-    if (p.quantity < consumptionQty) { showToast(`Estoque insuficiente de ${ing.name} para ${times}× receita`, true); return; }
+    if (productControlsStock(p) && p.quantity < consumptionQty) { showToast(`Estoque insuficiente de ${ing.name} para ${times}× receita`, true); return; }
   }
   for (let i = 0; i < times; i++) await createProduction(recipe);
   renderAll();
@@ -2114,6 +2225,7 @@ function renderShoppingList() {
   const products = getProducts();
   const needsBuying = products.filter(p => {
     if (p.linked_recipe_id) return false;
+    if (!productControlsStock(p)) return false;
     return p.quantity <= p.min_stock || p.quantity === 0;
   }).sort((a,b) => {
     const aR = a.quantity / (a.comfortable_stock || a.min_stock*2 || 1);
@@ -2160,6 +2272,9 @@ function renderStock() {
   const catColors = { 'Caf\u00e9': 'bg-amber-700', 'Cozinha': 'bg-orange-600', 'Drinks': 'bg-blue-600', 'Limpeza': 'bg-teal-600', 'Utens\u00edlios': 'bg-stone-600' };
 
   function renderProductCard(p) {
+    if (!productControlsStock(p)) {
+      return `<div class="flex items-center justify-between p-3.5 bg-white rounded-xl shadow-sm border border-stone-100 card-hover"><div class="flex-1 min-w-0"><span class="font-semibold text-stone-800 truncate block text-sm">${p.product_name}</span><span class="text-xs text-stone-400">${p.unit}</span><span class="ml-2 text-[10px] px-2 py-0.5 rounded-full font-semibold bg-stone-100 text-stone-500">Sem controle de estoque</span></div><div class="flex items-center gap-2 flex-shrink-0 ml-3"><button onclick="openEditLevels('${p.id}')" class="w-8 h-8 rounded-lg bg-blue-50 hover:bg-blue-100 flex items-center justify-center text-blue-600" title="Editar"><i data-lucide="settings" class="w-3.5 h-3.5"></i></button></div></div>`;
+    }
     const comfortable = p.comfortable_stock || 0;
     const sc = getStockClass(p.quantity, p.critical_stock, p.min_stock, comfortable);
     return `<div class="flex items-center justify-between p-3.5 bg-white rounded-xl shadow-sm border border-stone-100 ${sc} card-hover"><div class="flex-1 min-w-0"><span class="font-semibold text-stone-800 truncate block text-sm">${p.product_name}</span><span class="text-xs text-stone-400">${p.unit}</span>${getStockBadge(p.quantity,p.critical_stock,p.min_stock,comfortable)}</div><div class="flex items-center gap-2 flex-shrink-0 ml-3"><span class="w-20 text-right font-bold text-sm text-stone-800">${fmtQty(p.quantity,p.unit)} ${p.unit}</span><button onclick="openEditLevels('${p.id}')" class="w-8 h-8 rounded-lg bg-blue-50 hover:bg-blue-100 flex items-center justify-center text-blue-600" title="Editar"><i data-lucide="settings" class="w-3.5 h-3.5"></i></button></div></div>`;
@@ -2179,7 +2294,7 @@ function renderStock() {
 
     el.innerHTML = orderedCats.map(cat => {
       const items = grouped[cat].sort((a,b) => a.product_name.localeCompare(b.product_name));
-      const lowCount = items.filter(p => p.quantity <= p.min_stock).length;
+      const lowCount = items.filter(p => productControlsStock(p) && p.quantity <= p.min_stock).length;
       const icon = catIcons[cat] || '\ud83d\udce6';
       const color = catColors[cat] || 'bg-stone-600';
       return `<div class="mb-5">
@@ -2203,6 +2318,10 @@ document.getElementById('filter-category').addEventListener('change', renderStoc
 
 function showAddProduct() { const el = document.getElementById('add-product-form'); el.classList.remove('hidden'); setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100); }
 function hideAddProduct() { document.getElementById('add-product-form').classList.add('hidden'); }
+function toggleNewProdStockLevels() {
+  const on = document.getElementById('new-prod-controls-stock').checked;
+  document.getElementById('new-prod-stock-levels').classList.toggle('hidden', !on);
+}
 
 async function handleAddProduct(e) {
   e.preventDefault();
@@ -2210,19 +2329,20 @@ async function handleAddProduct(e) {
   const storageUnit = document.getElementById('new-prod-storage-unit').value;
   const category = document.getElementById('new-prod-category').value;
   const qty = Math.max(0, parseFloat(document.getElementById('new-prod-qty').value) || 0);
+  const controlsStock = document.getElementById('new-prod-controls-stock').checked;
   const critical = parseFloat(document.getElementById('new-prod-critical').value) || 1;
   const min = parseFloat(document.getElementById('new-prod-min').value) || 5;
   const comfortable = parseFloat(document.getElementById('new-prod-comfortable').value) || 10;
   if (!name||!storageUnit||!category) { showToast('Preencha todos os campos obrigatórios', true); return; }
   if (getProducts().some(p => p.product_name.toLowerCase() === name.toLowerCase())) { showToast('Insumo já cadastrado', true); return; }
-  const r = await dbCreate({ ...blankRecord(), type:'product', product_name:name, quantity:qty, unit:storageUnit, storage_unit:storageUnit, critical_stock:critical, min_stock:min, comfortable_stock:comfortable, category });
+  const r = await dbCreate({ ...blankRecord(), type:'product', product_name:name, quantity:qty, unit:storageUnit, storage_unit:storageUnit, critical_stock:critical, min_stock:min, comfortable_stock:comfortable, category, recipe_type: controlsStock ? '' : 'sem_controle_estoque' });
   if (r.isOk) {
     // Registra a quantidade inicial como uma entrada, pra ficar rastreável no histórico e a
     // ferramenta de "Conferir saldo" ter de onde partir (sem isso, a auditoria não tem começo).
     if (qty > 0) {
       await dbCreate({ ...blankRecord(), type:'movement', movement_type:'entrada', movement_product:name, movement_quantity:1, movement_date:new Date().toISOString(), movement_note:`Estoque inicial ao cadastrar: ${fmtQty(qty,storageUnit)} ${storageUnit} ${name}`, batch_items:JSON.stringify([{name, unit:storageUnit, qty, storageQty:qty}]) });
     }
-    showToast('Insumo cadastrado!'); hideAddProduct(); e.target.reset();
+    showToast('Insumo cadastrado!'); hideAddProduct(); e.target.reset(); toggleNewProdStockLevels();
   } else showToast('Erro ao cadastrar', true);
 }
 
@@ -2232,6 +2352,8 @@ function openEditLevels(id) {
   editingProductId = id;
   document.getElementById('edit-levels-product-name-input').value = p.product_name;
   document.getElementById('edit-levels-category').value = p.category || 'Café';
+  document.getElementById('edit-levels-controls-stock').checked = productControlsStock(p);
+  toggleEditLevelsStockSection();
   document.getElementById('edit-levels-critical').value = p.critical_stock;
   document.getElementById('edit-levels-min').value = p.min_stock;
   document.getElementById('edit-levels-comfortable').value = p.comfortable_stock || 0;
@@ -2262,6 +2384,10 @@ function openEditLevels(id) {
   document.getElementById('edit-levels-modal').classList.remove('hidden');
 }
 function closeEditLevels() { document.getElementById('edit-levels-modal').classList.add('hidden'); editingProductId = null; editingCustomConversions = []; }
+function toggleEditLevelsStockSection() {
+  const on = document.getElementById('edit-levels-controls-stock').checked;
+  document.getElementById('edit-levels-stock-section').classList.toggle('hidden', !on);
+}
 function toggleCCCustomName() {
   const sel = document.getElementById('edit-levels-cc-unit-select');
   document.getElementById('edit-levels-cc-unit-custom').classList.toggle('hidden', sel.value !== '__custom__');
@@ -2429,6 +2555,7 @@ async function saveEditedLevels() {
   const m = parseFloat(document.getElementById('edit-levels-min').value)||0;
   const co = parseFloat(document.getElementById('edit-levels-comfortable').value)||0;
   const linkedRecipeId = document.getElementById('edit-levels-linked-recipe').value || '';
+  const controlsStock = document.getElementById('edit-levels-controls-stock').checked;
   if (!newName) { showToast('Nome do insumo não pode ficar vazio', true); return; }
   if (isNaN(newQty) || newQty < 0) { showToast('Quantidade inválida', true); return; }
   const oldName = p.product_name;
@@ -2438,7 +2565,7 @@ async function saveEditedLevels() {
   }
   const oldQty = p.quantity;
   const diff = newQty - oldQty;
-  const r = await dbUpdate({...p, product_name:newName, quantity:newQty, category:cat, critical_stock:c, min_stock:m, comfortable_stock:co, linked_recipe_id:linkedRecipeId, custom_conversions:JSON.stringify(editingCustomConversions)});
+  const r = await dbUpdate({...p, product_name:newName, quantity:newQty, category:cat, critical_stock:c, min_stock:m, comfortable_stock:co, linked_recipe_id:linkedRecipeId, custom_conversions:JSON.stringify(editingCustomConversions), recipe_type: controlsStock ? '' : 'sem_controle_estoque'});
   if (r.isOk) {
     if (diff !== 0) await dbCreate({ ...blankRecord(), type:'movement', movement_type:'ajuste_manual', movement_product:newName, movement_quantity:diff, movement_date:new Date().toISOString(), movement_note:`Ajuste: ${newName} → ${fmtQty(newQty,p.unit)} ${p.unit}`, batch_items:JSON.stringify([{name:newName, qty:diff, unit:p.unit, productId:p.id}]) });
     if (nameChanged) {
@@ -2609,20 +2736,21 @@ function resetBatchForm() {
 function renderEntriesList() {
   const entries = getMovements().filter(m=>m.movement_type==='entrada').sort((a,b)=>new Date(b.movement_date)-new Date(a.movement_date));
   const el = document.getElementById('entries-list');
-  el.innerHTML = entries.length===0?'<p class="text-stone-400 text-center py-6 text-sm">Nenhuma entrada registrada</p>':
-    entries.slice(0,30).map(m=>{const d=new Date(m.movement_date);return`<div class="p-4 bg-white rounded-xl shadow-sm border border-stone-100 card-hover"><div class="flex justify-between items-start mb-1"><span class="font-medium text-emerald-700 text-sm">↓ Entrada</span><span class="text-xs text-stone-400">${d.toLocaleDateString('pt-BR')} ${d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</span></div><p class="text-sm text-stone-700 break-words">${m.movement_product}</p>${m.movement_user?`<p class="text-xs text-stone-400 mt-1">por ${m.movement_user}</p>`:''}</div>`;}).join('');
+  const linkHtml = entries.length > 5 ? `<button onclick="goToHistoryFiltered('entrada')" class="w-full text-center text-xs font-medium text-blue-600 hover:text-blue-800 py-2">Ver histórico completo de entradas (${entries.length}) →</button>` : '';
+  el.innerHTML = (entries.length===0?'<p class="text-stone-400 text-center py-6 text-sm">Nenhuma entrada registrada</p>':
+    entries.slice(0,5).map(m=>{const d=new Date(m.movement_date);return`<div class="p-4 bg-white rounded-xl shadow-sm border border-stone-100 card-hover"><div class="flex justify-between items-start mb-1"><span class="font-medium text-emerald-700 text-sm">↓ Entrada</span><span class="text-xs text-stone-400">${d.toLocaleDateString('pt-BR')} ${d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</span></div><p class="text-sm text-stone-700 break-words">${m.movement_product}</p>${m.movement_user?`<p class="text-xs text-stone-400 mt-1">por ${m.movement_user}</p>`:''}</div>`;}).join('')) + linkHtml;
 }
 
 // ============================================================
 // SAÍDAS MANUAIS
 // ============================================================
 function addManualExitItem() {
-  const products = getProducts().sort((a,b) => a.product_name.localeCompare(b.product_name));
+  const products = getProducts().filter(productControlsStock).sort((a,b) => a.product_name.localeCompare(b.product_name));
   const container = document.getElementById('manual-exit-container');
   const div = document.createElement('div');
   div.className = 'manual-exit-item bg-stone-50 border border-stone-200 rounded-lg p-4 space-y-2';
   div.dataset.itemType = 'insumo';
-  div.innerHTML = `<div class="flex gap-1.5"><button type="button" class="manual-exit-type-btn flex-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-stone-800 text-white" data-type="insumo" onclick="setManualExitItemType(this,'insumo')">Insumo</button><button type="button" class="manual-exit-type-btn flex-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-type="venda_direta" onclick="setManualExitItemType(this,'venda_direta')">🍽️ Item de Venda Direta</button></div><label class="manual-exit-label text-xs font-semibold text-stone-600 uppercase tracking-wide block">Insumo</label><div class="relative"><i data-lucide="search" class="absolute left-3 top-3 w-4 h-4 text-stone-400"></i><input type="text" class="manual-exit-search input-field text-sm w-full pl-9 pr-4" placeholder="Pesquisar insumo..."><div class="manual-exit-dropdown hidden absolute top-full left-0 right-0 mt-1 bg-white border border-stone-200 rounded-lg shadow-lg z-10 max-h-40 overflow-y-auto"></div></div><select class="manual-exit-product input-field text-sm w-full" required><option value="">Selecione o insumo</option>${products.map(p=>`<option value="${p.id}" data-name="${p.product_name}" data-unit="${p.unit}">${p.product_name} (${p.unit})</option>`).join('')}</select><div class="grid sm:grid-cols-[1fr_110px_auto] gap-2 items-end"><div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Quantidade</label><input type="number" class="manual-exit-qty input-field text-sm w-full" placeholder="Quantidade" min="0.001" step="any" required></div><div class="manual-exit-unit-wrap"><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Medida</label><select class="manual-exit-unit input-field text-sm w-full"></select></div><button type="button" onclick="removeManualExitItem(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button></div>`;
+  div.innerHTML = `<div class="flex gap-1.5"><button type="button" class="manual-exit-type-btn flex-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-stone-800 text-white" data-type="insumo" onclick="setManualExitItemType(this,'insumo')">Insumo</button><button type="button" class="manual-exit-type-btn flex-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-type="venda_direta" onclick="setManualExitItemType(this,'venda_direta')">🍽️ Item de Venda Direta</button></div><label class="manual-exit-label text-xs font-semibold text-stone-600 uppercase tracking-wide block">Insumo</label><div class="relative"><i data-lucide="search" class="absolute left-3 top-3 w-4 h-4 text-stone-400"></i><input type="text" class="manual-exit-search input-field text-sm w-full pl-9 pr-4" placeholder="Pesquisar insumo..."><div class="manual-exit-dropdown hidden absolute top-full left-0 right-0 mt-1 bg-white border border-stone-200 rounded-lg shadow-lg z-10 max-h-40 overflow-y-auto"></div></div><select class="manual-exit-product input-field text-sm w-full" required><option value="">Selecione o insumo</option>${products.map(p=>`<option value="${p.id}" data-name="${p.product_name}" data-unit="${p.unit}">${p.product_name} (${p.unit})</option>`).join('')}</select><div class="grid sm:grid-cols-[1fr_110px_auto] gap-2 items-end"><div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Quantidade</label><input type="number" class="manual-exit-qty input-field text-sm w-full" placeholder="Quantidade" min="0.001" step="any" required></div><div class="manual-exit-unit-wrap"><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Medida</label><select class="manual-exit-unit input-field text-sm w-full"></select></div><button type="button" onclick="removeManualExitItem(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button></div><div class="grid sm:grid-cols-2 gap-2"><div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Motivo</label><select class="manual-exit-motivo input-field text-sm w-full" onchange="toggleManualExitEventName(this)"><option value="consumo_interno">Consumo Interno</option><option value="uso_evento">Uso em Evento</option><option value="outros">Outros</option></select></div><div class="manual-exit-event-name-wrap hidden"><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Nome do evento</label><input type="text" class="manual-exit-event-name input-field text-sm w-full" placeholder="Ex: Aniversário Maria"></div></div>`;
   container.appendChild(div);
   attachManualExitSearchListeners(div);
   lucide.createIcons();
@@ -2632,6 +2760,10 @@ function initManualExitSearchListeners() { document.querySelectorAll('#manual-ex
 // Alterna cada linha da Saída Manual entre "Insumo" (retira direto do estoque) e "Item de Venda
 // Direta" (retira uma receita pronta — ex: um prato servido num evento — descontando os insumos
 // dela, mas sem gerar faturamento, já que em evento o valor é cobrado à parte por pessoa).
+function toggleManualExitEventName(sel) {
+  const wrap = sel.closest('.manual-exit-item').querySelector('.manual-exit-event-name-wrap');
+  if (wrap) wrap.classList.toggle('hidden', sel.value !== 'uso_evento');
+}
 function setManualExitItemType(btn, type) {
   const container = btn.closest('.manual-exit-item');
   container.dataset.itemType = type;
@@ -2654,7 +2786,7 @@ function setManualExitItemType(btn, type) {
   } else {
     label.textContent = 'Insumo';
     search.placeholder = 'Pesquisar insumo...';
-    const products = getProducts().sort((a,b)=>a.product_name.localeCompare(b.product_name));
+    const products = getProducts().filter(productControlsStock).sort((a,b)=>a.product_name.localeCompare(b.product_name));
     select.innerHTML = '<option value="">Selecione o insumo</option>' + products.map(p=>`<option value="${p.id}" data-name="${p.product_name}" data-unit="${p.unit}">${p.product_name} (${p.unit})</option>`).join('');
     unitWrap.classList.remove('hidden');
     populateUnitSelect(container.querySelector('.manual-exit-unit'), '');
@@ -2675,7 +2807,7 @@ function attachManualExitSearchListeners(container) {
       dropdown.innerHTML = filtered.map(r => `<div class="px-3 py-2 hover:bg-stone-100 cursor-pointer text-sm text-stone-700 border-b border-stone-100 last:border-b-0" onclick="selectManualExitRecipe(this,'${r.id}','${r.recipe_name.replace(/'/g,"\\'")}')">${r.recipe_name}</div>`).join('');
       dropdown.classList.remove('hidden');
     } else {
-      const products = getProducts().sort((a,b) => a.product_name.localeCompare(b.product_name));
+      const products = getProducts().filter(productControlsStock).sort((a,b) => a.product_name.localeCompare(b.product_name));
       const filtered = products.filter(p => p.product_name.toLowerCase().includes(query));
       if (filtered.length === 0) { dropdown.classList.add('hidden'); return; }
       dropdown.innerHTML = filtered.map(p => `<div class="px-3 py-2 hover:bg-stone-100 cursor-pointer text-sm text-stone-700 border-b border-stone-100 last:border-b-0" onclick="selectManualExitProduct(this,'${p.id}','${p.product_name.replace(/'/g,"\\'")}','${p.unit}')">${p.product_name} <span class="text-stone-400">(${p.unit})</span></div>`).join('');
@@ -2723,15 +2855,19 @@ async function confirmManualExit() {
     const sel = item.querySelector('.manual-exit-product');
     const qty = parseFloat(item.querySelector('.manual-exit-qty').value);
     if (!sel.value||!qty||qty<=0) { showToast('Preencha todos os campos', true); return; }
+    const motivoSel = item.querySelector('.manual-exit-motivo');
+    const reasonMotivo = motivoSel ? motivoSel.value : 'consumo_interno';
+    const eventNameInput = item.querySelector('.manual-exit-event-name');
+    const eventName = (reasonMotivo === 'uso_evento' && eventNameInput) ? eventNameInput.value.trim() : '';
     if (item.dataset.itemType === 'venda_direta') {
-      vendaDiretaEntries.push({ recipeId: sel.value, name: sel.selectedOptions[0]?.dataset.name||'', qty });
+      vendaDiretaEntries.push({ recipeId: sel.value, name: sel.selectedOptions[0]?.dataset.name||'', qty, reason:reasonMotivo, eventName });
     } else {
       const unitSel = item.querySelector('.manual-exit-unit');
       const p = allData.find(r => r.id === sel.value);
       const chosenUnit = unitSel.value || sel.selectedOptions[0]?.dataset.unit || '';
       const baseUnit = p ? (p.storage_unit||p.unit) : chosenUnit;
       const storageQty = p ? convertQuantity(qty, chosenUnit, baseUnit, getCustomConversions(p)) : qty;
-      insumoEntries.push({ id:sel.value, name:sel.selectedOptions[0]?.dataset.name||'', unit:chosenUnit, qty, storageQty });
+      insumoEntries.push({ id:sel.value, name:sel.selectedOptions[0]?.dataset.name||'', unit:chosenUnit, qty, storageQty, reason:reasonMotivo, eventName });
     }
   }
   for (const e of insumoEntries) {
@@ -2747,7 +2883,7 @@ async function confirmManualExit() {
       if (!p) { showToast(`Insumo ${ing.name} (usado em ${vd.name}) não encontrado`, true); return; }
       const storageUnit = p.storage_unit||p.unit;
       const needed = convertQuantity(ing.qty*vd.qty, ing.unit, storageUnit, getCustomConversions(p));
-      if (p.quantity < needed) { showToast(`Estoque insuficiente de ${ing.name} pra retirar ${vd.name}`, true); return; }
+      if (productControlsStock(p) && p.quantity < needed) { showToast(`Estoque insuficiente de ${ing.name} pra retirar ${vd.name}`, true); return; }
     }
   }
   const reason = document.getElementById('manual-exit-reason').value.trim();
@@ -2776,7 +2912,7 @@ async function confirmManualExit() {
       }
       // Guarda no mesmo formato usado nas vendas (value:'recipe_<id>' + deductedIngredients), pra
       // reaproveitar toda a lógica que já sabe ler isso: desfazer, saldo calculado, saídas recentes.
-      vendaDiretaExitData.push({ value:`recipe_${vd.recipeId}`, name: vd.name, unit: recipe.recipe_yield_unit, type:'venda_direta', qty: vd.qty, deductedIngredients });
+      vendaDiretaExitData.push({ value:`recipe_${vd.recipeId}`, name: vd.name, unit: recipe.recipe_yield_unit, type:'venda_direta', qty: vd.qty, deductedIngredients, reason:vd.reason, eventName:vd.eventName });
       done++;
     }
     const allExitData = [...insumoEntries, ...vendaDiretaExitData];
@@ -2793,8 +2929,8 @@ async function confirmManualExit() {
 }
 function cancelManualExit() { resetManualExitForm(); }
 function resetManualExitForm() {
-  const products = getProducts().sort((a,b) => a.product_name.localeCompare(b.product_name));
-  document.getElementById('manual-exit-container').innerHTML = `<div class="manual-exit-item bg-stone-50 border border-stone-200 rounded-lg p-4 space-y-2" data-item-type="insumo"><div class="flex gap-1.5"><button type="button" class="manual-exit-type-btn flex-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-stone-800 text-white" data-type="insumo" onclick="setManualExitItemType(this,'insumo')">Insumo</button><button type="button" class="manual-exit-type-btn flex-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-type="venda_direta" onclick="setManualExitItemType(this,'venda_direta')">🍽️ Item de Venda Direta</button></div><label class="manual-exit-label text-xs font-semibold text-stone-600 uppercase tracking-wide block">Insumo</label><div class="relative"><i data-lucide="search" class="absolute left-3 top-3 w-4 h-4 text-stone-400"></i><input type="text" class="manual-exit-search input-field text-sm w-full pl-9 pr-4" placeholder="Pesquisar insumo..."><div class="manual-exit-dropdown hidden absolute top-full left-0 right-0 mt-1 bg-white border border-stone-200 rounded-lg shadow-lg z-10 max-h-40 overflow-y-auto"></div></div><select class="manual-exit-product input-field text-sm w-full" required><option value="">Selecione o insumo</option>${products.map(p=>`<option value="${p.id}" data-name="${p.product_name}" data-unit="${p.unit}">${p.product_name} (${p.unit})</option>`).join('')}</select><div class="grid sm:grid-cols-[1fr_110px_auto] gap-2 items-end"><div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Quantidade</label><input type="number" class="manual-exit-qty input-field text-sm w-full" placeholder="Quantidade" min="0.001" step="any" required></div><div class="manual-exit-unit-wrap"><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Medida</label><select class="manual-exit-unit input-field text-sm w-full"></select></div><button type="button" onclick="removeManualExitItem(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button></div></div>`;
+  const products = getProducts().filter(productControlsStock).sort((a,b) => a.product_name.localeCompare(b.product_name));
+  document.getElementById('manual-exit-container').innerHTML = `<div class="manual-exit-item bg-stone-50 border border-stone-200 rounded-lg p-4 space-y-2" data-item-type="insumo"><div class="flex gap-1.5"><button type="button" class="manual-exit-type-btn flex-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-stone-800 text-white" data-type="insumo" onclick="setManualExitItemType(this,'insumo')">Insumo</button><button type="button" class="manual-exit-type-btn flex-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-type="venda_direta" onclick="setManualExitItemType(this,'venda_direta')">🍽️ Item de Venda Direta</button></div><label class="manual-exit-label text-xs font-semibold text-stone-600 uppercase tracking-wide block">Insumo</label><div class="relative"><i data-lucide="search" class="absolute left-3 top-3 w-4 h-4 text-stone-400"></i><input type="text" class="manual-exit-search input-field text-sm w-full pl-9 pr-4" placeholder="Pesquisar insumo..."><div class="manual-exit-dropdown hidden absolute top-full left-0 right-0 mt-1 bg-white border border-stone-200 rounded-lg shadow-lg z-10 max-h-40 overflow-y-auto"></div></div><select class="manual-exit-product input-field text-sm w-full" required><option value="">Selecione o insumo</option>${products.map(p=>`<option value="${p.id}" data-name="${p.product_name}" data-unit="${p.unit}">${p.product_name} (${p.unit})</option>`).join('')}</select><div class="grid sm:grid-cols-[1fr_110px_auto] gap-2 items-end"><div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Quantidade</label><input type="number" class="manual-exit-qty input-field text-sm w-full" placeholder="Quantidade" min="0.001" step="any" required></div><div class="manual-exit-unit-wrap"><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Medida</label><select class="manual-exit-unit input-field text-sm w-full"></select></div><button type="button" onclick="removeManualExitItem(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button></div><div class="grid sm:grid-cols-2 gap-2"><div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Motivo</label><select class="manual-exit-motivo input-field text-sm w-full" onchange="toggleManualExitEventName(this)"><option value="consumo_interno">Consumo Interno</option><option value="uso_evento">Uso em Evento</option><option value="outros">Outros</option></select></div><div class="manual-exit-event-name-wrap hidden"><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Nome do evento</label><input type="text" class="manual-exit-event-name input-field text-sm w-full" placeholder="Ex: Aniversário Maria"></div></div></div>`;
   document.getElementById('manual-exit-reason').value = '';
   initManualExitSearchListeners();
   lucide.createIcons();
@@ -2802,8 +2938,9 @@ function resetManualExitForm() {
 function renderManualExitsList() {
   const exits = getMovements().filter(m=>m.movement_type==='saida_manual').sort((a,b)=>new Date(b.movement_date)-new Date(a.movement_date));
   const el = document.getElementById('manual-exits-list');
-  el.innerHTML = exits.length===0?'<p class="text-stone-400 text-center py-6 text-sm">Nenhuma saída manual registrada</p>':
-    exits.slice(0,30).map(m=>{const d=new Date(m.movement_date);return`<div class="p-4 bg-white rounded-xl shadow-sm border border-stone-100 card-hover"><div class="flex justify-between items-start mb-1"><span class="font-medium text-orange-700 text-sm">📤 Saída Manual</span><span class="text-xs text-stone-400">${d.toLocaleDateString('pt-BR')} ${d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</span></div><p class="text-sm text-stone-700 break-words">${m.movement_product}</p></div>`;}).join('');
+  const linkHtml = exits.length > 5 ? `<button onclick="goToHistoryFiltered('saida_manual')" class="w-full text-center text-xs font-medium text-blue-600 hover:text-blue-800 py-2">Ver histórico completo de saídas (${exits.length}) →</button>` : '';
+  el.innerHTML = (exits.length===0?'<p class="text-stone-400 text-center py-6 text-sm">Nenhuma saída manual registrada</p>':
+    exits.slice(0,5).map(m=>{const d=new Date(m.movement_date);return`<div class="p-4 bg-white rounded-xl shadow-sm border border-stone-100 card-hover"><div class="flex justify-between items-start mb-1"><span class="font-medium text-orange-700 text-sm">📤 Saída Manual</span><span class="text-xs text-stone-400">${d.toLocaleDateString('pt-BR')} ${d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</span></div><p class="text-sm text-stone-700 break-words">${m.movement_product}</p></div>`;}).join('')) + linkHtml;
 }
 
 // ============================================================
@@ -2999,7 +3136,7 @@ function sendToProduction(recipeId) {
     if (!p) { showToast(`Insumo ${ing.name} não encontrado`, true); return; }
     const storageUnit = p.storage_unit || p.unit;
     const consumptionQty = convertQuantity(ing.qty, ing.unit, storageUnit, getCustomConversions(p));
-    if (p.quantity < consumptionQty) { showToast(`Estoque insuficiente de ${ing.name}`, true); return; }
+    if (productControlsStock(p) && p.quantity < consumptionQty) { showToast(`Estoque insuficiente de ${ing.name}`, true); return; }
   }
   createProduction(recipe).then(() => { renderAll(); showToast(`${recipe.recipe_name} enviado para produção!`); });
 }
@@ -3183,7 +3320,7 @@ function confirmFinalize() {
     if (!p) { document.getElementById('finalize-error').textContent=`Insumo ${ing.name} não encontrado`; document.getElementById('finalize-error').classList.remove('hidden'); return; }
     const storageUnit = p.storage_unit || p.unit;
     const consumptionQty = convertQuantity(ing.qty, ing.unit, storageUnit, getCustomConversions(p));
-    if (p.quantity < consumptionQty) { document.getElementById('finalize-error').textContent=`Estoque insuficiente de ${ing.name}`; document.getElementById('finalize-error').classList.remove('hidden'); return; }
+    if (productControlsStock(p) && p.quantity < consumptionQty) { document.getElementById('finalize-error').textContent=`Estoque insuficiente de ${ing.name}`; document.getElementById('finalize-error').classList.remove('hidden'); return; }
   }
   document.getElementById('finalize-btn').disabled = true;
   document.getElementById('finalize-btn').textContent = 'Processando...';
@@ -3351,7 +3488,9 @@ document.addEventListener('click', (e) => {
   document.querySelectorAll('.sales-mode-btn').forEach(b => { b.className = `sales-mode-btn px-4 py-2 rounded-lg text-sm font-medium ${b.dataset.mode===currentSalesMode?'bg-emerald-700 text-white':'bg-stone-100 text-stone-600 hover:bg-stone-200'}`; });
   document.getElementById('sales-manual-section').classList.toggle('hidden', currentSalesMode !== 'manual');
   document.getElementById('sales-bulk-section').classList.toggle('hidden', currentSalesMode !== 'bulk');
+  document.getElementById('sales-events-section').classList.toggle('hidden', currentSalesMode !== 'events');
   if (currentSalesMode === 'bulk') { initBulkSalesDate(); }
+  if (currentSalesMode === 'events') { renderPendingEvents(); }
 });
 document.addEventListener('click', (e) => {
   const btn = e.target.closest('.expense-mode-btn'); if (!btn) return;
@@ -3583,6 +3722,115 @@ async function confirmSales() {
   }
 }
 let salesHistoryFilter = 'today';
+// Eventos com custo já baixado (Saída Manual, motivo Uso em Evento) esperando o valor cobrado ser
+// lançado — mesmo padrão de "pendente até você preencher" já usado em Custos de Estoque.
+function renderPendingEvents() {
+  const el = document.getElementById('pending-events-list');
+  if (!el) return;
+  const events = getPendingEvents();
+  document.getElementById('pending-events-empty')?.classList.toggle('hidden', events.length > 0);
+  el.innerHTML = events.map((ev, i) => {
+    const d = new Date(ev.date);
+    const extras = getEventExtraCosts(ev.movementId);
+    const extrasHtml = extras.length === 0 ? '<p class="text-xs text-stone-400 italic">Nenhum custo extra ainda</p>' : extras.map(x => `
+      <div class="flex justify-between items-center bg-white border border-stone-200 rounded-lg px-3 py-1.5">
+        <span class="text-xs text-stone-700">${x.product_name} <span class="text-stone-400">— ${fmtCurrency(x.total_cost)}</span></span>
+        <button onclick="requestDeleteEventExtraCost('${x.id}')" class="text-red-500 hover:text-red-700 text-xs font-bold px-2">×</button>
+      </div>`).join('');
+    return `<div class="p-4 bg-amber-50 rounded-lg border border-amber-100">
+      <div class="mb-3">
+        <p class="text-sm font-semibold text-stone-800">${ev.eventName}</p>
+        <p class="text-xs text-stone-500">${d.toLocaleDateString('pt-BR')} · custo de estoque: ${fmtCurrency(ev.stockCost)}${ev.unknownCount>0?` (+${ev.unknownCount} item(ns) sem custo conhecido)`:''}</p>
+      </div>
+      <div class="mb-3">
+        <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-1.5">Custos extras (decoração, etc.)</p>
+        <div class="space-y-1.5 mb-2">${extrasHtml}</div>
+        <div class="flex gap-2">
+          <input type="text" id="event-extra-desc-${i}" placeholder="Descrição" class="input-field text-xs flex-1">
+          <div class="relative w-28"><span class="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-stone-400">R$</span><input type="number" id="event-extra-amount-${i}" placeholder="0,00" min="0.01" step="any" class="input-field text-xs w-full pl-6"></div>
+          <button onclick="handleAddEventExtraCost('${ev.movementId}', ${i})" class="btn-ghost px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap">+ Adicionar</button>
+        </div>
+      </div>
+      <div class="flex justify-between items-center mb-3 pt-2 border-t border-amber-200">
+        <span class="text-xs font-bold text-stone-700 uppercase tracking-wide">Custo total do evento</span>
+        <span class="text-sm font-bold text-red-700">${fmtCurrency(ev.totalCost)}</span>
+      </div>
+      <div class="flex flex-wrap gap-2 items-end">
+        <div class="flex-1 min-w-[120px]"><label class="text-[10px] font-semibold text-stone-500 uppercase tracking-wide block mb-1">Valor cobrado</label><div class="relative"><span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-stone-400">R$</span><input type="number" id="pending-event-amount-${i}" class="input-field text-sm w-full pl-7" placeholder="0,00" min="0.01" step="any"></div></div>
+        <div><label class="text-[10px] font-semibold text-stone-500 uppercase tracking-wide block mb-1">Data</label><input type="date" id="pending-event-date-${i}" class="input-field text-sm" value="${localDateStr(new Date())}"></div>
+        <button onclick="handleAddEventRevenue('${ev.movementId}', ${i})" class="btn-primary px-4 py-2.5 rounded-lg text-sm font-medium whitespace-nowrap">Lançar e Fechar Evento</button>
+      </div>
+    </div>`;
+  }).join('');
+  renderPricedEvents();
+  lucide.createIcons();
+}
+function renderPricedEvents() {
+  const el = document.getElementById('priced-events-list');
+  if (!el) return;
+  const events = getPricedEvents();
+  document.getElementById('priced-events-empty')?.classList.toggle('hidden', events.length > 0);
+  el.innerHTML = events.map(ev => {
+    const d = ev.date ? new Date(ev.date + 'T12:00:00') : null;
+    const profitColor = ev.profit >= 0 ? 'text-emerald-700' : 'text-red-600';
+    return `<div class="p-3 bg-white rounded-xl border border-stone-100 flex justify-between items-center gap-2">
+      <div class="min-w-0">
+        <p class="text-sm font-medium text-stone-800 truncate">${ev.eventName}</p>
+        <p class="text-xs text-stone-400">${d?d.toLocaleDateString('pt-BR'):''} · faturado ${fmtCurrency(ev.revenue)} − custo ${fmtCurrency(ev.totalCost)}</p>
+      </div>
+      <span class="text-sm font-bold ${profitColor} flex-shrink-0">${fmtCurrency(ev.profit)}</span>
+    </div>`;
+  }).join('');
+}
+async function handleAddEventExtraCost(movementId, idx) {
+  const descInput = document.getElementById(`event-extra-desc-${idx}`);
+  const amountInput = document.getElementById(`event-extra-amount-${idx}`);
+  const desc = descInput.value.trim();
+  const amount = parseFloat(amountInput.value);
+  if (!desc || !amount || amount <= 0) { showToast('Preencha a descrição e o valor', true); return; }
+  showLoadingProgress('Adicionando custo extra...');
+  try {
+    const payload = { type:'event_extra_cost', movement_id: movementId, product_name: desc, total_cost: amount, expense_date: localDateStr(new Date()), updated_at:new Date().toISOString() };
+    const r = await financeApiCall('create', { data: payload });
+    financeData.push({ id:r.id, ...payload });
+    hideLoadingProgress();
+    showToast('Custo extra adicionado!');
+    renderPendingEvents();
+    if (activeFinanceTab === 'dre') renderDRE();
+  } catch (err) {
+    hideLoadingProgress();
+    console.error('Erro ao adicionar custo extra:', err);
+    showToast('Erro ao adicionar custo extra: ' + err.message, true);
+  }
+}
+function requestDeleteEventExtraCost(id) {
+  const x = financeData.find(r => r.id === id); if (!x) return;
+  pendingDeleteId = id; pendingDeleteType = 'event_extra_cost';
+  document.getElementById('delete-confirm-text').textContent = `Deseja excluir o custo extra "${x.product_name}" (${fmtCurrency(x.total_cost)})?`;
+  document.getElementById('delete-confirm-modal').classList.remove('hidden');
+}
+async function handleAddEventRevenue(movementId, idx) {
+  const amountInput = document.getElementById(`pending-event-amount-${idx}`);
+  const dateInput = document.getElementById(`pending-event-date-${idx}`);
+  const amount = parseFloat(amountInput.value);
+  const date = dateInput.value;
+  if (!amount || amount <= 0 || !date) { showToast('Informe o valor cobrado e a data', true); return; }
+  const ev = getPendingEvents().find(e => e.movementId === movementId);
+  showLoadingProgress('Lançando faturamento do evento...');
+  try {
+    const payload = { type:'event_revenue', movement_id: movementId, product_name: ev ? ev.eventName : 'Evento', total_cost: amount, expense_date: date, updated_at:new Date().toISOString() };
+    const r = await financeApiCall('create', { data: payload });
+    financeData.push({ id:r.id, ...payload });
+    hideLoadingProgress();
+    showToast('Faturamento do evento lançado!');
+    renderPendingEvents();
+    if (activeFinanceTab === 'dre') renderDRE();
+  } catch (err) {
+    hideLoadingProgress();
+    console.error('Erro ao lançar faturamento do evento:', err);
+    showToast('Erro ao lançar faturamento do evento: ' + err.message, true);
+  }
+}
 function renderSalesToday() {
   document.querySelectorAll('.sales-history-filter').forEach(b => { b.className = `sales-history-filter px-2.5 py-1 rounded-lg text-xs font-medium ${b.dataset.filter===salesHistoryFilter?'bg-stone-800 text-white':'bg-stone-100 text-stone-600 hover:bg-stone-200'}`; });
 
@@ -4102,7 +4350,7 @@ async function processBulkSales(priceHints, prebuiltSalesData) {
 // PERDAS
 // ============================================================
 function updateLossProductOptions() {
-  const products = getProducts().sort((a,b) => a.product_name.localeCompare(b.product_name));
+  const products = getProducts().filter(productControlsStock).sort((a,b) => a.product_name.localeCompare(b.product_name));
   const sel = document.getElementById('loss-product'); if (!sel) return;
   const val = sel.value;
   sel.innerHTML = '<option value="">Selecione o insumo</option>' + products.map(p=>`<option value="${p.id}" data-name="${p.product_name}" data-unit="${p.unit}" data-qty="${p.quantity}">${p.product_name} (${p.unit})</option>`).join('');
@@ -4153,8 +4401,24 @@ async function handleRegisterLoss(e) {
 function renderLosses() {
   const losses = getMovements().filter(m=>m.movement_type==='perda').sort((a,b)=>new Date(b.movement_date)-new Date(a.movement_date));
   const el = document.getElementById('losses-list'); if (!el) return;
-  el.innerHTML = losses.length===0?'<p class="text-stone-400 text-center py-6 text-sm">Nenhuma perda registrada</p>':
-    losses.map(m=>{const d=new Date(m.movement_date);return`<div class="p-4 bg-white rounded-xl shadow-sm border border-stone-100 card-hover"><div class="flex justify-between items-start mb-1"><span class="font-medium text-red-600 text-sm">🗑 Perda</span><span class="text-xs text-stone-400">${d.toLocaleDateString('pt-BR')} ${d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</span></div><p class="text-sm text-stone-700">${m.movement_product}</p>${m.loss_reason?`<p class="text-xs text-stone-500 mt-1">Motivo: ${m.loss_reason}</p>`:''}</div>`;}).join('');
+  // Custo por perda vem do mesmo motor usado no DRE (computeLossesCost) — sem duplicar cálculo.
+  // Requer senha da Central Financeira desbloqueada (financeData carregado); sem isso, mostra só
+  // quantidade/motivo, sem valor (não dá pra saber o custo sem os preços lançados).
+  const costData = financeUnlocked ? computeLossesCost(null, null) : null;
+  const valueById = new Map((costData ? costData.rows : []).map(r => [r.id, r.value]));
+  const totalEl = document.getElementById('losses-total-value');
+  if (totalEl) {
+    totalEl.textContent = costData && costData.total > 0
+      ? `Total perdido: ${fmtCurrency(costData.total)}${costData.unknownCount > 0 ? ` (+${costData.unknownCount} sem custo conhecido)` : ''}`
+      : '';
+  }
+  const linkHtml = losses.length > 5 ? `<button onclick="goToHistoryFiltered('perda')" class="w-full text-center text-xs font-medium text-blue-600 hover:text-blue-800 py-2">Ver histórico completo de perdas (${losses.length}) →</button>` : '';
+  el.innerHTML = (losses.length===0?'<p class="text-stone-400 text-center py-6 text-sm">Nenhuma perda registrada</p>':
+    losses.slice(0,5).map(m=>{
+      const d=new Date(m.movement_date);
+      const value = valueById.get(m.id);
+      return `<div class="p-4 bg-white rounded-xl shadow-sm border border-stone-100 card-hover"><div class="flex justify-between items-start mb-1"><span class="font-medium text-red-600 text-sm">🗑 Perda</span><span class="text-xs text-stone-400">${d.toLocaleDateString('pt-BR')} ${d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</span></div><div class="flex justify-between items-center gap-2"><p class="text-sm text-stone-700">${m.movement_product}</p>${value!=null?`<p class="text-xs font-semibold text-red-600 whitespace-nowrap">${fmtCurrency(value)}</p>`:''}</div>${m.loss_reason?`<p class="text-xs text-stone-500 mt-1">Motivo: ${m.loss_reason}</p>`:''}</div>`;
+    }).join('')) + linkHtml;
 }
 
 // ============================================================
@@ -5226,6 +5490,13 @@ async function confirmDelete() {
       if (result.ok) { financeData = financeData.filter(r => r.id !== sc.id); renderStockCosts(); renderDRE(); showToast('Custo avulso excluído!'); }
       else showToast('Erro ao excluir', true);
     }
+  } else if (deleteType === 'event_extra_cost') {
+    const x = financeData.find(r => r.id === deleteId);
+    if (x) {
+      const result = await financeApiCall('delete', { id: x.id });
+      if (result.ok) { financeData = financeData.filter(r => r.id !== x.id); renderPendingEvents(); if (activeFinanceTab==='dre') renderDRE(); showToast('Custo extra excluído!'); }
+      else showToast('Erro ao excluir', true);
+    }
   } else if (deleteType === 'dre_group') {
     const g = financeData.find(r => r.id === deleteId);
     if (g) {
@@ -5289,7 +5560,8 @@ function closeDeleteConfirm() { document.getElementById('delete-confirm-modal').
 let financeUnlocked = false;
 let financePassword = '';
 let financeData = [];
-let activeFinanceTab = 'custos';
+let activeFinanceTab = 'dre';
+let custosSubTab = 'custos'; // sub-aba ativa dentro do grupo "Estoque & Custos"
 let currentArea = 'estoque'; // 'estoque' | 'financeiro'
 let financePrecosSearch = '';
 let financePrecosFilter = 'todos';
@@ -5332,30 +5604,49 @@ function gotoEstoque() {
   document.getElementById('header-subtitle').textContent = 'Gestão Operacional';
   lucide.createIcons();
 }
+// Sub-navegação do grupo "Estoque & Custos" (Custos Pendentes / Preço Médio / CMV / Dinheiro em
+// Estoque) — 4 telas que antes ocupavam 4 espaços na nav principal, agora atrás de 1 só.
+function renderCustosSubnav() {
+  document.querySelectorAll('.custos-sub-tab-btn').forEach(b => {
+    b.className = `custos-sub-tab-btn px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap ${b.dataset.sub===custosSubTab?'bg-stone-800 text-white':'bg-stone-100 text-stone-600 hover:bg-stone-200'}`;
+  });
+  document.getElementById('fpanel-custos').classList.toggle('hidden', custosSubTab!=='custos');
+  document.getElementById('fpanel-precos').classList.toggle('hidden', custosSubTab!=='precos');
+  document.getElementById('fpanel-cmv').classList.toggle('hidden', custosSubTab!=='cmv');
+  document.getElementById('fpanel-estoque-valor').classList.toggle('hidden', custosSubTab!=='estoque-valor');
+  document.getElementById('fpanel-saidas-sem-venda').classList.toggle('hidden', custosSubTab!=='saidas-sem-venda');
+  if (custosSubTab === 'precos') renderFinancePrecos();
+  if (custosSubTab === 'cmv') renderFinanceCMV();
+  if (custosSubTab === 'estoque-valor') renderInventoryPanel();
+  if (custosSubTab === 'saidas-sem-venda') renderSaidasSemVenda();
+  lucide.createIcons();
+}
 document.addEventListener('click', (e) => {
   const btn = e.target.closest('.finance-tab-btn'); if (!btn) return;
   activeFinanceTab = btn.dataset.ftab;
   document.querySelectorAll('.finance-tab-btn').forEach(b => b.classList.toggle('finance-tab-active', b.dataset.ftab===activeFinanceTab));
-  document.getElementById('fpanel-custos').classList.toggle('hidden', activeFinanceTab!=='custos');
-  document.getElementById('fpanel-precos').classList.toggle('hidden', activeFinanceTab!=='precos');
-  document.getElementById('fpanel-cmv').classList.toggle('hidden', activeFinanceTab!=='cmv');
+  document.getElementById('estoque-custos-header').classList.toggle('hidden', activeFinanceTab!=='estoque-custos');
+  document.getElementById('custos-subnav').classList.toggle('hidden', activeFinanceTab!=='estoque-custos');
+  if (activeFinanceTab === 'estoque-custos') renderCustosSubnav();
+  else ['fpanel-custos','fpanel-precos','fpanel-cmv','fpanel-estoque-valor','fpanel-saidas-sem-venda'].forEach(id => document.getElementById(id).classList.add('hidden'));
   document.getElementById('fpanel-vendas').classList.toggle('hidden', activeFinanceTab!=='vendas');
   document.getElementById('fpanel-faturamento').classList.toggle('hidden', activeFinanceTab!=='faturamento');
   document.getElementById('fpanel-dre').classList.toggle('hidden', activeFinanceTab!=='dre');
-  document.getElementById('fpanel-estoque-valor').classList.toggle('hidden', activeFinanceTab!=='estoque-valor');
   document.getElementById('fpanel-despesas').classList.toggle('hidden', activeFinanceTab!=='despesas');
   document.getElementById('fpanel-config-gastos').classList.toggle('hidden', activeFinanceTab!=='config-gastos');
   document.getElementById('fpanel-funcionarios').classList.toggle('hidden', activeFinanceTab!=='funcionarios');
-  if (activeFinanceTab === 'precos') renderFinancePrecos();
-  if (activeFinanceTab === 'cmv') renderFinanceCMV();
-  if (activeFinanceTab === 'vendas') { renderSalesSelect(); renderSalesToday(); if (currentSalesMode==='bulk') { initBulkSalesDate(); } }
+  if (activeFinanceTab === 'vendas') { renderSalesSelect(); renderSalesToday(); renderPendingEvents(); if (currentSalesMode==='bulk') { initBulkSalesDate(); } }
   if (activeFinanceTab === 'faturamento') renderFaturamento();
   if (activeFinanceTab === 'dre') renderDRE();
-  if (activeFinanceTab === 'estoque-valor') renderInventoryPanel();
   if (activeFinanceTab === 'despesas') renderExpenses();
   if (activeFinanceTab === 'config-gastos') renderExpenseConfig();
   if (activeFinanceTab === 'funcionarios') renderEmployees();
   lucide.createIcons();
+});
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.custos-sub-tab-btn'); if (!btn) return;
+  custosSubTab = btn.dataset.sub;
+  renderCustosSubnav();
 });
 document.addEventListener('click', (e) => {
   const btn = e.target.closest('.dre-filter'); if (!btn) return;
@@ -5550,27 +5841,85 @@ function computeMarginRanking(entries) {
   withCost.sort((a,b)=>b.marginPct-a.marginPct);
   return { withCost, withoutCost };
 }
+// Lucro bruto ABSOLUTO por produto (faturamento total - CMV total do período) — diferente de
+// computeMarginRanking, que ordena por margem % (bom pra achar produto eficiente, mas esconde
+// quem realmente traz dinheiro pro caixa). Produto que mais fatura nem sempre é o que mais lucra:
+// esse ranking existe exatamente pra mostrar essa diferença.
+function computeProductProfitRanking(entries) {
+  const rows = computeProductRevenueRanking(entries);
+  const withCost = [], withoutCost = [];
+  rows.forEach(r => {
+    if (r.qty <= 0) { withoutCost.push(r); return; }
+    const cmv = getProductCMV(r.name);
+    if (!cmv) { withoutCost.push(r); return; }
+    const totalCost = cmv.costPerUnit * r.qty;
+    const profit = r.revenue - totalCost;
+    const marginPct = r.revenue > 0 ? (profit/r.revenue)*100 : 0;
+    withCost.push({ ...r, totalCost, profit, marginPct });
+  });
+  const totalProfit = withCost.reduce((s,r)=>s+r.profit, 0);
+  withCost.sort((a,b) => b.profit - a.profit);
+  return { withCost: withCost.map(r => ({ ...r, pctOfProfit: totalProfit>0 ? (r.profit/totalProfit)*100 : 0 })), withoutCost, totalProfit };
+}
+// Setor da receita (Cozinha / Café e Drinks) é a única categorização real disponível pra um item
+// vendido — produto pronto (finished_product) não tem categoria própria, herda do setor da receita
+// vinculada, se tiver.
+function getProductSector(productName) {
+  const recipe = getRecipes().find(r => r.recipe_name === productName);
+  if (recipe) return recipe.recipe_sector || 'Sem categoria';
+  const fp = getFinishedProducts().find(f => f.product_name === productName);
+  if (fp && fp.linked_recipe_id) {
+    const r2 = getRecipes().find(r => r.id === fp.linked_recipe_id);
+    if (r2) return r2.recipe_sector || 'Sem categoria';
+  }
+  return 'Sem categoria';
+}
+function computeCategoryProfitRanking(entries) {
+  const { withCost } = computeProductProfitRanking(entries);
+  const byCategory = {};
+  withCost.forEach(r => {
+    const cat = getProductSector(r.name);
+    if (!byCategory[cat]) byCategory[cat] = { category: cat, profit: 0, revenue: 0 };
+    byCategory[cat].profit += r.profit;
+    byCategory[cat].revenue += r.revenue;
+  });
+  const total = Object.values(byCategory).reduce((s,c)=>s+c.profit, 0);
+  return Object.values(byCategory)
+    .map(c => ({ ...c, pct: total>0 ? (c.profit/total)*100 : 0, marginPct: c.revenue>0 ? (c.profit/c.revenue)*100 : 0 }))
+    .sort((a,b) => b.profit-a.profit);
+}
 const WEEKDAY_SHORT = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
 // Faturamento médio por dia da semana, dentro do período já filtrado na tela (não é o histórico
 // inteiro) — cada dia entra pela data real da venda (sale_price_updated_at).
 function computeWeekdaySeasonality(entries) {
-  const buckets = Array.from({length:7}, (_, i) => ({ weekday:i, revenue:0, days:new Set() }));
+  const buckets = Array.from({length:7}, (_, i) => ({ weekday:i, revenue:0, profit:0, days:new Set() }));
   entries.forEach(e => {
     if (!e.sale_price_updated_at) return;
     const b = buckets[parseLocalDate(e.sale_price_updated_at).getDay()];
     b.revenue += (e.total_revenue||0);
     b.days.add(e.sale_price_updated_at);
+    const cmv = getProductCMV(e.product_name);
+    if (cmv) b.profit += (e.total_revenue||0) - cmv.costPerUnit*(e.total_qty_sold||0);
   });
-  return buckets.map(b => ({ weekday:b.weekday, revenue:b.revenue, days:b.days.size, avg: b.days.size>0 ? b.revenue/b.days.size : 0 }));
+  return buckets.map(b => ({
+    weekday:b.weekday, revenue:b.revenue, profit:b.profit, days:b.days.size,
+    avg: b.days.size>0 ? b.revenue/b.days.size : 0,
+    avgProfit: b.days.size>0 ? b.profit/b.days.size : 0,
+  }));
 }
 // Gráfico de LINHA (trocado de barras — mais claro pra ver tendência dia a dia). Cada dia vira um
 // ponto clicável (mesmo comportamento de antes: toca no ponto pra ver o detalhe daquele dia).
-function buildFaturamentoChartSVG(dailyMap, startDate, endDate) {
+// profitDailyMap é opcional — quando presente, desenha uma 2ª linha (lucro) na mesma escala do
+// faturamento, pra comparação visual direta. Lucro aqui só soma dias/produtos com custo de receita
+// já lançado (mesma ressalva do resto do DRE/Faturamento) — pode ficar abaixo do "real" em períodos
+// com muito produto sem custo lançado ainda.
+function buildFaturamentoChartSVG(dailyMap, startDate, endDate, profitDailyMap) {
   const days = [];
   const d = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
   const end = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
   while (d <= end) {
-    days.push({ date:new Date(d), key: localDateStr(d), value: dailyMap[localDateStr(d)]||0 });
+    const key = localDateStr(d);
+    days.push({ date:new Date(d), key, value: dailyMap[key]||0, profit: profitDailyMap ? (profitDailyMap[key]||0) : null });
     d.setDate(d.getDate()+1);
   }
   if (days.length===0) return '<p class="text-xs text-stone-400">Sem dados suficientes pra gráfico.</p>';
@@ -5580,27 +5929,33 @@ function buildFaturamentoChartSVG(dailyMap, startDate, endDate) {
   const points = days.map((x,i) => {
     const cx = gap + i*colW + colW/2;
     const cy = topPad + chartH - (x.value/max)*chartH;
-    return { ...x, cx, cy };
+    const py = x.profit != null ? topPad + chartH - (Math.max(0,x.profit)/max)*chartH : null;
+    return { ...x, cx, cy, py };
   });
   const linePath = points.map((p,i) => `${i===0?'M':'L'}${p.cx.toFixed(1)},${p.cy.toFixed(1)}`).join(' ');
   const areaPath = `M${points[0].cx.toFixed(1)},${(topPad+chartH).toFixed(1)} ` +
     points.map(p => `L${p.cx.toFixed(1)},${p.cy.toFixed(1)}`).join(' ') +
     ` L${points[points.length-1].cx.toFixed(1)},${(topPad+chartH).toFixed(1)} Z`;
+  const profitLinePath = profitDailyMap ? points.map((p,i) => `${i===0?'M':'L'}${p.cx.toFixed(1)},${p.py.toFixed(1)}`).join(' ') : '';
   const dots = points.map(p => {
     const label = `${p.date.getDate()}/${p.date.getMonth()+1}`;
     const isSelected = faturamentoSelectedDay === p.key;
     const r = isSelected ? 5 : 3.5;
     const color = p.value>0 ? (isSelected ? '#047857' : '#10b981') : '#d6d3d1';
+    const profitTitle = p.profit != null ? ` · lucro ${fmtCurrency(p.profit)}` : '';
     return `<g style="cursor:pointer" onclick="selectFaturamentoDay('${p.key}')">
-      <title>${label}: ${fmtCurrency(p.value)}</title>
+      <title>${label}: ${fmtCurrency(p.value)}${profitTitle}</title>
       <rect x="${(p.cx-colW/2).toFixed(1)}" y="0" width="${colW}" height="${topPad+chartH+30}" fill="transparent"></rect>
+      ${p.profit != null ? `<circle cx="${p.cx.toFixed(1)}" cy="${p.py.toFixed(1)}" r="2.5" fill="#2563eb" stroke="#fff" stroke-width="1"></circle>` : ''}
       <circle cx="${p.cx.toFixed(1)}" cy="${p.cy.toFixed(1)}" r="${r}" fill="${color}" stroke="#fff" stroke-width="1.5"></circle>
       <text x="${p.cx.toFixed(1)}" y="${topPad+chartH+22}" font-size="8" fill="#78716c" text-anchor="middle">${label}</text>
     </g>`;
   }).join('');
-  return `<div class="overflow-x-auto -mx-1 px-1"><svg width="${width}" height="${topPad+chartH+34}" viewBox="0 0 ${width} ${topPad+chartH+34}" xmlns="http://www.w3.org/2000/svg" style="min-width:${width}px">
+  const legend = profitDailyMap ? `<div class="flex items-center gap-3 text-[10px] text-stone-500 mb-1"><span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full inline-block" style="background:#10b981"></span>Faturamento</span><span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full inline-block" style="background:#2563eb"></span>Lucro</span></div>` : '';
+  return `${legend}<div class="overflow-x-auto -mx-1 px-1"><svg width="${width}" height="${topPad+chartH+34}" viewBox="0 0 ${width} ${topPad+chartH+34}" xmlns="http://www.w3.org/2000/svg" style="min-width:${width}px">
     <path d="${areaPath}" fill="#10b981" fill-opacity="0.08"></path>
     <path d="${linePath}" fill="none" stroke="#10b981" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"></path>
+    ${profitDailyMap ? `<path d="${profitLinePath}" fill="none" stroke="#2563eb" stroke-width="1.75" stroke-dasharray="4,2" stroke-linejoin="round" stroke-linecap="round"></path>` : ''}
     ${dots}
   </svg></div>`;
 }
@@ -5612,11 +5967,19 @@ function renderFaturamento() {
   const entries = getSaleRevenueEntriesInRange(start, end);
 
   const dailyMap = {};
-  entries.forEach(e => { dailyMap[e.sale_price_updated_at] = (dailyMap[e.sale_price_updated_at]||0) + (e.total_revenue||0); });
+  const profitDailyMap = {};
+  entries.forEach(e => {
+    dailyMap[e.sale_price_updated_at] = (dailyMap[e.sale_price_updated_at]||0) + (e.total_revenue||0);
+    const cmv = getProductCMV(e.product_name);
+    if (cmv) {
+      const profit = (e.total_revenue||0) - cmv.costPerUnit*(e.total_qty_sold||0);
+      profitDailyMap[e.sale_price_updated_at] = (profitDailyMap[e.sale_price_updated_at]||0) + profit;
+    }
+  });
 
   const periodTotal = entries.reduce((s,e)=>s+(e.total_revenue||0), 0);
   document.getElementById('fat-period-total').textContent = fmtCurrency(periodTotal);
-  document.getElementById('fat-chart').innerHTML = buildFaturamentoChartSVG(dailyMap, start, end);
+  document.getElementById('fat-chart').innerHTML = buildFaturamentoChartSVG(dailyMap, start, end, profitDailyMap);
 
   // Comparação com o período anterior (mesmo número de dias, imediatamente antes)
   const prevRange = faturamentoPreviousRange(start, end);
@@ -5649,6 +6012,8 @@ function renderFaturamento() {
     : '—';
 
   renderFaturamentoRanking(entries, periodTotal);
+  renderFaturamentoProfitRanking(entries);
+  renderFaturamentoCategoryProfit(entries);
   renderFaturamentoMargin(entries);
   renderFaturamentoWeekday(entries);
 
@@ -5671,6 +6036,49 @@ function renderFaturamentoRanking(entries, periodTotal) {
     <div class="h-1.5 bg-stone-100 rounded-full overflow-hidden"><div class="h-full bg-emerald-500 rounded-full" style="width:${Math.max(2,r.pct)}%"></div></div>
   </div>`;
   el.innerHTML = top.map(rowHtml).join('') + (rest.length > 0 ? `<div class="pt-2 border-t border-stone-100 flex justify-between items-center text-xs text-stone-400"><span>Outros ${rest.length} produto(s)</span><span>${fmtCurrency(restTotal)} (${restPct.toFixed(0)}%)</span></div>` : '');
+}
+function renderFaturamentoProfitRanking(entries) {
+  const el = document.getElementById('fat-profit-ranking-list'); if (!el) return;
+  if (entries.length === 0) { el.innerHTML = '<p class="text-stone-400 text-center py-4 text-sm">Sem vendas no período</p>'; return; }
+  const { withCost, withoutCost, totalProfit } = computeProductProfitRanking(entries);
+  if (withCost.length === 0) {
+    el.innerHTML = '<p class="text-stone-400 text-center py-4 text-sm">Nenhum produto vendido no período tem custo de receita lançado ainda pra calcular lucro</p>';
+    return;
+  }
+  const top = withCost.slice(0, 8);
+  const rest = withCost.slice(8);
+  const restProfit = rest.reduce((s,r)=>s+r.profit, 0);
+  const rowHtml = (r) => {
+    const color = r.profit >= 0 ? 'text-emerald-700' : 'text-red-600';
+    return `<div class="pb-2 border-b border-stone-50 last:border-b-0">
+      <div class="flex justify-between items-start gap-2 mb-0.5">
+        <span class="text-sm text-stone-700 truncate">${r.name}</span>
+        <span class="text-sm font-bold ${color} whitespace-nowrap">${fmtCurrency(r.profit)}</span>
+      </div>
+      <p class="text-[11px] text-stone-400">${fmtQty(r.qty,r.unit)} ${r.unit} · fat. ${fmtCurrency(r.revenue)} · CMV ${fmtCurrency(r.totalCost)} · margem ${r.marginPct.toFixed(0)}%</p>
+    </div>`;
+  };
+  let html = top.map(rowHtml).join('');
+  if (rest.length > 0) html += `<div class="pt-1 flex justify-between items-center text-xs text-stone-400"><span>Outros ${rest.length} produto(s)</span><span>${fmtCurrency(restProfit)}</span></div>`;
+  if (withoutCost.length > 0) html += `<p class="text-[11px] text-stone-400 mt-2 pt-2 border-t border-stone-100">Sem custo de receita lançado ainda: ${withoutCost.map(r=>r.name).join(', ')}</p>`;
+  el.innerHTML = html;
+}
+function renderFaturamentoCategoryProfit(entries) {
+  const el = document.getElementById('fat-category-profit-content'); if (!el) return;
+  if (entries.length === 0) { el.innerHTML = '<p class="text-stone-400 text-center py-4 text-sm">Sem vendas no período</p>'; return; }
+  const rows = computeCategoryProfitRanking(entries);
+  if (rows.length === 0) {
+    el.innerHTML = '<p class="text-stone-400 text-center py-4 text-sm">Nenhum produto vendido no período tem custo de receita lançado ainda</p>';
+    return;
+  }
+  el.innerHTML = rows.map(c => `
+    <div class="mb-2.5 last:mb-0">
+      <div class="flex justify-between items-center mb-1 gap-2">
+        <span class="text-sm text-stone-700 truncate">${c.category}</span>
+        <span class="text-sm font-semibold text-stone-800 whitespace-nowrap">${fmtCurrency(c.profit)} <span class="text-stone-400 font-normal">(${c.pct.toFixed(0)}% · margem ${c.marginPct.toFixed(0)}%)</span></span>
+      </div>
+      <div class="h-2 bg-stone-100 rounded-full overflow-hidden"><div class="h-full bg-emerald-500 rounded-full" style="width:${Math.max(2,c.pct)}%"></div></div>
+    </div>`).join('');
 }
 function renderFaturamentoMargin(entries) {
   const el = document.getElementById('fat-margin-content'); if (!el) return;
@@ -5701,32 +6109,46 @@ function renderFaturamentoMargin(entries) {
   }
   el.innerHTML = html;
 }
+let faturamentoWeekdayMetric = 'revenue'; // 'revenue' | 'profit'
 function renderFaturamentoWeekday(entries) {
   const el = document.getElementById('fat-weekday-content'); if (!el) return;
+  document.querySelectorAll('.fat-weekday-metric-btn').forEach(b => { b.className = `fat-weekday-metric-btn px-2.5 py-1 rounded-lg text-xs font-medium ${b.dataset.metric===faturamentoWeekdayMetric?'bg-stone-800 text-white':'bg-stone-100 text-stone-600 hover:bg-stone-200'}`; });
   if (entries.length === 0) { el.innerHTML = '<p class="text-stone-400 text-center py-4 text-sm">Sem vendas no período</p>'; return; }
   const buckets = computeWeekdaySeasonality(entries);
   const withData = buckets.filter(b=>b.days>0);
   if (withData.length === 0) { el.innerHTML = '<p class="text-stone-400 text-center py-4 text-sm">Sem dados suficientes</p>'; return; }
-  const max = Math.max(...buckets.map(b=>b.avg), 0.0001);
-  const bestIdx = withData.reduce((best,b)=> b.avg > best.avg ? b : best, withData[0]).weekday;
+  const isProfit = faturamentoWeekdayMetric === 'profit';
+  const valueOf = (b) => isProfit ? b.avgProfit : b.avg;
+  const max = Math.max(...buckets.map(valueOf), 0.0001);
+  const bestIdx = withData.reduce((best,b)=> valueOf(b) > valueOf(best) ? b : best, withData[0]).weekday;
+  const barColor = isProfit ? '#1d4ed8' : '#047857';
+  const barColorLight = isProfit ? '#bfdbfe' : '#a7f3d0';
   const barsHtml = buckets.map(b => {
-    const h = b.days > 0 ? Math.max(3, Math.round((b.avg/max)*70)) : 2;
+    const v = valueOf(b);
+    const h = b.days > 0 ? Math.max(3, Math.round((Math.max(0,v)/max)*70)) : 2;
     const isBest = b.weekday === bestIdx && b.days > 0;
     return `<div class="flex flex-col items-center gap-1 flex-1 min-w-0">
-      <span class="text-[9px] text-stone-500 font-medium truncate">${b.days>0?fmtCurrency(b.avg):''}</span>
-      <div class="w-full rounded-t" style="height:${h}px; background:${isBest?'#047857':'#a7f3d0'}"></div>
-      <span class="text-[10px] font-semibold ${isBest?'text-emerald-700':'text-stone-500'}">${WEEKDAY_SHORT[b.weekday]}</span>
+      <span class="text-[9px] text-stone-500 font-medium truncate">${b.days>0?fmtCurrency(v):''}</span>
+      <div class="w-full rounded-t" style="height:${h}px; background:${isBest?barColor:barColorLight}"></div>
+      <span class="text-[10px] font-semibold ${isBest?(isProfit?'text-blue-700':'text-emerald-700'):'text-stone-500'}">${WEEKDAY_SHORT[b.weekday]}</span>
     </div>`;
   }).join('');
+  const metricLabel = isProfit ? 'lucro' : 'faturamento';
   const note = Math.min(...withData.map(b=>b.days)) < 2
-    ? '<p class="text-[11px] text-stone-400 mt-2">Média de faturamento por dia, calculada só com os dias do período selecionado — com poucos dias, a tendência pode mudar conforme mais vendas forem registradas.</p>'
-    : '<p class="text-[11px] text-stone-400 mt-2">Média de faturamento por dia (só dias com venda registrada), no período selecionado.</p>';
+    ? `<p class="text-[11px] text-stone-400 mt-2">Média de ${metricLabel} por dia, calculada só com os dias do período selecionado — com poucos dias, a tendência pode mudar conforme mais vendas forem registradas.</p>`
+    : `<p class="text-[11px] text-stone-400 mt-2">Média de ${metricLabel} por dia (só dias com venda registrada), no período selecionado.${isProfit?' Lucro considera só produtos com custo de receita já lançado.':''}</p>`;
   el.innerHTML = `<div class="flex items-end gap-1.5 h-24">${barsHtml}</div>${note}`;
 }
 function selectFaturamentoDay(dateKey) {
   faturamentoSelectedDay = faturamentoSelectedDay === dateKey ? null : dateKey;
   renderFaturamento();
 }
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.fat-weekday-metric-btn'); if (!btn) return;
+  faturamentoWeekdayMetric = btn.dataset.metric;
+  const entries = getSaleRevenueEntriesInRange(...Object.values(faturamentoRangeForFilter(faturamentoFilter)));
+  renderFaturamentoWeekday(entries);
+});
 // ============================================================
 // BAIXA RETROATIVA DE ESTOQUE — pra quando uma venda já está registrada no Faturamento (com
 // valor e tudo) mas por algum motivo o desconto de estoque correspondente nunca foi gravado.
@@ -6151,22 +6573,21 @@ function renderFinanceiro() {
   const nav = document.getElementById('finance-nav');
   lockScreen.classList.toggle('hidden', financeUnlocked);
   nav.classList.toggle('hidden', !financeUnlocked);
-  document.getElementById('fpanel-custos').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='custos');
-  document.getElementById('fpanel-precos').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='precos');
-  document.getElementById('fpanel-cmv').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='cmv');
+  document.getElementById('estoque-custos-header').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='estoque-custos');
+  document.getElementById('custos-subnav').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='estoque-custos');
+  if (financeUnlocked && activeFinanceTab === 'estoque-custos') renderCustosSubnav();
+  else ['fpanel-custos','fpanel-precos','fpanel-cmv','fpanel-estoque-valor','fpanel-saidas-sem-venda'].forEach(id => document.getElementById(id).classList.add('hidden'));
   document.getElementById('fpanel-vendas').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='vendas');
   document.getElementById('fpanel-faturamento').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='faturamento');
   document.getElementById('fpanel-dre').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='dre');
-  document.getElementById('fpanel-estoque-valor').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='estoque-valor');
   document.getElementById('fpanel-despesas').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='despesas');
   document.getElementById('fpanel-config-gastos').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='config-gastos');
   document.getElementById('fpanel-funcionarios').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='funcionarios');
   if (financeUnlocked) {
     renderFinancePending(); renderStockCosts(); renderFinancePrecos(); renderFinanceCMV();
-    if (activeFinanceTab === 'vendas') { renderSalesSelect(); renderSalesToday(); if (currentSalesMode==='bulk') { initBulkSalesDate(); } }
+    if (activeFinanceTab === 'vendas') { renderSalesSelect(); renderSalesToday(); renderPendingEvents(); if (currentSalesMode==='bulk') { initBulkSalesDate(); } }
     if (activeFinanceTab === 'faturamento') renderFaturamento();
     if (activeFinanceTab === 'dre') renderDRE();
-    if (activeFinanceTab === 'estoque-valor') renderInventoryPanel();
     if (activeFinanceTab === 'despesas') renderExpenses();
     if (activeFinanceTab === 'config-gastos') renderExpenseConfig();
     if (activeFinanceTab === 'funcionarios') renderEmployees();
@@ -7522,6 +7943,36 @@ function renderWeeklyTimesheets() {
 // pra converter entre as duas unidades, NÃO inventa um número: o item fica marcado como "sem custo
 // conhecido" em vez de inflar o total.
 // ============================================================
+// Custo por unidade de estoque (storage_unit || unit) de UM produto/produto pronto — motor único
+// reaproveitado por Dinheiro em Estoque, Perdas e (futuramente) qualquer outro lugar que precise
+// "quanto vale 1 unidade de estoque desse item agora". Insumo comprado usa getFinanceCostPrice,
+// insumo produzido internamente (linked_recipe_id) usa computeRecipeCost recursivo. Se as unidades
+// não baterem e não houver conversão (padrão ou personalizada), devolve null — nunca inventa valor
+// multiplicando unidades incompatíveis.
+function getProductUnitCost(p) {
+  const targetUnit = p.storage_unit || p.unit;
+  const customConversions = getCustomConversions(p);
+  function unitFactorTo(sourceUnit) {
+    if (!sourceUnit) return null;
+    if (namesMatch(sourceUnit, targetUnit)) return 1;
+    const hasCustom = customConversions.some(c => namesMatch(c.unit, targetUnit) || namesMatch(c.unit, sourceUnit));
+    if (!canConvert(targetUnit, sourceUnit) && !hasCustom) return null;
+    const factor = convertQuantity(1, targetUnit, sourceUnit, customConversions);
+    return (factor > 0 && isFinite(factor)) ? factor : null;
+  }
+  if (p.linked_recipe_id) {
+    const recipe = getRecipes().find(r => r.id === p.linked_recipe_id);
+    if (!recipe) return null;
+    const cost = computeRecipeCost(recipe);
+    if (!cost.hasAllCosts) return null;
+    const factor = unitFactorTo(cost.yieldUnit);
+    return factor != null ? { unitCost: cost.costPerUnit * factor, unit: targetUnit } : null;
+  }
+  const costRec = getFinanceCostPrice(p.product_name);
+  if (!costRec) return null;
+  const factor = unitFactorTo(costRec.unit);
+  return factor != null ? { unitCost: costRec.price * factor, unit: targetUnit } : null;
+}
 function computeInventoryValue() {
   const rows = [];
   let total = 0, unknownCount = 0;
@@ -7530,42 +7981,13 @@ function computeInventoryValue() {
     ...getFinishedProducts().map(p => ({ p, isFinished:true })),
   ];
   stockable.forEach(({ p, isFinished }) => {
+    if (!isFinished && !productControlsStock(p)) return; // sem controle de estoque, sem valor imobilizado pra mostrar
     if (!p.quantity || p.quantity <= 0) return; // sem estoque, sem valor imobilizado
-    const targetUnit = p.storage_unit || p.unit;
-    const customConversions = getCustomConversions(p);
-    // Converte 1 targetUnit pra sourceUnit (a unidade em que o custo está expresso) — se as
-    // unidades já forem iguais, o fator é 1 (sem mudar nada). Se não der pra converter (grupos de
-    // unidade incompatíveis e sem conversão personalizada cobrindo isso), devolve null — quem
-    // chama decide não usar esse custo, em vez de multiplicar errado.
-    function unitFactorTo(sourceUnit) {
-      if (!sourceUnit) return null;
-      if (namesMatch(sourceUnit, targetUnit)) return 1;
-      const hasCustom = customConversions.some(c => namesMatch(c.unit, targetUnit) || namesMatch(c.unit, sourceUnit));
-      if (!canConvert(targetUnit, sourceUnit) && !hasCustom) return null;
-      const factor = convertQuantity(1, targetUnit, sourceUnit, customConversions);
-      return (factor > 0 && isFinite(factor)) ? factor : null;
-    }
-    let unitCost = null;
-    if (p.linked_recipe_id) {
-      const recipe = getRecipes().find(r => r.id === p.linked_recipe_id);
-      if (recipe) {
-        const cost = computeRecipeCost(recipe);
-        if (cost.hasAllCosts) {
-          const factor = unitFactorTo(cost.yieldUnit);
-          if (factor != null) unitCost = cost.costPerUnit * factor;
-        }
-      }
-    } else {
-      const costRec = getFinanceCostPrice(p.product_name);
-      if (costRec) {
-        const factor = unitFactorTo(costRec.unit);
-        if (factor != null) unitCost = costRec.price * factor;
-      }
-    }
-    if (unitCost == null) { unknownCount++; return; }
-    const value = p.quantity * unitCost;
+    const uc = getProductUnitCost(p);
+    if (!uc) { unknownCount++; return; }
+    const value = p.quantity * uc.unitCost;
     rows.push({
-      name: p.product_name, quantity: p.quantity, unit: targetUnit, unitCost, value,
+      name: p.product_name, quantity: p.quantity, unit: uc.unit, unitCost: uc.unitCost, value,
       category: isFinished ? 'Produtos Prontos' : (p.category || 'Sem categoria'),
     });
     total += value;
@@ -7640,6 +8062,238 @@ function renderInventoryPanel() {
 // existente (computeRecipeCost/getProductCMV — os mesmos usados na aba CMV e no Faturamento), não
 // cria uma lógica de custo paralela.
 // ============================================================
+// Custo de PERDAS no período — antes essas movimentações só davam baixa física no estoque e
+// nunca apareciam em nenhum relatório financeiro (dinheiro jogado fora sem virar número em lugar
+// nenhum). Reaproveita getProductUnitCost (mesmo motor de Dinheiro em Estoque/CMV). Perda de
+// insumo que não existe mais no cadastro, ou sem custo conhecido, entra em unknownCount e fica de
+// fora do total — não inventa valor.
+// Custo de uma quantidade de um produto/insumo, numa unidade qualquer — motor único reaproveitado
+// por Perdas, Consumo Interno e Uso em Evento (todos "saída sem venda"). Converte pra unidade real
+// de estoque do produto usando o mesmo guard-rail de sempre; devolve null (não inventa valor) se o
+// produto não existe mais ou não há custo/conversão conhecida.
+function costForProductQty(productName, qty, unit) {
+  const catalog = [...getProducts(), ...getFinishedProducts()];
+  const product = catalog.find(p => namesMatch(p.product_name, productName));
+  if (!product) return null;
+  const uc = getProductUnitCost(product);
+  if (!uc) return null;
+  let q = qty || 0;
+  if (unit && !namesMatch(unit, uc.unit)) {
+    const customConversions = getCustomConversions(product);
+    const hasCustom = customConversions.some(c => namesMatch(c.unit, uc.unit) || namesMatch(c.unit, unit));
+    if (!canConvert(unit, uc.unit) && !hasCustom) return null;
+    q = convertQuantity(q, unit, uc.unit, customConversions);
+  }
+  return q * uc.unitCost;
+}
+function getLossesInRange(start, end) {
+  return getMovements().filter(m => {
+    if (m.movement_type !== 'perda') return false;
+    if (!m.movement_date) return false;
+    const d = new Date(m.movement_date);
+    if (start && d < start) return false;
+    if (end && d > end) return false;
+    return true;
+  });
+}
+function computeLossesCost(start, end) {
+  const losses = getLossesInRange(start, end);
+  let total = 0, unknownCount = 0;
+  const rows = [];
+  losses.forEach(m => {
+    let items = []; try { items = JSON.parse(m.batch_items || '[]'); } catch(e) {}
+    const lossUnit = (items[0] && items[0].unit) || null;
+    const value = costForProductQty(m.movement_product, m.movement_quantity, lossUnit);
+    if (value == null) { unknownCount++; return; }
+    total += value;
+    rows.push({ id: m.id, name: m.movement_product, date: m.movement_date, reason: m.loss_reason, qty: m.movement_quantity, unit: lossUnit, value });
+  });
+  rows.sort((a,b) => new Date(b.date) - new Date(a.date));
+  return { total, unknownCount, rows };
+}
+// Custo de saídas manuais classificadas por motivo (Consumo Interno / Uso em Evento / Outros) —
+// olha dentro de batch_items de cada saída manual no período, soma só os itens com esse motivo.
+// Item de venda direta (deductedIngredients) soma o custo de cada ingrediente real deduzido, não o
+// "preço" do item pronto (que nem existe pra isso, já que não passa pelo faturamento).
+function getSaidaManualMovementsInRange(start, end) {
+  return getMovements().filter(m => {
+    if (m.movement_type !== 'saida_manual') return false;
+    if (!m.movement_date) return false;
+    const d = new Date(m.movement_date);
+    if (start && d < start) return false;
+    if (end && d > end) return false;
+    return true;
+  });
+}
+function computeSaidaManualCost(reason, start, end) {
+  const movements = getSaidaManualMovementsInRange(start, end);
+  let total = 0, unknownCount = 0;
+  const rows = [];
+  movements.forEach(m => {
+    let items = []; try { items = JSON.parse(m.batch_items || '[]'); } catch(e) {}
+    items.filter(it => it.reason === reason).forEach(it => {
+      if (it.deductedIngredients) {
+        it.deductedIngredients.forEach(ing => {
+          const value = costForProductQty(ing.name, ing.qty, ing.unit);
+          if (value == null) { unknownCount++; return; }
+          total += value;
+          rows.push({ id: m.id, name: ing.name, date: m.movement_date, eventName: it.eventName||'', parentName: it.name, qty: ing.qty, unit: ing.unit, value });
+        });
+      } else {
+        const value = costForProductQty(it.name, it.qty, it.unit);
+        if (value == null) { unknownCount++; return; }
+        total += value;
+        rows.push({ id: m.id, name: it.name, date: m.movement_date, eventName: it.eventName||'', qty: it.qty, unit: it.unit, value });
+      }
+    });
+  });
+  rows.sort((a,b) => new Date(b.date) - new Date(a.date));
+  return { total, unknownCount, rows };
+}
+// Eventos com custo já baixado no estoque (Saída Manual, motivo Uso em Evento) mas ainda sem
+// receita lançada — aparecem em Vendas > Eventos Pendentes de Faturamento até o valor cobrado ser
+// informado. Um "evento" = uma submissão de Saída Manual que contém pelo menos 1 item desse motivo.
+function getEventRevenues() {
+  return financeData.filter(r => r.type === 'event_revenue');
+}
+// Mesmo filtro por string de data usado em getExpensesInRange — expense_date já é "yyyy-MM-dd".
+function getEventRevenueInRange(start, end) {
+  return getEventRevenues().filter(r => {
+    if (!r.expense_date) return false;
+    if (start && r.expense_date < localDateStr(start)) return false;
+    if (end && r.expense_date > localDateStr(end)) return false;
+    return true;
+  });
+}
+// Custo de estoque de UM evento (soma dos itens "Uso em Evento" dentro de uma saída manual) — só a
+// parte automática. Reaproveitado por pendentes e histórico, pra não duplicar a leitura de
+// batch_items em dois lugares.
+function computeEventStockCost(m) {
+  let items = []; try { items = JSON.parse(m.batch_items || '[]'); } catch(e) {}
+  const eventItems = items.filter(it => it.reason === 'uso_evento');
+  const eventName = eventItems.find(it => it.eventName)?.eventName || 'Evento sem nome';
+  let cost = 0, unknownCount = 0;
+  eventItems.forEach(it => {
+    if (it.deductedIngredients) {
+      it.deductedIngredients.forEach(ing => {
+        const value = costForProductQty(ing.name, ing.qty, ing.unit);
+        if (value == null) unknownCount++; else cost += value;
+      });
+    } else {
+      const value = costForProductQty(it.name, it.qty, it.unit);
+      if (value == null) unknownCount++; else cost += value;
+    }
+  });
+  return { cost, unknownCount, eventName, itemsCount: eventItems.length };
+}
+// Custos extras de evento (decoração, etc.) — lançados à mão, um valor de cada vez, ligados ao
+// movement_id da saída manual que abriu o evento. Somam no custo total junto do custo de estoque.
+function getEventExtraCosts(movementId) {
+  return financeData.filter(r => r.type === 'event_extra_cost' && r.movement_id === movementId);
+}
+function getEventExtraCostsTotal(movementId) {
+  return getEventExtraCosts(movementId).reduce((s,r) => s + (r.total_cost||0), 0);
+}
+function getEventExtraCostsInRange(start, end) {
+  return financeData.filter(r => {
+    if (r.type !== 'event_extra_cost') return false;
+    if (!r.expense_date) return false;
+    if (start && r.expense_date < localDateStr(start)) return false;
+    if (end && r.expense_date > localDateStr(end)) return false;
+    return true;
+  });
+}
+function getPendingEvents() {
+  const movements = getMovements().filter(m => m.movement_type === 'saida_manual');
+  const pricedMovementIds = new Set(getEventRevenues().map(r => r.movement_id));
+  const events = [];
+  movements.forEach(m => {
+    if (pricedMovementIds.has(m.id)) return;
+    const info = computeEventStockCost(m);
+    if (info.itemsCount === 0) return;
+    const extraCost = getEventExtraCostsTotal(m.id);
+    events.push({ movementId: m.id, date: m.movement_date, eventName: info.eventName, stockCost: info.cost, extraCost, totalCost: info.cost + extraCost, unknownCount: info.unknownCount, itemsCount: info.itemsCount });
+  });
+  events.sort((a,b) => new Date(b.date) - new Date(a.date));
+  return events;
+}
+// Eventos já com faturamento lançado — junta receita + custo de estoque + custos extras pra
+// mostrar o lucro final de cada evento no histórico.
+function getPricedEvents() {
+  return getEventRevenues().map(rev => {
+    const m = getMovements().find(mv => mv.id === rev.movement_id);
+    const info = m ? computeEventStockCost(m) : { cost:0, unknownCount:0 };
+    const extraCost = getEventExtraCostsTotal(rev.movement_id);
+    const totalCost = info.cost + extraCost;
+    const revenue = rev.total_cost || 0;
+    return { revenueId: rev.id, movementId: rev.movement_id, eventName: rev.product_name, date: rev.expense_date, revenue, stockCost: info.cost, extraCost, totalCost, profit: revenue - totalCost, unknownCount: info.unknownCount };
+  }).sort((a,b) => (b.date||'').localeCompare(a.date||''));
+}
+let ssvFilter = '7days';
+// Painel "Saídas sem Venda" — agrega Perda + Consumo Interno + Uso em Evento (custo) + Outros num
+// só lugar, pra responder "quanto saiu de estoque sem gerar faturamento e por quê". Uso em Evento
+// aqui é só o CUSTO (a receita, quando lançada, mora no DRE separadamente via event_revenue).
+function computeSaidasSemVenda(start, end) {
+  const perda = computeLossesCost(start, end);
+  const consumo = computeSaidaManualCost('consumo_interno', start, end);
+  const evento = computeSaidaManualCost('uso_evento', start, end);
+  const outros = computeSaidaManualCost('outros', start, end);
+  const total = perda.total + consumo.total + evento.total + outros.total;
+  const allRows = [
+    ...perda.rows.map(r => ({...r, motivo:'Perda'})),
+    ...consumo.rows.map(r => ({...r, motivo:'Consumo Interno'})),
+    ...evento.rows.map(r => ({...r, motivo:'Uso em Evento'})),
+    ...outros.rows.map(r => ({...r, motivo:'Outros'})),
+  ];
+  const byProduct = {};
+  allRows.forEach(r => { byProduct[r.name] = (byProduct[r.name]||0) + r.value; });
+  const ranking = Object.entries(byProduct)
+    .map(([name,value]) => ({ name, value, pct: total>0 ? (value/total)*100 : 0 }))
+    .sort((a,b) => b.value-a.value);
+  const byMotivo = [
+    { motivo:'Perda', value: perda.total },
+    { motivo:'Consumo Interno', value: consumo.total },
+    { motivo:'Uso em Evento', value: evento.total },
+    { motivo:'Outros', value: outros.total },
+  ].filter(m => m.value > 0).map(m => ({ ...m, pct: total>0 ? (m.value/total)*100 : 0 })).sort((a,b)=>b.value-a.value);
+  return { total, perda, consumo, evento, outros, ranking, byMotivo };
+}
+function renderSaidasSemVenda() {
+  const totalEl = document.getElementById('ssv-kpi-total'); if (!totalEl) return;
+  document.querySelectorAll('.ssv-filter').forEach(b => { b.className = `ssv-filter px-3 py-1.5 rounded-lg text-xs font-medium ${b.dataset.filter===ssvFilter?'bg-stone-800 text-white':'bg-stone-100 text-stone-600 hover:bg-stone-200'}`; });
+  const { start, end } = faturamentoRangeForFilter(ssvFilter);
+  const ssv = computeSaidasSemVenda(start, end);
+  document.getElementById('ssv-kpi-perda').textContent = fmtCurrency(ssv.perda.total);
+  document.getElementById('ssv-kpi-consumo').textContent = fmtCurrency(ssv.consumo.total);
+  document.getElementById('ssv-kpi-evento').textContent = fmtCurrency(ssv.evento.total);
+  totalEl.textContent = fmtCurrency(ssv.total);
+  const pendingCount = getPendingEvents().length;
+  document.getElementById('ssv-kpi-evento-note').textContent = pendingCount > 0 ? `${pendingCount} evento(s) aguardando faturamento em Vendas` : '';
+  const breakdownEl = document.getElementById('ssv-motivo-breakdown');
+  breakdownEl.innerHTML = ssv.byMotivo.length === 0 ? '<p class="text-stone-400 text-center py-4 text-sm">Nenhuma saída sem venda nesse período</p>' : ssv.byMotivo.map(m => `
+    <div>
+      <div class="flex justify-between items-center mb-1 gap-2">
+        <span class="text-sm text-stone-700 truncate">${m.motivo}</span>
+        <span class="text-sm font-semibold text-stone-800 whitespace-nowrap">${fmtCurrency(m.value)} <span class="text-stone-400 font-normal">(${m.pct.toFixed(1)}%)</span></span>
+      </div>
+      <div class="h-2 bg-stone-100 rounded-full overflow-hidden"><div class="h-full bg-red-400 rounded-full" style="width:${Math.max(2,m.pct)}%"></div></div>
+    </div>`).join('');
+  const rankEl = document.getElementById('ssv-ranking-list');
+  rankEl.innerHTML = ssv.ranking.length === 0 ? '<p class="text-stone-400 text-center py-6 text-sm">Nenhum item nesse período</p>' : ssv.ranking.map((r,i) => `
+    <div class="flex justify-between items-center py-2 border-b border-stone-50 last:border-b-0 gap-2">
+      <div class="flex items-center gap-2 min-w-0">
+        <span class="text-xs font-bold text-stone-300 w-6 flex-shrink-0">${i+1}º</span>
+        <p class="text-sm text-stone-700 truncate">${r.name}</p>
+      </div>
+      <span class="text-sm font-bold text-stone-800 flex-shrink-0 whitespace-nowrap">${fmtCurrency(r.value)} <span class="text-stone-400 font-normal text-xs">(${r.pct.toFixed(1)}%)</span></span>
+    </div>`).join('');
+  lucide.createIcons();
+}
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.ssv-filter'); if (!btn) return;
+  ssvFilter = btn.dataset.filter;
+  renderSaidasSemVenda();
+});
 let dreFilter = '7days';
 // Pros itens vendidos SEM custo de receita confirmado, estima o CMV aplicando a proporção
 // custo/faturamento observada nos itens QUE TÊM custo confirmado — uma extrapolação a partir de
@@ -7652,7 +8306,7 @@ let dreFilter = '7days';
 // estimado. Os grupos de despesa (CMO, e todo grupo que você cadastrar em Config. Gastos) são
 // dinâmicos — o DRE não conhece mais uma lista fixa, só soma cada gasto no grupo que
 // resolveExpenseDreGroupId() encontrar pra ele.
-function computeDRE(entries, expenses, stockCosts) {
+function computeDRE(entries, expenses, stockCosts, losses, internalConsumption, eventCost, eventRevenueRecords, eventExtraCostRecords) {
   const totalRevenue = entries.reduce((s,e)=>s+(e.total_revenue||0), 0);
   let knownCost = 0, knownRevenue = 0, unknownRevenue = 0;
   entries.forEach(e => {
@@ -7676,11 +8330,31 @@ function computeDRE(entries, expenses, stockCosts) {
   });
   const totalAllExpenses = Object.values(groupTotals).reduce((s,v)=>s+v, 0);
 
+  // Perda é custo real e confirmado do período inteiro (não amarrada a uma venda), igual custo de
+  // estoque avulso — desconta nos dois cenários, confirmado e estimado.
+  const totalLosses = (losses && losses.total) || 0;
+  const lossesUnknownCount = (losses && losses.unknownCount) || 0;
+
+  // Consumo Interno (funcionário/dono consumindo estoque) — mesma lógica de Perda: custo real,
+  // sem venda pra "casar", desconta nos dois cenários.
+  const totalInternalConsumption = (internalConsumption && internalConsumption.total) || 0;
+  const internalConsumptionUnknownCount = (internalConsumption && internalConsumption.unknownCount) || 0;
+
+  // Uso em Evento é diferente: o custo sai do estoque na hora da saída, mas a RECEITA do evento só
+  // existe quando o valor cobrado é lançado em Vendas > Eventos Pendentes (pode ser um período
+  // diferente do da saída). Por isso entram como duas linhas próprias — não somam em totalRevenue
+  // nem em totalCMV, pra não distorcer as métricas de "% do faturamento" que são sobre a cafeteria.
+  const totalEventExtraCost = (eventExtraCostRecords||[]).reduce((s,r)=>s+(r.total_cost||0), 0);
+  const totalEventCost = ((eventCost && eventCost.total) || 0) + totalEventExtraCost;
+  const eventCostUnknownCount = (eventCost && eventCost.unknownCount) || 0;
+  const totalEventRevenue = (eventRevenueRecords||[]).reduce((s,r)=>s+(r.total_cost||0), 0);
+
   // Custo de estoque avulso é confirmado e do período inteiro (não amarrado a uma venda
   // específica), então desconta nos dois cenários — diferente do CMV por receita, cuja incerteza
   // só existe pra fatia de faturamento sem custo confirmado (unknownRevenue).
-  const confirmedProfit = knownRevenue - totalCMVConfirmed - totalAllExpenses;
-  const estimatedProfit = totalRevenue - totalCMV - totalAllExpenses;
+  const eventNet = totalEventRevenue - totalEventCost;
+  const confirmedProfit = knownRevenue - totalCMVConfirmed - totalAllExpenses - totalLosses - totalInternalConsumption + eventNet;
+  const estimatedProfit = totalRevenue - totalCMV - totalAllExpenses - totalLosses - totalInternalConsumption + eventNet;
   const coveragePct = totalRevenue > 0 ? (knownRevenue/totalRevenue)*100 : 0;
   // % sempre sobre o faturamento total do período — é a "representatividade" de cada linha.
   const pctOf = (v) => totalRevenue > 0 ? (v/totalRevenue)*100 : 0;
@@ -7695,11 +8369,14 @@ function computeDRE(entries, expenses, stockCosts) {
 
   return {
     totalRevenue, knownRevenue, unknownRevenue, knownCost, estimatedExtraCost, totalStockCosts, totalCMVConfirmed, totalCMV,
-    totalAllExpenses, groupLines,
+    totalAllExpenses, groupLines, totalLosses, lossesUnknownCount,
+    totalInternalConsumption, internalConsumptionUnknownCount,
+    totalEventCost, eventCostUnknownCount, totalEventRevenue,
     confirmedProfit, estimatedProfit, coveragePct, hasEstimate, pctOf,
     pct: {
       cmvConfirmed: pctOf(totalCMVConfirmed), cmvTotal: pctOf(totalCMV),
-      confirmedProfit: pctOf(confirmedProfit), estimatedProfit: pctOf(estimatedProfit),
+      confirmedProfit: pctOf(confirmedProfit), estimatedProfit: pctOf(estimatedProfit), losses: pctOf(totalLosses),
+      internalConsumption: pctOf(totalInternalConsumption), eventRevenue: pctOf(totalEventRevenue), eventCost: pctOf(totalEventCost),
     },
   };
 }
@@ -7709,7 +8386,12 @@ function renderDRE() {
   const entries = getSaleRevenueEntriesInRange(start, end);
   const expenses = getExpensesInRange(start, end);
   const stockCosts = getStockCostsInRange(start, end);
-  const dre = computeDRE(entries, expenses, stockCosts);
+  const losses = computeLossesCost(start, end);
+  const internalConsumption = computeSaidaManualCost('consumo_interno', start, end);
+  const eventCost = computeSaidaManualCost('uso_evento', start, end);
+  const eventRevenueRecords = getEventRevenueInRange(start, end);
+  const eventExtraCostRecords = getEventExtraCostsInRange(start, end);
+  const dre = computeDRE(entries, expenses, stockCosts, losses, internalConsumption, eventCost, eventRevenueRecords, eventExtraCostRecords);
   const el = document.getElementById('dre-content'); if (!el) return;
   const profitColor = (v) => v >= 0 ? 'text-emerald-700' : 'text-red-600';
   const pctTag = (v) => `<span class="text-stone-400 font-normal">(${v.toFixed(1)}%)</span>`;
@@ -7744,6 +8426,10 @@ function renderDRE() {
           <span class="text-stone-600">(–) CMV estimado (adicional)</span>
           <span class="font-semibold text-amber-600">${dre.hasEstimate ? `${fmtCurrency(dre.estimatedExtraCost)} ${pctTag(dre.pct.cmvTotal - dre.pct.cmvConfirmed)}` : '—'}</span>
         </div>
+        ${dre.totalLosses > 0 ? line('(–) Perdas', dre.totalLosses, dre.pct.losses, 'text-red-600') : ''}
+        ${dre.totalInternalConsumption > 0 ? line('(–) Consumo Interno', dre.totalInternalConsumption, dre.pct.internalConsumption, 'text-red-600') : ''}
+        ${dre.totalEventRevenue > 0 ? line('(+) Faturamento de Evento', dre.totalEventRevenue, dre.pct.eventRevenue, 'text-emerald-700') : ''}
+        ${dre.totalEventCost > 0 ? line('(–) Custo de Eventos', dre.totalEventCost, dre.pct.eventCost, 'text-red-600') : ''}
         ${groupLinesHtml || '<p class="text-xs text-stone-400 py-2">Nenhum gasto lançado neste período.</p>'}
         <div class="flex justify-between items-center py-2 pt-2">
           <span class="font-bold text-stone-800">(=) Lucro confirmado</span>
@@ -7757,6 +8443,9 @@ function renderDRE() {
       ${dre.unknownRevenue > 0 && !dre.hasEstimate ? `<p class="text-[11px] text-stone-400 mt-3 pt-3 border-t border-stone-100">${fmtCurrency(dre.unknownRevenue)} em vendas sem nenhum custo de receita confirmado ainda neste período — sem base pra estimar o CMV desses itens (lance os custos em Custos de Estoque).</p>` : ''}
       ${dre.hasEstimate ? `<p class="text-[11px] text-stone-400 mt-3 pt-3 border-t border-stone-100">${fmtCurrency(dre.unknownRevenue)} em vendas sem custo de receita confirmado — o CMV estimado desses itens usa a proporção custo/faturamento média dos itens que já têm custo confirmado.</p>` : ''}
       ${dre.totalStockCosts > 0 ? `<p class="text-[11px] text-stone-400 mt-3 pt-3 border-t border-stone-100">"CMV confirmado" inclui ${fmtCurrency(dre.totalStockCosts)} de Custos de Estoque avulsos (taxa de entrega, insumo fora do cardápio, perda não rastreada) lançados manualmente em Custos de Estoque.</p>` : ''}
+      ${dre.lossesUnknownCount > 0 ? `<p class="text-[11px] text-stone-400 mt-3 pt-3 border-t border-stone-100">${dre.lossesUnknownCount} perda(s) no período sem custo conhecido (insumo sem preço lançado, ou sem conversão de unidade possível) — não entram no valor de Perdas acima.</p>` : ''}
+      ${dre.internalConsumptionUnknownCount > 0 ? `<p class="text-[11px] text-stone-400 mt-3 pt-3 border-t border-stone-100">${dre.internalConsumptionUnknownCount} item(ns) de Consumo Interno no período sem custo conhecido — não entram no valor acima.</p>` : ''}
+      ${dre.eventCostUnknownCount > 0 ? `<p class="text-[11px] text-stone-400 mt-3 pt-3 border-t border-stone-100">${dre.eventCostUnknownCount} item(ns) de Uso em Evento no período sem custo conhecido — não entram no Custo de Eventos acima.</p>` : ''}
       ${entries.length === 0 && expenses.length === 0 ? '<p class="text-stone-400 text-center py-4 text-sm">Sem vendas nem gastos no período</p>' : ''}
     </div>
   `;
