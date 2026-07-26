@@ -264,7 +264,7 @@
             <button type="button" onclick="removeManualExitItem(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button>
           </div>
           <div class="grid sm:grid-cols-2 gap-2">
-            <div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Motivo</label><select class="manual-exit-motivo input-field text-sm w-full" onchange="toggleManualExitEventName(this)"><option value="consumo_interno">Consumo Interno</option><option value="uso_evento">Uso em Evento</option><option value="outros">Outros</option></select></div>
+            <div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Motivo</label><select class="manual-exit-motivo input-field text-sm w-full" onchange="toggleManualExitEventName(this)"><option value="consumo_interno">Consumo Interno</option><option value="consumo_socios">Consumo dos Sócios</option><option value="uso_evento">Uso em Evento</option><option value="outros">Outros</option></select></div>
             <div class="manual-exit-event-name-wrap hidden"><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Nome do evento</label><input type="text" class="manual-exit-event-name input-field text-sm w-full" placeholder="Ex: Aniversário Maria"></div>
           </div>
         </div>
@@ -568,7 +568,7 @@
       <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="vendas"><i data-lucide="credit-card" class="w-5 h-5"></i>Vendas</button>
       <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="faturamento"><i data-lucide="trending-up" class="w-5 h-5"></i>Faturamento</button>
       <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="despesas"><i data-lucide="receipt" class="w-5 h-5"></i>Gastos</button>
-      <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="config-gastos"><i data-lucide="settings" class="w-5 h-5"></i>Config. Gastos</button>
+      <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="config-gastos"><i data-lucide="settings" class="w-5 h-5"></i>Configurações</button>
       <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="funcionarios"><i data-lucide="users" class="w-5 h-5"></i>Funcionários</button>
     </div>
   </nav>
@@ -948,7 +948,7 @@
         <button class="ssv-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-filter="month">Este mês</button>
         <button class="ssv-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-filter="year">Este ano</button>
       </div>
-      <div class="grid grid-cols-2 gap-3 mb-4">
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
         <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100">
           <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-1">Perda</p>
           <p class="text-xl font-bold text-red-600" id="ssv-kpi-perda">R$ 0,00</p>
@@ -956,6 +956,10 @@
         <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100">
           <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-1">Consumo Interno</p>
           <p class="text-xl font-bold text-amber-700" id="ssv-kpi-consumo">R$ 0,00</p>
+        </div>
+        <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100">
+          <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-1">Consumo dos Sócios</p>
+          <p class="text-xl font-bold text-purple-700" id="ssv-kpi-socios">R$ 0,00</p>
         </div>
         <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100">
           <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-1">Uso em Evento (custo)</p>
@@ -972,7 +976,17 @@
         <div id="ssv-motivo-breakdown" class="space-y-2.5"></div>
       </div>
       <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 mb-4">
-        <h3 class="font-semibold text-sm mb-3 text-stone-800 flex items-center gap-2"><i data-lucide="bar-chart-2" class="w-4 h-4 text-emerald-600"></i>Ranking por produto</h3>
+        <div class="flex items-center justify-between gap-2 mb-3 flex-wrap">
+          <h3 class="font-semibold text-sm text-stone-800 flex items-center gap-2"><i data-lucide="bar-chart-2" class="w-4 h-4 text-emerald-600"></i>Ranking por produto</h3>
+          <select id="ssv-ranking-motivo-filter" class="input-field text-xs py-1.5 px-2" onchange="handleSsvRankingMotivoChange(this)">
+            <option value="all">Todos os motivos</option>
+            <option value="Consumo Interno">Consumo Interno</option>
+            <option value="Consumo dos Sócios">Consumo dos Sócios</option>
+            <option value="Uso em Evento">Eventos</option>
+            <option value="Perda">Perdas</option>
+            <option value="Outros">Outros</option>
+          </select>
+        </div>
         <div id="ssv-ranking-list"></div>
       </div>
     </section>
@@ -983,7 +997,7 @@
         <h2 class="text-lg font-bold text-stone-800 flex items-center gap-2"><i data-lucide="receipt" class="w-5 h-5 text-emerald-600"></i>Gastos</h2>
         <button onclick="lockFinanceiro()" class="text-xs text-stone-400 hover:text-stone-600 flex items-center gap-1"><i data-lucide="lock" class="w-3.5 h-3.5"></i>Bloquear</button>
       </div>
-      <p class="text-xs text-stone-400 mb-3">Grupo, categoria e item são cadastrados em <strong>Config. Gastos</strong> — monte sua estrutura lá primeiro.</p>
+      <p class="text-xs text-stone-400 mb-3">Grupo, categoria e item são cadastrados em <strong>Configurações</strong> — monte sua estrutura lá primeiro.</p>
       <div class="flex gap-2 mb-4">
         <button id="expense-mode-simple-btn" class="expense-mode-btn px-4 py-2 rounded-lg text-sm font-medium bg-emerald-700 text-white" data-mode="simple">Gasto Simples</button>
         <button id="expense-mode-batch-btn" class="expense-mode-btn px-4 py-2 rounded-lg text-sm font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-mode="batch">Gasto em Lote</button>
@@ -1045,13 +1059,35 @@
       <div id="expenses-list" class="space-y-2"></div>
     </section>
 
-    <!-- Sub-aba: Config. Gastos -->
+    <!-- Sub-aba: Configurações (Despesas Fixas, Parâmetros Financeiros, estrutura Grupo/Categoria/Item) -->
     <section id="fpanel-config-gastos" class="hidden fade-in">
       <div class="flex items-center justify-between mb-4">
-        <h2 class="text-lg font-bold text-stone-800 flex items-center gap-2"><i data-lucide="settings" class="w-5 h-5 text-emerald-600"></i>Config. Gastos</h2>
+        <h2 class="text-lg font-bold text-stone-800 flex items-center gap-2"><i data-lucide="settings" class="w-5 h-5 text-emerald-600"></i>Configurações</h2>
         <button onclick="lockFinanceiro()" class="text-xs text-stone-400 hover:text-stone-600 flex items-center gap-1"><i data-lucide="lock" class="w-3.5 h-3.5"></i>Bloquear</button>
       </div>
-      <p class="text-xs text-stone-400 mb-4">Monte sua própria estrutura: Grupo do DRE → Categoria → Item. É isso que alimenta o Gasto em Lote, os filtros de Gastos e as linhas do DRE.</p>
+      <p class="text-xs text-stone-400 mb-4">Parâmetros do sistema que você mesmo ajusta por aqui, sem precisar mexer em código: despesas fixas recorrentes, percentuais usados no DRE, e a estrutura de Grupo/Categoria/Item dos gastos.</p>
+
+      <div class="bg-white rounded-xl p-5 shadow-sm border border-stone-100 mb-5">
+        <h3 class="font-semibold mb-1 text-stone-800 text-sm flex items-center gap-2"><i data-lucide="repeat" class="w-4 h-4 text-emerald-600"></i>Despesas Fixas</h3>
+        <p class="text-xs text-stone-400 mb-3">Cadastre uma vez — o sistema lança automaticamente todo mês no financeiro e na DRE, sem precisar repetir o cadastro.</p>
+        <form onsubmit="handleAddFixedExpense(event)" class="grid sm:grid-cols-[1fr_1fr_130px_auto] gap-2 mb-3">
+          <input id="new-fixed-expense-name" type="text" placeholder="Nome (ex: Aluguel)" required class="input-field text-sm">
+          <select id="new-fixed-expense-group" required class="input-field text-sm"><option value="">Grupo DRE *</option></select>
+          <div class="relative"><span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-stone-400">R$</span><input id="new-fixed-expense-amount" type="number" placeholder="Valor mensal" min="0.01" step="any" required class="input-field text-sm w-full pl-9"></div>
+          <button type="submit" class="btn-primary px-4 py-2.5 rounded-lg text-sm font-medium">Adicionar</button>
+        </form>
+        <div id="fixed-expense-config-list"></div>
+      </div>
+
+      <div class="bg-white rounded-xl p-5 shadow-sm border border-stone-100 mb-5">
+        <h3 class="font-semibold mb-1 text-stone-800 text-sm flex items-center gap-2"><i data-lucide="percent" class="w-4 h-4 text-emerald-600"></i>Parâmetros Financeiros</h3>
+        <p class="text-xs text-stone-400 mb-3">Percentuais aplicados automaticamente sobre o faturamento na DRE — mude aqui, sem precisar alterar código.</p>
+        <form onsubmit="handleSaveFinanceSettings(event)" class="grid sm:grid-cols-[1fr_1fr_auto] gap-2 items-end">
+          <div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Percentual de imposto</label><div class="relative"><input id="finance-settings-tax" type="number" min="0" max="100" step="any" required class="input-field text-sm w-full pr-8"><span class="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-stone-400">%</span></div></div>
+          <div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Taxa de cartão</label><div class="relative"><input id="finance-settings-card-fee" type="number" min="0" max="100" step="any" required class="input-field text-sm w-full pr-8"><span class="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-stone-400">%</span></div></div>
+          <button type="submit" class="btn-primary px-4 py-2.5 rounded-lg text-sm font-medium">Salvar</button>
+        </form>
+      </div>
 
       <div class="bg-white rounded-xl p-5 shadow-sm border border-stone-100 mb-5">
         <h3 class="font-semibold mb-3 text-stone-800 text-sm flex items-center gap-2"><i data-lucide="layers" class="w-4 h-4 text-emerald-600"></i>Grupos do DRE</h3>
@@ -2768,7 +2804,7 @@ function addManualExitItem() {
   const div = document.createElement('div');
   div.className = 'manual-exit-item bg-stone-50 border border-stone-200 rounded-lg p-4 space-y-2';
   div.dataset.itemType = 'insumo';
-  div.innerHTML = `<div class="flex gap-1.5"><button type="button" class="manual-exit-type-btn flex-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-stone-800 text-white" data-type="insumo" onclick="setManualExitItemType(this,'insumo')">Insumo</button><button type="button" class="manual-exit-type-btn flex-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-type="venda_direta" onclick="setManualExitItemType(this,'venda_direta')">🍽️ Item de Venda Direta</button></div><label class="manual-exit-label text-xs font-semibold text-stone-600 uppercase tracking-wide block">Insumo</label><div class="relative"><i data-lucide="search" class="absolute left-3 top-3 w-4 h-4 text-stone-400"></i><input type="text" class="manual-exit-search input-field text-sm w-full pl-9 pr-4" placeholder="Pesquisar insumo..."><div class="manual-exit-dropdown hidden absolute top-full left-0 right-0 mt-1 bg-white border border-stone-200 rounded-lg shadow-lg z-10 max-h-40 overflow-y-auto"></div></div><select class="manual-exit-product input-field text-sm w-full" required><option value="">Selecione o insumo</option>${products.map(p=>`<option value="${p.id}" data-name="${p.product_name}" data-unit="${p.unit}">${p.product_name} (${p.unit})</option>`).join('')}</select><div class="grid sm:grid-cols-[1fr_110px_auto] gap-2 items-end"><div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Quantidade</label><input type="number" class="manual-exit-qty input-field text-sm w-full" placeholder="Quantidade" min="0.001" step="any" required></div><div class="manual-exit-unit-wrap"><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Medida</label><select class="manual-exit-unit input-field text-sm w-full"></select></div><button type="button" onclick="removeManualExitItem(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button></div><div class="grid sm:grid-cols-2 gap-2"><div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Motivo</label><select class="manual-exit-motivo input-field text-sm w-full" onchange="toggleManualExitEventName(this)"><option value="consumo_interno">Consumo Interno</option><option value="uso_evento">Uso em Evento</option><option value="outros">Outros</option></select></div><div class="manual-exit-event-name-wrap hidden"><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Nome do evento</label><input type="text" class="manual-exit-event-name input-field text-sm w-full" placeholder="Ex: Aniversário Maria"></div></div>`;
+  div.innerHTML = `<div class="flex gap-1.5"><button type="button" class="manual-exit-type-btn flex-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-stone-800 text-white" data-type="insumo" onclick="setManualExitItemType(this,'insumo')">Insumo</button><button type="button" class="manual-exit-type-btn flex-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-type="venda_direta" onclick="setManualExitItemType(this,'venda_direta')">🍽️ Item de Venda Direta</button></div><label class="manual-exit-label text-xs font-semibold text-stone-600 uppercase tracking-wide block">Insumo</label><div class="relative"><i data-lucide="search" class="absolute left-3 top-3 w-4 h-4 text-stone-400"></i><input type="text" class="manual-exit-search input-field text-sm w-full pl-9 pr-4" placeholder="Pesquisar insumo..."><div class="manual-exit-dropdown hidden absolute top-full left-0 right-0 mt-1 bg-white border border-stone-200 rounded-lg shadow-lg z-10 max-h-40 overflow-y-auto"></div></div><select class="manual-exit-product input-field text-sm w-full" required><option value="">Selecione o insumo</option>${products.map(p=>`<option value="${p.id}" data-name="${p.product_name}" data-unit="${p.unit}">${p.product_name} (${p.unit})</option>`).join('')}</select><div class="grid sm:grid-cols-[1fr_110px_auto] gap-2 items-end"><div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Quantidade</label><input type="number" class="manual-exit-qty input-field text-sm w-full" placeholder="Quantidade" min="0.001" step="any" required></div><div class="manual-exit-unit-wrap"><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Medida</label><select class="manual-exit-unit input-field text-sm w-full"></select></div><button type="button" onclick="removeManualExitItem(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button></div><div class="grid sm:grid-cols-2 gap-2"><div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Motivo</label><select class="manual-exit-motivo input-field text-sm w-full" onchange="toggleManualExitEventName(this)"><option value="consumo_interno">Consumo Interno</option><option value="consumo_socios">Consumo dos Sócios</option><option value="uso_evento">Uso em Evento</option><option value="outros">Outros</option></select></div><div class="manual-exit-event-name-wrap hidden"><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Nome do evento</label><input type="text" class="manual-exit-event-name input-field text-sm w-full" placeholder="Ex: Aniversário Maria"></div></div>`;
   container.appendChild(div);
   attachManualExitSearchListeners(div);
   lucide.createIcons();
@@ -2948,7 +2984,7 @@ async function confirmManualExit() {
 function cancelManualExit() { resetManualExitForm(); }
 function resetManualExitForm() {
   const products = getProducts().filter(productControlsStock).sort((a,b) => a.product_name.localeCompare(b.product_name));
-  document.getElementById('manual-exit-container').innerHTML = `<div class="manual-exit-item bg-stone-50 border border-stone-200 rounded-lg p-4 space-y-2" data-item-type="insumo"><div class="flex gap-1.5"><button type="button" class="manual-exit-type-btn flex-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-stone-800 text-white" data-type="insumo" onclick="setManualExitItemType(this,'insumo')">Insumo</button><button type="button" class="manual-exit-type-btn flex-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-type="venda_direta" onclick="setManualExitItemType(this,'venda_direta')">🍽️ Item de Venda Direta</button></div><label class="manual-exit-label text-xs font-semibold text-stone-600 uppercase tracking-wide block">Insumo</label><div class="relative"><i data-lucide="search" class="absolute left-3 top-3 w-4 h-4 text-stone-400"></i><input type="text" class="manual-exit-search input-field text-sm w-full pl-9 pr-4" placeholder="Pesquisar insumo..."><div class="manual-exit-dropdown hidden absolute top-full left-0 right-0 mt-1 bg-white border border-stone-200 rounded-lg shadow-lg z-10 max-h-40 overflow-y-auto"></div></div><select class="manual-exit-product input-field text-sm w-full" required><option value="">Selecione o insumo</option>${products.map(p=>`<option value="${p.id}" data-name="${p.product_name}" data-unit="${p.unit}">${p.product_name} (${p.unit})</option>`).join('')}</select><div class="grid sm:grid-cols-[1fr_110px_auto] gap-2 items-end"><div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Quantidade</label><input type="number" class="manual-exit-qty input-field text-sm w-full" placeholder="Quantidade" min="0.001" step="any" required></div><div class="manual-exit-unit-wrap"><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Medida</label><select class="manual-exit-unit input-field text-sm w-full"></select></div><button type="button" onclick="removeManualExitItem(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button></div><div class="grid sm:grid-cols-2 gap-2"><div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Motivo</label><select class="manual-exit-motivo input-field text-sm w-full" onchange="toggleManualExitEventName(this)"><option value="consumo_interno">Consumo Interno</option><option value="uso_evento">Uso em Evento</option><option value="outros">Outros</option></select></div><div class="manual-exit-event-name-wrap hidden"><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Nome do evento</label><input type="text" class="manual-exit-event-name input-field text-sm w-full" placeholder="Ex: Aniversário Maria"></div></div></div>`;
+  document.getElementById('manual-exit-container').innerHTML = `<div class="manual-exit-item bg-stone-50 border border-stone-200 rounded-lg p-4 space-y-2" data-item-type="insumo"><div class="flex gap-1.5"><button type="button" class="manual-exit-type-btn flex-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-stone-800 text-white" data-type="insumo" onclick="setManualExitItemType(this,'insumo')">Insumo</button><button type="button" class="manual-exit-type-btn flex-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-type="venda_direta" onclick="setManualExitItemType(this,'venda_direta')">🍽️ Item de Venda Direta</button></div><label class="manual-exit-label text-xs font-semibold text-stone-600 uppercase tracking-wide block">Insumo</label><div class="relative"><i data-lucide="search" class="absolute left-3 top-3 w-4 h-4 text-stone-400"></i><input type="text" class="manual-exit-search input-field text-sm w-full pl-9 pr-4" placeholder="Pesquisar insumo..."><div class="manual-exit-dropdown hidden absolute top-full left-0 right-0 mt-1 bg-white border border-stone-200 rounded-lg shadow-lg z-10 max-h-40 overflow-y-auto"></div></div><select class="manual-exit-product input-field text-sm w-full" required><option value="">Selecione o insumo</option>${products.map(p=>`<option value="${p.id}" data-name="${p.product_name}" data-unit="${p.unit}">${p.product_name} (${p.unit})</option>`).join('')}</select><div class="grid sm:grid-cols-[1fr_110px_auto] gap-2 items-end"><div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Quantidade</label><input type="number" class="manual-exit-qty input-field text-sm w-full" placeholder="Quantidade" min="0.001" step="any" required></div><div class="manual-exit-unit-wrap"><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Medida</label><select class="manual-exit-unit input-field text-sm w-full"></select></div><button type="button" onclick="removeManualExitItem(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button></div><div class="grid sm:grid-cols-2 gap-2"><div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Motivo</label><select class="manual-exit-motivo input-field text-sm w-full" onchange="toggleManualExitEventName(this)"><option value="consumo_interno">Consumo Interno</option><option value="consumo_socios">Consumo dos Sócios</option><option value="uso_evento">Uso em Evento</option><option value="outros">Outros</option></select></div><div class="manual-exit-event-name-wrap hidden"><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Nome do evento</label><input type="text" class="manual-exit-event-name input-field text-sm w-full" placeholder="Ex: Aniversário Maria"></div></div></div>`;
   document.getElementById('manual-exit-reason').value = '';
   initManualExitSearchListeners();
   lucide.createIcons();
@@ -5536,6 +5572,13 @@ async function confirmDelete() {
       if (result.ok) { financeData = financeData.filter(r => r.id !== it.id); renderExpenseConfig(); showToast('Item excluído!'); }
       else showToast('Erro ao excluir', true);
     }
+  } else if (deleteType === 'fixed_expense') {
+    const fe = financeData.find(r => r.id === deleteId);
+    if (fe) {
+      const result = await financeApiCall('delete', { id: fe.id });
+      if (result.ok) { financeData = financeData.filter(r => r.id !== fe.id); renderFixedExpensesConfig(); showToast('Despesa fixa excluída!'); }
+      else showToast('Erro ao excluir', true);
+    }
   } else if (deleteType === 'employee') {
     const emp = financeData.find(r => r.id === deleteId);
     if (emp) {
@@ -5657,7 +5700,7 @@ document.addEventListener('click', (e) => {
   if (activeFinanceTab === 'faturamento') renderFaturamento();
   if (activeFinanceTab === 'dre') renderDRE();
   if (activeFinanceTab === 'despesas') renderExpenses();
-  if (activeFinanceTab === 'config-gastos') renderExpenseConfig();
+  if (activeFinanceTab === 'config-gastos') { renderExpenseConfig(); renderFixedExpensesConfig(); renderFinanceSettingsConfig(); }
   if (activeFinanceTab === 'funcionarios') renderEmployees();
   lucide.createIcons();
 });
@@ -6666,7 +6709,7 @@ function renderFinanceiro() {
     if (activeFinanceTab === 'faturamento') renderFaturamento();
     if (activeFinanceTab === 'dre') renderDRE();
     if (activeFinanceTab === 'despesas') renderExpenses();
-    if (activeFinanceTab === 'config-gastos') renderExpenseConfig();
+    if (activeFinanceTab === 'config-gastos') { renderExpenseConfig(); renderFixedExpensesConfig(); renderFinanceSettingsConfig(); }
     if (activeFinanceTab === 'funcionarios') renderEmployees();
     lucide.createIcons();
   }
@@ -6688,6 +6731,7 @@ async function unlockFinanceiro() {
     }));
     financeUnlocked = true;
     await seedDefaultDreGroupsIfNeeded();
+    await syncFixedExpenses();
     hideLoadingProgress();
     document.getElementById('finance-password-input').value = '';
     activeFinanceTab = 'dre';
@@ -7516,6 +7560,168 @@ function renderExpenseConfig() {
 }
 
 // ============================================================
+// DESPESAS FIXAS — config recorrente que se lança sozinha todo mês, sem precisar cadastrar de
+// novo. type='fixed_expense' -> {id, type, product_name(=nome), category(=nome do grupo do DRE,
+// exibição), cost_unit(=id do grupo do DRE), cost_price(=valor mensal), system_name(=periodicidade,
+// só 'mensal' por enquanto), skipped(=true quando inativa), updated_at}
+// ============================================================
+function getFixedExpenses() { return financeData.filter(r => r.type === 'fixed_expense'); }
+function getActiveFixedExpenses() { return getFixedExpenses().filter(fe => fe.skipped !== true && fe.skipped !== 'true'); }
+async function handleAddFixedExpense(e) {
+  e.preventDefault();
+  const name = document.getElementById('new-fixed-expense-name').value.trim();
+  const groupId = document.getElementById('new-fixed-expense-group').value;
+  const amount = parseFloat(document.getElementById('new-fixed-expense-amount').value);
+  if (!name || !groupId || !amount || amount <= 0) { showToast('Preencha nome, grupo e valor', true); return; }
+  const group = getDreGroupById(groupId);
+  showLoadingProgress('Salvando despesa fixa...');
+  try {
+    const payload = {
+      type:'fixed_expense', product_name:name, category: group ? group.product_name : '',
+      cost_unit: groupId, cost_price: amount, system_name:'mensal', skipped:false,
+      updated_at:new Date().toISOString(),
+    };
+    const r = await financeApiCall('create', { data: payload });
+    financeData.push({ id:r.id, ...payload });
+    hideLoadingProgress();
+    showToast('Despesa fixa cadastrada! Vai ser lançada automaticamente todo mês.');
+    e.target.reset();
+    renderFixedExpensesConfig();
+    fixedExpensesSyncAttempted = false;
+    await syncFixedExpenses();
+    if (activeFinanceTab === 'despesas') renderExpenses();
+    if (activeFinanceTab === 'dre') renderDRE();
+  } catch (err) {
+    hideLoadingProgress();
+    console.error('Erro ao salvar despesa fixa:', err);
+    showToast('Erro ao salvar despesa fixa: ' + err.message, true);
+  }
+}
+async function toggleFixedExpenseActive(id) {
+  const fe = financeData.find(r => r.id === id); if (!fe) return;
+  const nextSkipped = !(fe.skipped === true || fe.skipped === 'true');
+  try {
+    await financeApiCall('update', { data: { ...fe, skipped: nextSkipped } });
+    fe.skipped = nextSkipped;
+    showToast(nextSkipped ? 'Despesa fixa desativada — não gera mais lançamento automático' : 'Despesa fixa reativada!');
+    renderFixedExpensesConfig();
+    if (!nextSkipped) { fixedExpensesSyncAttempted = false; await syncFixedExpenses(); if (activeFinanceTab === 'despesas') renderExpenses(); if (activeFinanceTab === 'dre') renderDRE(); }
+  } catch (err) {
+    console.error('Erro ao alterar despesa fixa:', err);
+    showToast('Erro ao alterar: ' + err.message, true);
+  }
+}
+function requestDeleteFixedExpense(id) {
+  const fe = financeData.find(r => r.id === id); if (!fe) return;
+  pendingDeleteId = id; pendingDeleteType = 'fixed_expense';
+  document.getElementById('delete-confirm-text').textContent = `Deseja excluir a despesa fixa "${fe.product_name}"? Os lançamentos automáticos já gerados nos meses anteriores não são apagados — só para de gerar novos.`;
+  document.getElementById('delete-confirm-modal').classList.remove('hidden');
+}
+function renderFixedExpensesConfig() {
+  populateExpenseGroupSelect(document.getElementById('new-fixed-expense-group'), 'Grupo DRE *');
+  const el = document.getElementById('fixed-expense-config-list'); if (!el) return;
+  const items = getFixedExpenses().slice().sort((a,b)=>(a.product_name||'').localeCompare(b.product_name||''));
+  el.innerHTML = items.length === 0 ? '<p class="text-stone-400 text-center py-4 text-sm">Nenhuma despesa fixa cadastrada</p>' : items.map(fe => {
+    const active = fe.skipped !== true && fe.skipped !== 'true';
+    return `<div class="flex items-center justify-between gap-2 p-2 hover:bg-stone-50 rounded-lg mb-1">
+      <div class="min-w-0">
+        <p class="text-sm text-stone-700 truncate">${fe.product_name} <span class="text-[11px] text-stone-400">· ${fe.category||'sem grupo'}</span></p>
+        <p class="text-xs text-stone-500">${fmtCurrency(fe.cost_price)} / ${fe.system_name||'mensal'}${active?'':' <span class="text-red-500 font-medium">· inativa</span>'}</p>
+      </div>
+      <div class="flex items-center gap-1.5 flex-shrink-0">
+        <button onclick="toggleFixedExpenseActive('${fe.id}')" class="text-[11px] font-medium px-2 py-1 rounded-lg ${active?'bg-emerald-50 text-emerald-700 hover:bg-emerald-100':'bg-stone-100 text-stone-500 hover:bg-stone-200'}">${active?'Ativa':'Inativa'}</button>
+        <button onclick="requestDeleteFixedExpense('${fe.id}')" class="text-stone-300 hover:text-red-600"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+      </div>
+    </div>`;
+  }).join('');
+  lucide.createIcons();
+}
+// Roda uma vez por desbloqueio da Central Financeira. Pra cada despesa fixa ATIVA, garante que
+// exista um lançamento 'expense' pra cada mês desde a criação da despesa fixa até o mês atual — sem
+// duplicar (cada lançamento gerado carrega spreadsheet_name = 'fixed_<id>_<yyyy-MM>', que funciona
+// como chave de idempotência: se já existe um gasto com essa marca, não gera de novo). Assim, mesmo
+// ficando semanas sem abrir o financeiro, nenhum mês fica sem o lançamento ao reabrir.
+let fixedExpensesSyncAttempted = false;
+async function syncFixedExpenses() {
+  if (fixedExpensesSyncAttempted) return;
+  fixedExpensesSyncAttempted = true;
+  const active = getActiveFixedExpenses();
+  if (active.length === 0) return;
+  const existingMarkers = new Set(getExpenses().map(ex => ex.spreadsheet_name).filter(Boolean));
+  const now = new Date();
+  const limit = new Date(now.getFullYear(), now.getMonth(), 1);
+  const ops = [];
+  active.forEach(fe => {
+    const createdAt = fe.updated_at ? new Date(fe.updated_at) : now;
+    let cursor = new Date(createdAt.getFullYear(), createdAt.getMonth(), 1);
+    while (cursor <= limit) {
+      const yyyymm = `${cursor.getFullYear()}-${String(cursor.getMonth()+1).padStart(2,'0')}`;
+      const marker = `fixed_${fe.id}_${yyyymm}`;
+      if (!existingMarkers.has(marker)) {
+        ops.push({ op:'create', data: {
+          type:'expense', product_name: fe.product_name, category: fe.category || '',
+          cost_unit: fe.cost_unit, total_cost: fe.cost_price || 0,
+          expense_date: localDateStr(cursor), spreadsheet_name: marker,
+          updated_at: new Date().toISOString(),
+        }});
+      }
+      cursor = new Date(cursor.getFullYear(), cursor.getMonth()+1, 1);
+    }
+  });
+  if (ops.length === 0) return;
+  try {
+    const result = await financeBatchWrite(ops);
+    if (!result.isOk) throw new Error(result.error || 'falha ao gravar');
+  } catch (e) {
+    console.error('Erro ao sincronizar despesas fixas:', e);
+    fixedExpensesSyncAttempted = false;
+  }
+}
+
+// ============================================================
+// CONFIGURAÇÕES FINANCEIRAS — percentuais usados automaticamente no DRE (imposto, taxa de cartão,
+// e outros que possam surgir). type='finance_settings' -> {id, type, cost_price(=percentual de
+// imposto), unit_cost(=percentual de taxa de cartão), updated_at} — registro único (singleton).
+// ============================================================
+function getFinanceSettings() {
+  const rec = financeData.find(r => r.type === 'finance_settings');
+  return { taxPct: rec && rec.cost_price != null ? rec.cost_price : 6, cardFeePct: rec && rec.unit_cost != null ? rec.unit_cost : 2.5, _rec: rec };
+}
+async function handleSaveFinanceSettings(e) {
+  e.preventDefault();
+  const taxPct = parseFloat(document.getElementById('finance-settings-tax').value);
+  const cardFeePct = parseFloat(document.getElementById('finance-settings-card-fee').value);
+  if (isNaN(taxPct) || taxPct < 0 || isNaN(cardFeePct) || cardFeePct < 0) { showToast('Preencha os percentuais com valores válidos', true); return; }
+  showLoadingProgress('Salvando configurações...');
+  try {
+    const existing = getFinanceSettings()._rec;
+    const payload = { type:'finance_settings', product_name:'config', cost_price:taxPct, unit_cost:cardFeePct, updated_at:new Date().toISOString() };
+    if (existing) {
+      await financeApiCall('update', { data: { ...existing, ...payload } });
+      Object.assign(existing, payload);
+    } else {
+      const r = await financeApiCall('create', { data: payload });
+      financeData.push({ id:r.id, ...payload });
+    }
+    hideLoadingProgress();
+    showToast('Configurações financeiras salvas!');
+    if (activeFinanceTab === 'dre') renderDRE();
+  } catch (err) {
+    hideLoadingProgress();
+    console.error('Erro ao salvar configurações financeiras:', err);
+    showToast('Erro ao salvar: ' + err.message, true);
+  }
+}
+function renderFinanceSettingsConfig() {
+  const settings = getFinanceSettings();
+  const taxEl = document.getElementById('finance-settings-tax');
+  const cardEl = document.getElementById('finance-settings-card-fee');
+  if (taxEl && document.activeElement !== taxEl) taxEl.value = settings.taxPct;
+  if (cardEl && document.activeElement !== cardEl) cardEl.value = settings.cardFeePct;
+}
+
+// ============================================================
+// GASTOS — Gasto Simples e Gasto em Lote (mesma ideia de Venda Manual/Venda em Lote).
 // GASTOS — Gasto Simples e Gasto em Lote (mesma ideia de Venda Manual/Venda em Lote).
 // type='expense' -> {id, type, product_name(=descrição), category(=nome da categoria, só pra
 // exibição rápida), cost_unit(=id da categoria OU id do grupo direto — ver
@@ -8286,18 +8492,32 @@ function getSaidaManualMovementsInRange(start, end) {
 }
 function computeSaidaManualCost(reason, start, end) {
   const movements = getSaidaManualMovementsInRange(start, end);
+  // Consumo Interno e Consumo dos Sócios não abrem o item de venda direta em ingredientes — o
+  // ranking precisa mostrar o produto pronto que foi registrado (ex: "Queijo Quente"), não os
+  // insumos internos dele. O custo ainda é a soma real dos ingredientes deduzidos, só a linha do
+  // ranking fica agregada no nome do item pai.
+  const noDecompose = reason === 'consumo_interno' || reason === 'consumo_socios';
   let total = 0, unknownCount = 0;
   const rows = [];
   movements.forEach(m => {
     let items = []; try { items = JSON.parse(m.batch_items || '[]'); } catch(e) {}
     items.filter(it => it.reason === reason).forEach(it => {
-      if (it.deductedIngredients) {
+      if (it.deductedIngredients && !noDecompose) {
         it.deductedIngredients.forEach(ing => {
           const value = costForProductQty(ing.name, ing.qty, ing.unit);
           if (value == null) { unknownCount++; return; }
           total += value;
           rows.push({ id: m.id, name: ing.name, date: m.movement_date, eventName: it.eventName||'', parentName: it.name, qty: ing.qty, unit: ing.unit, value });
         });
+      } else if (it.deductedIngredients && noDecompose) {
+        let value = 0, hasKnown = false;
+        it.deductedIngredients.forEach(ing => {
+          const v = costForProductQty(ing.name, ing.qty, ing.unit);
+          if (v == null) { unknownCount++; } else { value += v; hasKnown = true; }
+        });
+        if (!hasKnown) return;
+        total += value;
+        rows.push({ id: m.id, name: it.name, date: m.movement_date, eventName: it.eventName||'', qty: it.qty, unit: it.unit, value });
       } else {
         const value = costForProductQty(it.name, it.qty, it.unit);
         if (value == null) { unknownCount++; return; }
@@ -8389,33 +8609,43 @@ function getPricedEvents() {
   }).sort((a,b) => (b.date||'').localeCompare(a.date||''));
 }
 let ssvFilter = '7days';
+let ssvRankingMotivoFilter = 'all';
 // Painel "Saídas sem Venda" — agrega Perda + Consumo Interno + Uso em Evento (custo) + Outros num
 // só lugar, pra responder "quanto saiu de estoque sem gerar faturamento e por quê". Uso em Evento
 // aqui é só o CUSTO (a receita, quando lançada, mora no DRE separadamente via event_revenue).
+// Agrega uma lista de linhas (já filtrada por motivo, ou não) num ranking por nome de produto —
+// reaproveitado tanto pro ranking geral quanto pro ranking filtrado por motivo na UI.
+function buildSsvRanking(rows) {
+  const rowsTotal = rows.reduce((s,r) => s+r.value, 0);
+  const byProduct = {};
+  rows.forEach(r => { byProduct[r.name] = (byProduct[r.name]||0) + r.value; });
+  return Object.entries(byProduct)
+    .map(([name,value]) => ({ name, value, pct: rowsTotal>0 ? (value/rowsTotal)*100 : 0 }))
+    .sort((a,b) => b.value-a.value);
+}
 function computeSaidasSemVenda(start, end) {
   const perda = computeLossesCost(start, end);
   const consumo = computeSaidaManualCost('consumo_interno', start, end);
+  const socios = computeSaidaManualCost('consumo_socios', start, end);
   const evento = computeSaidaManualCost('uso_evento', start, end);
   const outros = computeSaidaManualCost('outros', start, end);
-  const total = perda.total + consumo.total + evento.total + outros.total;
+  const total = perda.total + consumo.total + socios.total + evento.total + outros.total;
   const allRows = [
     ...perda.rows.map(r => ({...r, motivo:'Perda'})),
     ...consumo.rows.map(r => ({...r, motivo:'Consumo Interno'})),
+    ...socios.rows.map(r => ({...r, motivo:'Consumo dos Sócios'})),
     ...evento.rows.map(r => ({...r, motivo:'Uso em Evento'})),
     ...outros.rows.map(r => ({...r, motivo:'Outros'})),
   ];
-  const byProduct = {};
-  allRows.forEach(r => { byProduct[r.name] = (byProduct[r.name]||0) + r.value; });
-  const ranking = Object.entries(byProduct)
-    .map(([name,value]) => ({ name, value, pct: total>0 ? (value/total)*100 : 0 }))
-    .sort((a,b) => b.value-a.value);
+  const ranking = buildSsvRanking(allRows);
   const byMotivo = [
     { motivo:'Perda', value: perda.total },
     { motivo:'Consumo Interno', value: consumo.total },
+    { motivo:'Consumo dos Sócios', value: socios.total },
     { motivo:'Uso em Evento', value: evento.total },
     { motivo:'Outros', value: outros.total },
   ].filter(m => m.value > 0).map(m => ({ ...m, pct: total>0 ? (m.value/total)*100 : 0 })).sort((a,b)=>b.value-a.value);
-  return { total, perda, consumo, evento, outros, ranking, byMotivo };
+  return { total, perda, consumo, socios, evento, outros, ranking, allRows, byMotivo };
 }
 function renderSaidasSemVenda() {
   const totalEl = document.getElementById('ssv-kpi-total'); if (!totalEl) return;
@@ -8424,6 +8654,7 @@ function renderSaidasSemVenda() {
   const ssv = computeSaidasSemVenda(start, end);
   document.getElementById('ssv-kpi-perda').textContent = fmtCurrency(ssv.perda.total);
   document.getElementById('ssv-kpi-consumo').textContent = fmtCurrency(ssv.consumo.total);
+  document.getElementById('ssv-kpi-socios').textContent = fmtCurrency(ssv.socios.total);
   document.getElementById('ssv-kpi-evento').textContent = fmtCurrency(ssv.evento.total);
   totalEl.textContent = fmtCurrency(ssv.total);
   const pendingCount = getPendingEvents().length;
@@ -8437,8 +8668,12 @@ function renderSaidasSemVenda() {
       </div>
       <div class="h-2 bg-stone-100 rounded-full overflow-hidden"><div class="h-full bg-red-400 rounded-full" style="width:${Math.max(2,m.pct)}%"></div></div>
     </div>`).join('');
+  const motivoSel = document.getElementById('ssv-ranking-motivo-filter');
+  if (motivoSel) motivoSel.value = ssvRankingMotivoFilter;
+  const filteredRows = ssvRankingMotivoFilter === 'all' ? ssv.allRows : ssv.allRows.filter(r => r.motivo === ssvRankingMotivoFilter);
+  const filteredRanking = buildSsvRanking(filteredRows);
   const rankEl = document.getElementById('ssv-ranking-list');
-  rankEl.innerHTML = ssv.ranking.length === 0 ? '<p class="text-stone-400 text-center py-6 text-sm">Nenhum item nesse período</p>' : ssv.ranking.map((r,i) => `
+  rankEl.innerHTML = filteredRanking.length === 0 ? '<p class="text-stone-400 text-center py-6 text-sm">Nenhum item nesse período</p>' : filteredRanking.map((r,i) => `
     <div class="flex justify-between items-center py-2 border-b border-stone-50 last:border-b-0 gap-2">
       <div class="flex items-center gap-2 min-w-0">
         <span class="text-xs font-bold text-stone-300 w-6 flex-shrink-0">${i+1}º</span>
@@ -8447,6 +8682,10 @@ function renderSaidasSemVenda() {
       <span class="text-sm font-bold text-stone-800 flex-shrink-0 whitespace-nowrap">${fmtCurrency(r.value)} <span class="text-stone-400 font-normal text-xs">(${r.pct.toFixed(1)}%)</span></span>
     </div>`).join('');
   lucide.createIcons();
+}
+function handleSsvRankingMotivoChange(sel) {
+  ssvRankingMotivoFilter = sel.value;
+  renderSaidasSemVenda();
 }
 document.addEventListener('click', (e) => {
   const btn = e.target.closest('.ssv-filter'); if (!btn) return;
@@ -8465,7 +8704,7 @@ let dreFilter = '7days';
 // estimado. Os grupos de despesa (CMO, e todo grupo que você cadastrar em Config. Gastos) são
 // dinâmicos — o DRE não conhece mais uma lista fixa, só soma cada gasto no grupo que
 // resolveExpenseDreGroupId() encontrar pra ele.
-function computeDRE(entries, expenses, stockCosts, losses, internalConsumption, eventCost, eventRevenueRecords, eventExtraCostRecords) {
+function computeDRE(entries, expenses, stockCosts, losses, internalConsumption, eventCost, eventRevenueRecords, eventExtraCostRecords, partnerConsumption) {
   const totalRevenue = entries.reduce((s,e)=>s+(e.total_revenue||0), 0);
   let knownCost = 0, knownRevenue = 0, unknownRevenue = 0;
   entries.forEach(e => {
@@ -8499,6 +8738,11 @@ function computeDRE(entries, expenses, stockCosts, losses, internalConsumption, 
   const totalInternalConsumption = (internalConsumption && internalConsumption.total) || 0;
   const internalConsumptionUnknownCount = (internalConsumption && internalConsumption.unknownCount) || 0;
 
+  // Consumo dos Sócios é medido separado do Consumo Interno (pedido explícito, pra não misturar
+  // consumo da equipe com consumo dos donos nos relatórios), mas entra no DRE com a mesma lógica.
+  const totalPartnerConsumption = (partnerConsumption && partnerConsumption.total) || 0;
+  const partnerConsumptionUnknownCount = (partnerConsumption && partnerConsumption.unknownCount) || 0;
+
   // Uso em Evento é diferente: o custo sai do estoque na hora da saída, mas a RECEITA do evento só
   // existe quando o valor cobrado é lançado em Vendas > Eventos Pendentes (pode ser um período
   // diferente do da saída). Por isso entram como duas linhas próprias — não somam em totalRevenue
@@ -8508,12 +8752,20 @@ function computeDRE(entries, expenses, stockCosts, losses, internalConsumption, 
   const eventCostUnknownCount = (eventCost && eventCost.unknownCount) || 0;
   const totalEventRevenue = (eventRevenueRecords||[]).reduce((s,r)=>s+(r.total_cost||0), 0);
 
+  // Imposto e taxa de cartão são percentuais configuráveis (Configurações > Parâmetros
+  // Financeiros), aplicados automaticamente sobre o faturamento da cafeteria — não precisa mais
+  // lançar isso à mão como gasto todo período. É uma aproximação sobre o faturamento total (o
+  // sistema não distingue forma de pagamento), documentada como tal na tela.
+  const financeSettings = getFinanceSettings();
+  const totalTax = totalRevenue * (financeSettings.taxPct/100);
+  const totalCardFee = totalRevenue * (financeSettings.cardFeePct/100);
+
   // Custo de estoque avulso é confirmado e do período inteiro (não amarrado a uma venda
   // específica), então desconta nos dois cenários — diferente do CMV por receita, cuja incerteza
   // só existe pra fatia de faturamento sem custo confirmado (unknownRevenue).
   const eventNet = totalEventRevenue - totalEventCost;
-  const confirmedProfit = knownRevenue - totalCMVConfirmed - totalAllExpenses - totalLosses - totalInternalConsumption + eventNet;
-  const estimatedProfit = totalRevenue - totalCMV - totalAllExpenses - totalLosses - totalInternalConsumption + eventNet;
+  const confirmedProfit = knownRevenue - totalCMVConfirmed - totalAllExpenses - totalLosses - totalInternalConsumption - totalPartnerConsumption - totalTax - totalCardFee + eventNet;
+  const estimatedProfit = totalRevenue - totalCMV - totalAllExpenses - totalLosses - totalInternalConsumption - totalPartnerConsumption - totalTax - totalCardFee + eventNet;
   const coveragePct = totalRevenue > 0 ? (knownRevenue/totalRevenue)*100 : 0;
   // % sempre sobre o faturamento total do período — é a "representatividade" de cada linha.
   const pctOf = (v) => totalRevenue > 0 ? (v/totalRevenue)*100 : 0;
@@ -8530,12 +8782,16 @@ function computeDRE(entries, expenses, stockCosts, losses, internalConsumption, 
     totalRevenue, knownRevenue, unknownRevenue, knownCost, estimatedExtraCost, totalStockCosts, totalCMVConfirmed, totalCMV,
     totalAllExpenses, groupLines, totalLosses, lossesUnknownCount,
     totalInternalConsumption, internalConsumptionUnknownCount,
+    totalPartnerConsumption, partnerConsumptionUnknownCount,
     totalEventCost, eventCostUnknownCount, totalEventRevenue,
+    totalTax, totalCardFee, taxPct: financeSettings.taxPct, cardFeePct: financeSettings.cardFeePct,
     confirmedProfit, estimatedProfit, coveragePct, hasEstimate, pctOf,
     pct: {
       cmvConfirmed: pctOf(totalCMVConfirmed), cmvTotal: pctOf(totalCMV),
       confirmedProfit: pctOf(confirmedProfit), estimatedProfit: pctOf(estimatedProfit), losses: pctOf(totalLosses),
-      internalConsumption: pctOf(totalInternalConsumption), eventRevenue: pctOf(totalEventRevenue), eventCost: pctOf(totalEventCost),
+      internalConsumption: pctOf(totalInternalConsumption), partnerConsumption: pctOf(totalPartnerConsumption),
+      eventRevenue: pctOf(totalEventRevenue), eventCost: pctOf(totalEventCost),
+      tax: pctOf(totalTax), cardFee: pctOf(totalCardFee),
     },
   };
 }
@@ -8547,10 +8803,11 @@ function renderDRE() {
   const stockCosts = getStockCostsInRange(start, end);
   const losses = computeLossesCost(start, end);
   const internalConsumption = computeSaidaManualCost('consumo_interno', start, end);
+  const partnerConsumption = computeSaidaManualCost('consumo_socios', start, end);
   const eventCost = computeSaidaManualCost('uso_evento', start, end);
   const eventRevenueRecords = getEventRevenueInRange(start, end);
   const eventExtraCostRecords = getEventExtraCostsInRange(start, end);
-  const dre = computeDRE(entries, expenses, stockCosts, losses, internalConsumption, eventCost, eventRevenueRecords, eventExtraCostRecords);
+  const dre = computeDRE(entries, expenses, stockCosts, losses, internalConsumption, eventCost, eventRevenueRecords, eventExtraCostRecords, partnerConsumption);
   const el = document.getElementById('dre-content'); if (!el) return;
   const profitColor = (v) => v >= 0 ? 'text-emerald-700' : 'text-red-600';
   const pctTag = (v) => `<span class="text-stone-400 font-normal">(${v.toFixed(1)}%)</span>`;
@@ -8585,8 +8842,11 @@ function renderDRE() {
           <span class="text-stone-600">(–) CMV estimado (adicional)</span>
           <span class="font-semibold text-amber-600">${dre.hasEstimate ? `${fmtCurrency(dre.estimatedExtraCost)} ${pctTag(dre.pct.cmvTotal - dre.pct.cmvConfirmed)}` : '—'}</span>
         </div>
+        ${dre.totalTax > 0 ? line(`(–) Imposto (${dre.taxPct}%)`, dre.totalTax, dre.pct.tax, 'text-red-600') : ''}
+        ${dre.totalCardFee > 0 ? line(`(–) Taxa de Cartão (${dre.cardFeePct}%)`, dre.totalCardFee, dre.pct.cardFee, 'text-red-600') : ''}
         ${dre.totalLosses > 0 ? line('(–) Perdas', dre.totalLosses, dre.pct.losses, 'text-red-600') : ''}
         ${dre.totalInternalConsumption > 0 ? line('(–) Consumo Interno', dre.totalInternalConsumption, dre.pct.internalConsumption, 'text-red-600') : ''}
+        ${dre.totalPartnerConsumption > 0 ? line('(–) Consumo dos Sócios', dre.totalPartnerConsumption, dre.pct.partnerConsumption, 'text-red-600') : ''}
         ${dre.totalEventRevenue > 0 ? line('(+) Faturamento de Evento', dre.totalEventRevenue, dre.pct.eventRevenue, 'text-emerald-700') : ''}
         ${dre.totalEventCost > 0 ? line('(–) Custo de Eventos', dre.totalEventCost, dre.pct.eventCost, 'text-red-600') : ''}
         ${groupLinesHtml || '<p class="text-xs text-stone-400 py-2">Nenhum gasto lançado neste período.</p>'}
@@ -8604,7 +8864,9 @@ function renderDRE() {
       ${dre.totalStockCosts > 0 ? `<p class="text-[11px] text-stone-400 mt-3 pt-3 border-t border-stone-100">"CMV confirmado" inclui ${fmtCurrency(dre.totalStockCosts)} de Custos de Estoque avulsos (taxa de entrega, insumo fora do cardápio, perda não rastreada) lançados manualmente em Custos de Estoque.</p>` : ''}
       ${dre.lossesUnknownCount > 0 ? `<p class="text-[11px] text-stone-400 mt-3 pt-3 border-t border-stone-100">${dre.lossesUnknownCount} perda(s) no período sem custo conhecido (insumo sem preço lançado, ou sem conversão de unidade possível) — não entram no valor de Perdas acima.</p>` : ''}
       ${dre.internalConsumptionUnknownCount > 0 ? `<p class="text-[11px] text-stone-400 mt-3 pt-3 border-t border-stone-100">${dre.internalConsumptionUnknownCount} item(ns) de Consumo Interno no período sem custo conhecido — não entram no valor acima.</p>` : ''}
+      ${dre.partnerConsumptionUnknownCount > 0 ? `<p class="text-[11px] text-stone-400 mt-3 pt-3 border-t border-stone-100">${dre.partnerConsumptionUnknownCount} item(ns) de Consumo dos Sócios no período sem custo conhecido — não entram no valor acima.</p>` : ''}
       ${dre.eventCostUnknownCount > 0 ? `<p class="text-[11px] text-stone-400 mt-3 pt-3 border-t border-stone-100">${dre.eventCostUnknownCount} item(ns) de Uso em Evento no período sem custo conhecido — não entram no Custo de Eventos acima.</p>` : ''}
+      ${dre.totalTax > 0 || dre.totalCardFee > 0 ? `<p class="text-[11px] text-stone-400 mt-3 pt-3 border-t border-stone-100">Imposto e Taxa de Cartão são calculados automaticamente sobre o faturamento total (aproximação — o sistema não distingue forma de pagamento). Ajuste os percentuais em Configurações > Parâmetros Financeiros.</p>` : ''}
       ${entries.length === 0 && expenses.length === 0 ? '<p class="text-stone-400 text-center py-4 text-sm">Sem vendas nem gastos no período</p>' : ''}
     </div>
   `;
