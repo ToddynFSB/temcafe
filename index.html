@@ -908,6 +908,10 @@
         </div>
         <button id="analise-next-btn" onclick="shiftAnalysisPeriod(1)" class="px-2.5 py-1.5 rounded-lg text-sm text-stone-600 hover:bg-stone-100"><i data-lucide="chevron-right" class="w-4 h-4"></i></button>
       </div>
+      <div class="flex justify-end mb-2">
+        <button onclick="toggleRateioHelp()" class="text-xs text-emerald-700 hover:text-emerald-900 flex items-center gap-1 font-medium"><i data-lucide="help-circle" class="w-3.5 h-3.5"></i>Como este cálculo é feito?</button>
+      </div>
+      <div id="rateio-help-panel" class="hidden mb-4"></div>
       <div id="analises-content"></div>
     </section>
 
@@ -1128,14 +1132,14 @@
 
       <div class="bg-white rounded-xl p-5 shadow-sm border border-stone-100 mb-5">
         <h3 class="font-semibold mb-1 text-stone-800 text-sm flex items-center gap-2"><i data-lucide="line-chart" class="w-4 h-4 text-emerald-600"></i>Análises</h3>
-        <p class="text-xs text-stone-400 mb-3">Como as análises semanal e mensal são calculadas e o que aparece nelas.</p>
+        <p class="text-xs text-stone-400 mb-3">Como as análises semanal e mensal são calculadas e o que aparece nelas. O rateio vale pra toda despesa marcada como <strong>mensal</strong> — seja pela tela de Despesas Fixas, seja pela categoria (em Categorias, logo abaixo) — independente do grupo do DRE.</p>
         <form onsubmit="handleSaveAnalysisSettings(event)" class="grid sm:grid-cols-[1fr_1fr_auto] gap-2 items-end mb-4">
           <div>
-            <label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Rateio das despesas fixas</label>
+            <label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Rateio das despesas mensais</label>
             <select id="analysis-settings-proration" class="input-field text-sm w-full">
               <option value="weeks">Dividir entre as semanas do mês</option>
               <option value="days">Dividir por dia do mês</option>
-              <option value="none">Sem rateio (tudo na 1ª semana)</option>
+              <option value="none">Sem rateio (cai no dia do lançamento)</option>
             </select>
           </div>
           <div>
@@ -1168,9 +1172,14 @@
 
       <div class="bg-white rounded-xl p-5 shadow-sm border border-stone-100 mb-5">
         <h3 class="font-semibold mb-3 text-stone-800 text-sm flex items-center gap-2"><i data-lucide="folder" class="w-4 h-4 text-emerald-600"></i>Categorias</h3>
-        <form onsubmit="handleAddExpenseCategory(event)" class="grid sm:grid-cols-[1fr_1fr_auto] gap-2 mb-3">
+        <p class="text-xs text-stone-400 mb-3">O <strong>grupo do DRE</strong> define onde a despesa aparece no relatório. O <strong>tipo</strong> define como ela se distribui no tempo nas Análises — são independentes: uma categoria pode ser Operacional <em>e</em> mensal. Mensal = o pagamento cobre o mês todo (água, luz, internet, limpeza) e é rateado entre as semanas. Pontual = cai inteiro no dia do lançamento.</p>
+        <form onsubmit="handleAddExpenseCategory(event)" class="grid sm:grid-cols-[1fr_1fr_140px_auto] gap-2 mb-3">
           <input id="new-expense-category-name" type="text" placeholder="Nome da categoria (ex: Limpeza)" required class="input-field text-sm">
           <select id="new-expense-category-group" required class="input-field text-sm"><option value="">Grupo DRE *</option></select>
+          <select id="new-expense-category-type" class="input-field text-sm">
+            <option value="pontual">Pontual</option>
+            <option value="mensal">Mensal · rateia</option>
+          </select>
           <button type="submit" class="btn-primary px-4 py-2.5 rounded-lg text-sm font-medium">Adicionar</button>
         </form>
         <div id="expense-category-config-list"></div>
@@ -7477,7 +7486,8 @@ async function handleAddExpenseCategory(e) {
   if (getExpenseCategories().some(c => (c.product_name||'').toLowerCase() === name.toLowerCase())) { showToast('Já existe uma categoria com esse nome', true); return; }
   showLoadingProgress('Salvando categoria...');
   try {
-    const payload = { type:'expense_category', product_name:name, movement_id:groupId, updated_at:new Date().toISOString() };
+    const typeSel = document.getElementById('new-expense-category-type');
+    const payload = { type:'expense_category', product_name:name, movement_id:groupId, system_name:(typeSel ? typeSel.value : 'pontual'), updated_at:new Date().toISOString() };
     const r = await financeApiCall('create', { data: payload });
     financeData.push({ id:r.id, ...payload });
     hideLoadingProgress();
@@ -7488,6 +7498,24 @@ async function handleAddExpenseCategory(e) {
     hideLoadingProgress();
     console.error('Erro ao criar categoria:', err);
     showToast('Erro ao criar categoria: ' + err.message, true);
+  }
+}
+// Alterna a categoria entre "mensal" (rateia nas análises semanais) e "pontual". Isso é INDEPENDENTE
+// do grupo do DRE da categoria: uma categoria pode estar em Despesas Operacionais e ser mensal.
+async function toggleExpenseCategoryMonthly(id) {
+  const c = financeData.find(r => r.id === id); if (!c) return;
+  const next = isMonthlyCategory(c) ? 'pontual' : 'mensal';
+  try {
+    await financeApiCall('update', { data: { ...c, system_name: next } });
+    c.system_name = next;
+    showToast(next === 'mensal'
+      ? `"${c.product_name}" agora é mensal — o valor será rateado entre as semanas do mês`
+      : `"${c.product_name}" agora é pontual — cai inteira na semana do lançamento`);
+    renderExpenseConfig();
+    if (activeFinanceTab === 'analises') renderAnalises();
+  } catch (err) {
+    console.error('Erro ao alterar tipo da categoria:', err);
+    showToast('Erro ao alterar: ' + err.message, true);
   }
 }
 async function renameExpenseCategory(id, newName) {
@@ -7596,9 +7624,11 @@ function renderExpenseConfig() {
               <button onclick="toggleEditConfigRow('${c.id}')" class="text-stone-400 hover:text-stone-600 flex-shrink-0"><i data-lucide="x" class="w-4 h-4"></i></button>
             </div>`;
           }
+          const mensal = isMonthlyCategory(c);
           return `<div class="flex items-center justify-between gap-2 p-2 hover:bg-stone-50 rounded-lg mb-1">
             <span class="text-sm text-stone-700 min-w-0 truncate">${c.product_name}</span>
             <div class="flex items-center gap-1.5 flex-shrink-0">
+              <button onclick="toggleExpenseCategoryMonthly('${c.id}')" title="${mensal?'Despesa mensal: o valor é rateado entre as semanas do mês nas Análises':'Despesa pontual: cai inteira na semana do lançamento'}" class="text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${mensal?'bg-emerald-50 text-emerald-700 hover:bg-emerald-100':'bg-stone-100 text-stone-500 hover:bg-stone-200'}">${mensal?'Mensal · rateia':'Pontual'}</button>
               <span class="text-[11px] text-stone-400 whitespace-nowrap">${itemCount} item(ns)</span>
               <button onclick="toggleEditConfigRow('${c.id}')" class="text-stone-400 hover:text-stone-600"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
               <button onclick="requestDeleteExpenseCategory('${c.id}')" class="text-stone-300 hover:text-red-600"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
@@ -9033,7 +9063,7 @@ const ANALYSIS_DEFAULTS = {
 const ANALYSIS_INDICATOR_LABELS = {
   lucroBruto:'Lucro bruto', lucroOperacional:'Lucro operacional', lucroLiquido:'Lucro líquido',
   margem:'Margem de lucro (%)', cmv:'CMV (%)', cmo:'CMO (%)', imposto:'Impostos (%)',
-  cartao:'Taxa de cartão (%)', fixas:'Despesas fixas (%)', operacionais:'Despesas operacionais (%)',
+  cartao:'Taxa de cartão (%)', fixas:'Despesas mensais rateadas (%)', operacionais:'Despesas operacionais (%)',
   saidasSemVenda:'Saídas sem venda', eventos:'Eventos', patrimonio:'Estoque (patrimônio)',
   evolucao:'Gráfico de evolução',
 };
@@ -9128,45 +9158,87 @@ function weeksInMonth(year, month) {
   return count || 1;
 }
 
-// ---------- Rateio das despesas fixas ----------
-// syncFixedExpenses() lança a despesa fixa como um 'expense' único no dia 1 de cada mês, marcado
-// com spreadsheet_name='fixed_<id>_<yyyy-MM>'. Pra análise semanal isso precisa ser diluído: o
-// aluguel não foi "gasto" todo na primeira semana. A taxa é diária, então uma semana que cruza a
-// virada do mês recebe a fatia certa de cada um dos dois meses automaticamente.
+// ---------- Rateio das despesas mensais ----------
+// CONCEITOS SEPARADOS, de propósito:
+//   • GRUPO DO DRE ("Despesas Operacionais", "Despesa Fixa", "CMO"...) = onde a despesa aparece
+//     no relatório. É classificação contábil.
+//   • FORMA DE RATEIO (mensal x pontual) = como o valor se distribui no tempo. É temporal.
+// Os dois são independentes: a conta de luz pode estar no grupo "Despesas Operacionais" E ser
+// rateada semanalmente por cobrir o mês inteiro. Antes disso, só as despesas geradas pela tela de
+// Despesas Fixas eram rateadas, o que amarrava as duas coisas indevidamente.
+//
+// Uma despesa é MENSAL quando o pagamento cobre o funcionamento do negócio durante o mês todo
+// (aluguel, água, energia, internet, limpeza, utensílios, contador...) — nesse caso a semana que
+// consumiu 1/4 do mês deve arcar com 1/4 do custo. É PONTUAL quando o gasto acontece num dia
+// específico e se esgota nele (uma compra avulsa, um conserto) — esse cai inteiro na semana do dia.
 function isGeneratedFixedExpense(ex) { return typeof ex.spreadsheet_name === 'string' && ex.spreadsheet_name.startsWith('fixed_'); }
-function fixedExpenseTotalForMonth(year, month) {
-  const prefix = `${year}-${String(month+1).padStart(2,'0')}`;
-  return getExpenses()
-    .filter(ex => isGeneratedFixedExpense(ex) && (ex.expense_date||'').startsWith(prefix))
-    .reduce((s,ex) => s + (ex.total_cost||0), 0);
+// Resolve em camadas, na mesma ideia de resolveExpenseDreGroupId — pra nunca depender de um campo
+// que lançamentos antigos não têm:
+//   1) veio da tela de Despesas Fixas -> mensal por definição (é recorrente por natureza)
+//   2) marcação explícita no próprio lançamento (system_name)
+//   3) herda da categoria do gasto (configurável em Configurações > Categorias)
+//   4) padrão: pontual — não reclassifica dinheiro por adivinhação
+function isMonthlyExpense(ex) {
+  if (isGeneratedFixedExpense(ex)) return true;
+  if (ex.system_name === 'mensal') return true;
+  if (ex.system_name === 'pontual') return false;
+  const cat = getExpenseCategoryById(ex.cost_unit);
+  if (cat && cat.system_name) return cat.system_name === 'mensal';
+  return false;
 }
-function computeProratedFixedExpenses(start, end, mode) {
+function isMonthlyCategory(cat) { return !!cat && cat.system_name === 'mensal'; }
+// Total das despesas MENSAIS de um mês, quebrado por grupo do DRE — o rateio precisa preservar o
+// grupo pra que a cascata da análise continue mostrando cada despesa na linha certa do relatório.
+function monthlyExpenseTotalsByGroup(year, month) {
+  const prefix = `${year}-${String(month+1).padStart(2,'0')}`;
+  const byGroup = {};
+  getExpenses().forEach(ex => {
+    if (!(ex.expense_date||'').startsWith(prefix)) return;
+    if (!isMonthlyExpense(ex)) return;
+    const gid = resolveExpenseDreGroupId(ex) || '__sem_grupo__';
+    byGroup[gid] = (byGroup[gid]||0) + (ex.total_cost||0);
+  });
+  return byGroup;
+}
+function monthlyExpenseTotalForMonth(year, month) {
+  return Object.values(monthlyExpenseTotalsByGroup(year, month)).reduce((s,v)=>s+v, 0);
+}
+// Devolve {groupId: valor rateado} pro período pedido. Três modos:
+//   'weeks' (padrão) — cada semana recebe (total mensal do mês dono da semana ÷ semanas do mês)
+//   'days'           — taxa diária: total mensal ÷ dias do mês, somada dia a dia
+//   'none'           — sem rateio: o valor cai inteiro na data em que foi lançado
+function computeProratedMonthlyByGroup(start, end, mode) {
+  const result = {};
+  const add = (gid, v) => { if (v) result[gid] = (result[gid]||0) + v; };
   if (mode === 'none') {
-    return getExpensesInRange(start, end).filter(isGeneratedFixedExpense).reduce((s,ex)=>s+(ex.total_cost||0), 0);
+    getExpensesInRange(start, end).filter(isMonthlyExpense).forEach(ex => {
+      add(resolveExpenseDreGroupId(ex) || '__sem_grupo__', ex.total_cost||0);
+    });
+    return result;
   }
   if (mode === 'days') {
-    // Taxa diária = valor mensal / dias do mês. Caminha dia a dia, então uma semana que cruza a
-    // virada do mês recebe a fatia certa de cada um dos dois meses automaticamente.
-    const rateCache = {};
-    const rateForMonth = (y, m) => {
+    const cache = {};
+    const ratesForMonth = (y, m) => {
       const key = `${y}-${m}`;
-      if (rateCache[key] == null) rateCache[key] = fixedExpenseTotalForMonth(y, m) / new Date(y, m+1, 0).getDate();
-      return rateCache[key];
+      if (!cache[key]) {
+        const days = new Date(y, m+1, 0).getDate();
+        const byGroup = monthlyExpenseTotalsByGroup(y, m);
+        cache[key] = Object.fromEntries(Object.entries(byGroup).map(([g,v]) => [g, v/days]));
+      }
+      return cache[key];
     };
-    let total = 0;
     const cursor = new Date(start.getFullYear(), start.getMonth(), start.getDate());
     const lastDay = new Date(end.getFullYear(), end.getMonth(), end.getDate());
     while (cursor <= lastDay) {
-      total += rateForMonth(cursor.getFullYear(), cursor.getMonth());
+      const rates = ratesForMonth(cursor.getFullYear(), cursor.getMonth());
+      Object.entries(rates).forEach(([g,v]) => add(g, v));
       cursor.setDate(cursor.getDate() + 1);
     }
-    return total;
+    return result;
   }
-  // mode 'weeks': cada semana recebe (valor mensal do mês dono da semana / semanas daquele mês).
-  // Rateio por SEMANA, não por dia — é o que o dono pediu ("dividir entre as 4 ou 5 semanas do
-  // mês") e o que faz a soma das semanas de um mês bater exatamente com o valor mensal. Se o range
-  // pedido for um pedaço de semana, entra proporcional aos dias.
-  let total = 0;
+  // 'weeks': rateio por SEMANA, não por dia. É o que faz a soma das semanas de um mês fechar
+  // exatamente com o valor mensal (cada semana tem um mês dono só — ver weekOwnerMonth). Se o
+  // range pedido for um pedaço de semana, entra proporcional aos dias.
   const cursor = getWeekRange(start).start;
   const lastDay = new Date(end.getFullYear(), end.getMonth(), end.getDate(), 23, 59, 59, 999);
   while (cursor <= lastDay) {
@@ -9174,15 +9246,20 @@ function computeProratedFixedExpenses(start, end, mode) {
     const weekEnd = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + 6, 23, 59, 59, 999);
     const owner = weekOwnerMonth(weekStart);
     const divisor = weeksInMonth(owner.year, owner.month);
-    const weekShare = fixedExpenseTotalForMonth(owner.year, owner.month) / divisor;
-    // Fração da semana que cai dentro do range pedido (1 quando a semana está inteira dentro).
+    const byGroup = monthlyExpenseTotalsByGroup(owner.year, owner.month);
     const overlapStart = weekStart > start ? weekStart : start;
     const overlapEnd = weekEnd < lastDay ? weekEnd : lastDay;
     const days = Math.round((new Date(overlapEnd.getFullYear(), overlapEnd.getMonth(), overlapEnd.getDate()) - new Date(overlapStart.getFullYear(), overlapStart.getMonth(), overlapStart.getDate())) / 86400000) + 1;
-    if (days > 0) total += weekShare * (Math.min(days, 7) / 7);
+    if (days > 0) {
+      const fraction = Math.min(days, 7) / 7;
+      Object.entries(byGroup).forEach(([g,v]) => add(g, (v/divisor) * fraction));
+    }
     cursor.setDate(cursor.getDate() + 7);
   }
-  return total;
+  return result;
+}
+function computeProratedFixedExpenses(start, end, mode) {
+  return Object.values(computeProratedMonthlyByGroup(start, end, mode)).reduce((s,v)=>s+v, 0);
 }
 
 // ---------- Motor da análise ----------
@@ -9203,43 +9280,61 @@ function computeAnalysis(mode, anchorDate) {
   const eventExtraCostRecords = getEventExtraCostsInRange(start, end);
   const dre = computeDRE(entries, allExpenses, stockCosts, losses, internalConsumption, eventCost, eventRevenueRecords, eventExtraCostRecords, partnerConsumption, otherExits);
 
-  // Três baldes. CMO é achado pelo nome do grupo (mesma convenção do Registro Semanal, que lança a
-  // folha nele automaticamente); despesa fixa pela marca de lançamento automático; o resto é
-  // operacional. Grupos marcados como excluídos na configuração ficam fora de tudo.
+  // As despesas viram um valor POR GRUPO DO DRE. Cada grupo recebe duas contribuições:
+  //   • as despesas PONTUAIS lançadas dentro do período (caem inteiras no dia);
+  //   • a fatia rateada das despesas MENSAIS daquele grupo (cobrem o mês todo).
+  // Manter a quebra por grupo — em vez de jogar todo o rateio numa linha "Despesas fixas" — é o
+  // que permite uma despesa ser operacional (grupo) e rateada (tempo) ao mesmo tempo.
+  // Mês inteiro não precisa de rateio: o mês É a unidade natural da despesa mensal.
+  const prorationMode = mode === 'mensal' ? 'none' : cfg.fixedProration;
+  const fixedIsProrated = prorationMode !== 'none';
   const cmoGroupId = (getDreGroups().find(g => g.product_name === 'CMO') || {}).id || null;
   const excluded = new Set(cfg.excludedGroupIds || []);
-  let totalCMO = 0, totalOperational = 0, totalExcluded = 0;
-  const operationalByGroup = {};
+  let totalExcluded = 0, totalPontual = 0, totalMensalRateado = 0;
+  const byGroup = {};
+  const proratedGroups = new Set();
+  const addToGroup = (gid, value) => { const key = gid || '__sem_grupo__'; byGroup[key] = (byGroup[key]||0) + value; };
   allExpenses.forEach(ex => {
     const value = ex.total_cost || 0;
     const groupId = resolveExpenseDreGroupId(ex);
     if (excluded.has(groupId)) { totalExcluded += value; return; }
-    if (isGeneratedFixedExpense(ex)) return; // entra pelo rateio, não pelo valor bruto do mês
-    if (cmoGroupId && groupId === cmoGroupId) { totalCMO += value; return; }
-    totalOperational += value;
-    const key = groupId || '__sem_grupo__';
-    operationalByGroup[key] = (operationalByGroup[key]||0) + value;
+    if (isMonthlyExpense(ex)) return; // entra pelo rateio abaixo, não pelo valor bruto do dia
+    addToGroup(groupId, value);
+    totalPontual += value;
   });
-  // Mês inteiro não precisa de rateio — o mês É a unidade natural da despesa fixa, ratear ali só
-  // introduziria erro de arredondamento sem ganho nenhum.
-  const prorationMode = mode === 'mensal' ? 'none' : cfg.fixedProration;
-  const totalFixed = computeProratedFixedExpenses(start, end, prorationMode);
-  const fixedIsProrated = prorationMode !== 'none';
+  Object.entries(computeProratedMonthlyByGroup(start, end, prorationMode)).forEach(([gid, value]) => {
+    if (excluded.has(gid)) { totalExcluded += value; return; }
+    addToGroup(gid, value);
+    totalMensalRateado += value;
+    if (value > 0) proratedGroups.add(gid);
+  });
+  const totalCMO = cmoGroupId ? (byGroup[cmoGroupId] || 0) : 0;
+  if (cmoGroupId) delete byGroup[cmoGroupId]; // CMO tem linha própria na cascata
+  const totalOperational = Object.values(byGroup).reduce((s,v)=>s+v, 0);
+  // totalFixed = quanto do período veio de despesa mensal rateada. É um INDICADOR (o quanto do
+  // custo é recorrente), não uma linha da cascata — na cascata esse valor já está dentro do grupo
+  // de cada despesa, então subtrair de novo seria contar duas vezes.
+  const totalFixed = totalMensalRateado;
 
-  const operationalLines = Object.entries(operationalByGroup)
-    .map(([id,value]) => ({ id, name: id === '__sem_grupo__' ? 'Sem grupo' : ((getDreGroupById(id)||{}).product_name || 'Sem grupo'), value }))
+  const operationalLines = Object.entries(byGroup)
+    .map(([id,value]) => ({
+      id, value,
+      name: id === '__sem_grupo__' ? 'Sem grupo' : ((getDreGroupById(id)||{}).product_name || 'Sem grupo'),
+      hasProrated: proratedGroups.has(id),
+    }))
     .filter(l => l.value > 0).sort((a,b) => b.value - a.value);
 
   const revenue = dre.totalRevenue;
   const eventNet = dre.totalEventRevenue - dre.totalEventCost;
   const totalSaidasSemVenda = dre.totalLosses + dre.totalInternalConsumption + dre.totalPartnerConsumption + dre.totalOtherExits;
   // Lucro bruto  = faturamento − CMV (o que sobra da mercadoria em si)
-  // Lucro oper.  = lucro bruto − CMO − despesas fixas rateadas − despesas operacionais (o que a
-  //                operação da cafeteria produz, antes de imposto e de perda de estoque)
+  // Lucro oper.  = lucro bruto − CMO − despesas dos demais grupos (o que a operação da cafeteria
+  //                produz, antes de imposto e de perda de estoque). O rateio das mensais já está
+  //                dentro de totalCMO/totalOperational, por grupo — não subtrai de novo.
   // Lucro líquido= lucro operacional − impostos − taxa de cartão − saídas sem venda + eventos
   //                (o que realmente sobrou de dinheiro no período)
   const lucroBruto = revenue - dre.totalCMV;
-  const lucroOperacional = lucroBruto - totalCMO - totalFixed - totalOperational;
+  const lucroOperacional = lucroBruto - totalCMO - totalOperational;
   const lucroLiquido = lucroOperacional - dre.totalTax - dre.totalCardFee - totalSaidasSemVenda + eventNet;
   const pct = (v) => revenue > 0 ? (v/revenue)*100 : 0;
 
@@ -9247,6 +9342,7 @@ function computeAnalysis(mode, anchorDate) {
     mode, start, end, cfg, dre, entries,
     revenue, totalCMV: dre.totalCMV, totalCMVConfirmed: dre.totalCMVConfirmed,
     totalCMO, totalFixed, totalOperational, operationalLines, totalExcluded, fixedIsProrated, prorationMode,
+    totalPontual, totalMensalRateado,
     totalTax: dre.totalTax, totalCardFee: dre.totalCardFee, taxPct: dre.taxPct, cardFeePct: dre.cardFeePct,
     totalLosses: dre.totalLosses, totalInternalConsumption: dre.totalInternalConsumption,
     totalPartnerConsumption: dre.totalPartnerConsumption, totalOtherExits: dre.totalOtherExits,
@@ -9391,8 +9487,7 @@ function renderAnalises() {
         ${row('(–) CMV dos produtos vendidos', a.totalCMV, a.pct.cmv, 'text-red-600')}
         ${ind.lucroBruto ? subtotal('(=) Lucro bruto', a.lucroBruto, a.pct.lucroBruto) : ''}
         ${a.totalCMO > 0 ? row('(–) CMO (folha de pagamento)', a.totalCMO, a.pct.cmo, 'text-red-600') : ''}
-        ${a.totalFixed > 0 ? row('(–) Despesas fixas', a.totalFixed, a.pct.fixas, 'text-red-600', a.fixedIsProrated?'rateadas no período':'') : ''}
-        ${a.operationalLines.map(l => row(`(–) ${l.name}`, l.value, a.revenue>0?(l.value/a.revenue)*100:0, 'text-red-600')).join('')}
+        ${a.operationalLines.map(l => row(`(–) ${l.name}`, l.value, a.revenue>0?(l.value/a.revenue)*100:0, 'text-red-600', l.hasProrated && a.fixedIsProrated ? '· inclui rateio mensal' : '')).join('')}
         ${ind.lucroOperacional ? subtotal('(=) Lucro operacional', a.lucroOperacional, a.pct.lucroOperacional) : ''}
         ${a.totalTax > 0 ? row(`(–) Impostos (${a.taxPct}%)`, a.totalTax, a.pct.imposto, 'text-red-600') : ''}
         ${a.totalCardFee > 0 ? row(`(–) Taxa de cartão (${a.cardFeePct}%)`, a.totalCardFee, a.pct.cartao, 'text-red-600') : ''}
@@ -9404,7 +9499,7 @@ function renderAnalises() {
         ${ind.eventos && a.eventCost > 0 ? row('(–) Custo de eventos', a.eventCost, a.revenue>0?(a.eventCost/a.revenue)*100:0, 'text-red-600') : ''}
         ${ind.lucroLiquido ? subtotal('(=) Lucro líquido', a.lucroLiquido, a.pct.margem) : ''}
       </div>
-      ${a.fixedIsProrated && a.totalFixed > 0 ? `<p class="text-[11px] text-stone-400 mt-3 pt-3 border-t border-stone-100">As despesas fixas mensais foram rateadas ${a.prorationMode==='days'?'por dia do mês':'entre as semanas do mês'} — essa semana recebeu a fatia proporcional dela, não o valor mensal inteiro. Ajuste a regra em Configurações.</p>` : ''}
+      ${a.fixedIsProrated && a.totalMensalRateado > 0 ? `<p class="text-[11px] text-stone-400 mt-3 pt-3 border-t border-stone-100">${fmtCurrency(a.totalMensalRateado)} vieram de despesas mensais rateadas ${a.prorationMode==='days'?'por dia do mês':'entre as semanas do mês'} — essa semana recebeu a fatia proporcional, não o valor mensal inteiro. <button onclick="toggleRateioHelp()" class="text-emerald-700 hover:text-emerald-900 underline font-medium">Como este cálculo é feito?</button></p>` : ''}
       ${a.totalExcluded > 0 ? `<p class="text-[11px] text-stone-400 mt-3 pt-3 border-t border-stone-100">${money(a.totalExcluded)} em gastos ficaram de fora por configuração (grupos excluídos das análises).</p>` : ''}
       ${a.dre.hasEstimate ? `<p class="text-[11px] text-stone-400 mt-3 pt-3 border-t border-stone-100">${money(a.dre.unknownRevenue)} do faturamento ainda não tem custo de receita confirmado — o CMV desses itens é estimado pela proporção média dos que já têm.</p>` : ''}
       ${a.revenue === 0 ? '<p class="text-stone-400 text-center py-4 text-sm">Sem faturamento registrado nesse período</p>' : ''}
@@ -9412,6 +9507,85 @@ function renderAnalises() {
     ${ind.patrimonio ? renderAnalisePatrimonio(a) : ''}
     ${ind.evolucao ? renderAnaliseEvolucao() : ''}
   `;
+  // O painel de ajuda mostra os números do período aberto — se estiver visível, acompanha a troca
+  // de período/modo em vez de ficar exibindo a conta de um período que não está mais na tela.
+  const helpEl = document.getElementById('rateio-help-panel');
+  if (helpEl && !helpEl.classList.contains('hidden')) renderRateioHelp();
+  lucide.createIcons();
+}
+// Painel "Como este cálculo é feito?" — documentação viva: explica a regra E mostra os números
+// reais do período aberto, incluindo a lista nominal das despesas que estão sendo rateadas. A ideia
+// é que qualquer número da análise possa ser auditado sem sair da tela nem ler código.
+function toggleRateioHelp() {
+  const el = document.getElementById('rateio-help-panel'); if (!el) return;
+  const willShow = el.classList.contains('hidden');
+  el.classList.toggle('hidden', !willShow);
+  if (willShow) { renderRateioHelp(); el.scrollIntoView({ behavior:'smooth', block:'nearest' }); }
+}
+function renderRateioHelp() {
+  const el = document.getElementById('rateio-help-panel'); if (!el) return;
+  const a = computeAnalysis(analysisMode, analysisAnchor);
+  const owner = weekOwnerMonth(getWeekRange(a.start).start);
+  const nWeeks = weeksInMonth(owner.year, owner.month);
+  const monthName = new Date(owner.year, owner.month, 1).toLocaleDateString('pt-BR', { month:'long', year:'numeric' });
+  const monthTotal = monthlyExpenseTotalForMonth(owner.year, owner.month);
+  // Lista nominal do que está sendo rateado neste mês, com o motivo da classificação.
+  const prefix = `${owner.year}-${String(owner.month+1).padStart(2,'0')}`;
+  const monthlyItems = getExpenses().filter(ex => (ex.expense_date||'').startsWith(prefix) && isMonthlyExpense(ex));
+  const reasonOf = (ex) => {
+    if (isGeneratedFixedExpense(ex)) return 'Despesa Fixa (automática)';
+    if (ex.system_name === 'mensal') return 'marcada no lançamento';
+    const cat = getExpenseCategoryById(ex.cost_unit);
+    return cat ? `categoria "${cat.product_name}" é mensal` : 'mensal';
+  };
+  const itemsHtml = monthlyItems.length === 0
+    ? '<p class="text-xs text-stone-400 py-1">Nenhuma despesa mensal registrada nesse mês ainda.</p>'
+    : monthlyItems.sort((x,y)=>(y.total_cost||0)-(x.total_cost||0)).map(ex => `
+      <div class="flex justify-between items-baseline gap-2 py-1 border-b border-stone-100 last:border-b-0">
+        <span class="text-xs text-stone-600 min-w-0 truncate">${ex.product_name} <span class="text-[10px] text-stone-400">· ${reasonOf(ex)}</span></span>
+        <span class="text-xs font-semibold text-stone-700 whitespace-nowrap">${fmtCurrency(ex.total_cost||0)} <span class="text-stone-400 font-normal">→ ${fmtCurrency((ex.total_cost||0)/nWeeks)}/sem</span></span>
+      </div>`).join('');
+  const modeName = { weeks:'Dividir entre as semanas do mês', days:'Dividir por dia do mês', none:'Sem rateio' }[a.prorationMode] || a.prorationMode;
+  el.innerHTML = `
+    <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+      <div class="flex items-start justify-between gap-2 mb-3">
+        <h3 class="font-semibold text-sm text-emerald-900 flex items-center gap-2"><i data-lucide="help-circle" class="w-4 h-4"></i>Como este cálculo é feito?</h3>
+        <button onclick="toggleRateioHelp()" class="text-emerald-700 hover:text-emerald-900 flex-shrink-0"><i data-lucide="x" class="w-4 h-4"></i></button>
+      </div>
+      <div class="space-y-3 text-xs text-stone-700">
+        <div>
+          <p class="font-semibold text-stone-800 mb-1">1. Dois conceitos separados</p>
+          <p><strong>Grupo do DRE</strong> (Despesas Operacionais, CMO...) é <em>onde</em> a despesa aparece no relatório. <strong>Forma de rateio</strong> (mensal ou pontual) é <em>como</em> ela se distribui no tempo. São independentes: a conta de luz pode estar em Despesas Operacionais <em>e</em> ser rateada por semana.</p>
+        </div>
+        <div>
+          <p class="font-semibold text-stone-800 mb-1">2. O que é rateado</p>
+          <p><strong>Mensal (rateia):</strong> o pagamento cobre o mês inteiro — aluguel, água, energia, internet, limpeza, utensílios, contador. A semana que usou 1/4 do mês arca com 1/4 do custo.</p>
+          <p class="mt-1"><strong>Pontual (não rateia):</strong> o gasto acontece num dia e se esgota nele — uma compra avulsa, um conserto. Cai inteiro na semana em que foi lançado.</p>
+          <p class="mt-1 text-stone-500">Uma despesa é mensal se: veio da tela de Despesas Fixas, ou foi marcada como mensal no lançamento, ou a categoria dela está marcada como mensal em Configurações.</p>
+        </div>
+        <div>
+          <p class="font-semibold text-stone-800 mb-1">3. Quantas semanas tem o mês</p>
+          <p>A semana vai de <strong>segunda a domingo</strong>. Quando ela cruza a virada do mês, pertence ao mês onde cai a <strong>quinta-feira</strong> (regra ISO-8601, a mesma do calendário). Assim cada semana tem um mês dono só — nenhum valor é contado duas vezes nem some.</p>
+          <p class="mt-1 bg-white rounded-lg px-2.5 py-1.5 border border-emerald-100"><strong>${monthName.charAt(0).toUpperCase()+monthName.slice(1)}</strong> tem <strong>${nWeeks} semanas</strong> por essa regra.</p>
+        </div>
+        <div>
+          <p class="font-semibold text-stone-800 mb-1">4. A conta deste período</p>
+          <div class="bg-white rounded-lg px-2.5 py-2 border border-emerald-100 space-y-1">
+            <div class="flex justify-between"><span class="text-stone-500">Regra ativa</span><span class="font-semibold">${modeName}</span></div>
+            <div class="flex justify-between"><span class="text-stone-500">Despesas mensais do mês</span><span class="font-semibold">${fmtCurrency(monthTotal)}</span></div>
+            <div class="flex justify-between"><span class="text-stone-500">÷ ${nWeeks} semanas</span><span class="font-semibold">${fmtCurrency(nWeeks>0?monthTotal/nWeeks:0)} por semana</span></div>
+            <div class="flex justify-between pt-1 border-t border-stone-100"><span class="text-stone-500">Coube a este período</span><span class="font-bold text-emerald-800">${fmtCurrency(a.totalMensalRateado)}</span></div>
+            <div class="flex justify-between"><span class="text-stone-500">+ despesas pontuais do período</span><span class="font-semibold">${fmtCurrency(a.totalPontual)}</span></div>
+          </div>
+          ${a.mode === 'mensal' ? '<p class="mt-1.5 text-stone-500">Na análise <strong>mensal</strong> não há rateio: o mês é a unidade natural da despesa mensal, então entra o valor cheio.</p>' : ''}
+        </div>
+        <div>
+          <p class="font-semibold text-stone-800 mb-1">5. Despesas mensais de ${monthName} (${monthlyItems.length})</p>
+          <div class="bg-white rounded-lg px-2.5 py-1.5 border border-emerald-100 max-h-44 overflow-y-auto">${itemsHtml}</div>
+        </div>
+        <p class="text-stone-500 pt-1 border-t border-emerald-200">Marque quais categorias são mensais em <strong>Configurações → Categorias</strong>, e a regra de rateio em <strong>Configurações → Análises</strong>.</p>
+      </div>
+    </div>`;
   lucide.createIcons();
 }
 function renderAnalisePatrimonio(a) {
