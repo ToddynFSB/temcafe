@@ -566,7 +566,8 @@
 <div id="financeiro-area" class="hidden">
   <nav id="finance-nav" class="max-w-7xl mx-auto px-4 pt-3 pb-1 hidden">
     <div class="nav-grid">
-      <button class="finance-tab-btn finance-tab-active px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="dre"><i data-lucide="scale" class="w-5 h-5"></i>DRE</button>
+      <button class="finance-tab-btn finance-tab-active px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="analises"><i data-lucide="line-chart" class="w-5 h-5"></i>Análises</button>
+      <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="dre"><i data-lucide="scale" class="w-5 h-5"></i>DRE</button>
       <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="estoque-custos"><i data-lucide="banknote" class="w-5 h-5"></i>Estoque &amp; Custos</button>
       <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="vendas"><i data-lucide="credit-card" class="w-5 h-5"></i>Vendas</button>
       <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="faturamento"><i data-lucide="trending-up" class="w-5 h-5"></i>Faturamento</button>
@@ -886,6 +887,30 @@
     </section>
 
     <!-- Sub-aba: DRE -->
+    <!-- Análises — visão gerencial por semana (segunda a domingo) e por mês. Constrói sobre o mesmo
+         motor do DRE, mas separa CMO / Despesas Fixas / Operacionais e rateia a despesa fixa mensal
+         entre as semanas, pra que cada semana mostre o custo real dela. -->
+    <section id="fpanel-analises" class="hidden fade-in">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-bold text-stone-800 flex items-center gap-2"><i data-lucide="line-chart" class="w-5 h-5 text-emerald-600"></i>Análises</h2>
+        <button onclick="lockFinanceiro()" class="text-xs text-stone-400 hover:text-stone-600 flex items-center gap-1"><i data-lucide="lock" class="w-3.5 h-3.5"></i>Bloquear</button>
+      </div>
+      <p class="text-xs text-stone-400 mb-4">Quanto realmente sobrou de dinheiro no período. A semana vai de segunda a domingo (domingo é o último dia), acompanhando a operação da cafeteria. Despesas fixas mensais entram rateadas entre as semanas do mês.</p>
+      <div class="flex gap-2 mb-3">
+        <button class="analise-mode-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-800 text-white" data-mode="semanal" onclick="switchAnalysisMode('semanal')">Semanal</button>
+        <button class="analise-mode-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-mode="mensal" onclick="switchAnalysisMode('mensal')">Mensal</button>
+      </div>
+      <div class="bg-white rounded-xl px-3 py-2.5 shadow-sm border border-stone-100 mb-4 flex items-center justify-between gap-2">
+        <button onclick="shiftAnalysisPeriod(-1)" class="px-2.5 py-1.5 rounded-lg text-sm text-stone-600 hover:bg-stone-100"><i data-lucide="chevron-left" class="w-4 h-4"></i></button>
+        <div class="text-center min-w-0">
+          <p class="text-sm font-bold text-stone-800 truncate" id="analise-period-label">—</p>
+          <p class="text-[10px] text-stone-400" id="analise-period-sub"></p>
+        </div>
+        <button id="analise-next-btn" onclick="shiftAnalysisPeriod(1)" class="px-2.5 py-1.5 rounded-lg text-sm text-stone-600 hover:bg-stone-100"><i data-lucide="chevron-right" class="w-4 h-4"></i></button>
+      </div>
+      <div id="analises-content"></div>
+    </section>
+
     <section id="fpanel-dre" class="hidden fade-in">
       <div class="flex items-center justify-between mb-4">
         <h2 class="text-lg font-bold text-stone-800 flex items-center gap-2"><i data-lucide="scale" class="w-5 h-5 text-emerald-600"></i>DRE — Resultado do Período</h2>
@@ -1099,6 +1124,37 @@
           <div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Taxa de cartão</label><div class="relative"><input id="finance-settings-card-fee" type="number" min="0" max="100" step="any" required class="input-field text-sm w-full pr-8"><span class="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-stone-400">%</span></div></div>
           <button type="submit" class="btn-primary px-4 py-2.5 rounded-lg text-sm font-medium">Salvar</button>
         </form>
+      </div>
+
+      <div class="bg-white rounded-xl p-5 shadow-sm border border-stone-100 mb-5">
+        <h3 class="font-semibold mb-1 text-stone-800 text-sm flex items-center gap-2"><i data-lucide="line-chart" class="w-4 h-4 text-emerald-600"></i>Análises</h3>
+        <p class="text-xs text-stone-400 mb-3">Como as análises semanal e mensal são calculadas e o que aparece nelas.</p>
+        <form onsubmit="handleSaveAnalysisSettings(event)" class="grid sm:grid-cols-[1fr_1fr_auto] gap-2 items-end mb-4">
+          <div>
+            <label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Rateio das despesas fixas</label>
+            <select id="analysis-settings-proration" class="input-field text-sm w-full">
+              <option value="weeks">Dividir entre as semanas do mês</option>
+              <option value="days">Dividir por dia do mês</option>
+              <option value="none">Sem rateio (tudo na 1ª semana)</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Períodos no gráfico</label>
+            <input id="analysis-settings-periods" type="number" min="2" max="24" step="1" required class="input-field text-sm w-full">
+          </div>
+          <button type="submit" class="btn-primary px-4 py-2.5 rounded-lg text-sm font-medium">Salvar</button>
+        </form>
+        <div class="grid sm:grid-cols-2 gap-4">
+          <div>
+            <p class="text-xs font-semibold text-stone-600 uppercase tracking-wide mb-1.5">Indicadores exibidos</p>
+            <div id="analysis-settings-indicators" class="max-h-56 overflow-y-auto pr-1"></div>
+          </div>
+          <div>
+            <p class="text-xs font-semibold text-stone-600 uppercase tracking-wide mb-1.5">Grupos de gasto incluídos</p>
+            <p class="text-[11px] text-stone-400 mb-1">Desmarque um grupo pra deixar os gastos dele fora do cálculo das análises.</p>
+            <div id="analysis-settings-groups" class="max-h-48 overflow-y-auto pr-1"></div>
+          </div>
+        </div>
       </div>
 
       <div class="bg-white rounded-xl p-5 shadow-sm border border-stone-100 mb-5">
@@ -5641,7 +5697,9 @@ function closeDeleteConfirm() { document.getElementById('delete-confirm-modal').
 let financeUnlocked = false;
 let financePassword = '';
 let financeData = [];
-let activeFinanceTab = 'dre';
+// Análises é a tela de entrada da Central Financeira — é ela que responde "quanto sobrou?", que é
+// a pergunta que se faz ao abrir o financeiro. O DRE continua a um clique, pro detalhe contábil.
+let activeFinanceTab = 'analises';
 let custosSubTab = 'custos'; // sub-aba ativa dentro do grupo "Estoque & Custos"
 let currentArea = 'estoque'; // 'estoque' | 'financeiro'
 let financePrecosSearch = '';
@@ -5710,17 +5768,19 @@ document.addEventListener('click', (e) => {
   document.getElementById('custos-subnav').classList.toggle('hidden', activeFinanceTab!=='estoque-custos');
   if (activeFinanceTab === 'estoque-custos') renderCustosSubnav();
   else ['fpanel-custos','fpanel-precos','fpanel-cmv','fpanel-estoque-valor','fpanel-saidas-sem-venda'].forEach(id => document.getElementById(id).classList.add('hidden'));
+  document.getElementById('fpanel-analises').classList.toggle('hidden', activeFinanceTab!=='analises');
   document.getElementById('fpanel-vendas').classList.toggle('hidden', activeFinanceTab!=='vendas');
   document.getElementById('fpanel-faturamento').classList.toggle('hidden', activeFinanceTab!=='faturamento');
   document.getElementById('fpanel-dre').classList.toggle('hidden', activeFinanceTab!=='dre');
   document.getElementById('fpanel-despesas').classList.toggle('hidden', activeFinanceTab!=='despesas');
   document.getElementById('fpanel-config-gastos').classList.toggle('hidden', activeFinanceTab!=='config-gastos');
   document.getElementById('fpanel-funcionarios').classList.toggle('hidden', activeFinanceTab!=='funcionarios');
+  if (activeFinanceTab === 'analises') renderAnalises();
   if (activeFinanceTab === 'vendas') { renderSalesSelect(); renderSalesToday(); renderPendingEvents(); if (currentSalesMode==='bulk') { initBulkSalesDate(); } }
   if (activeFinanceTab === 'faturamento') renderFaturamento();
   if (activeFinanceTab === 'dre') renderDRE();
   if (activeFinanceTab === 'despesas') renderExpenses();
-  if (activeFinanceTab === 'config-gastos') { renderExpenseConfig(); renderFixedExpensesConfig(); renderFinanceSettingsConfig(); }
+  if (activeFinanceTab === 'config-gastos') { renderExpenseConfig(); renderFixedExpensesConfig(); renderFinanceSettingsConfig(); renderAnalysisSettingsConfig(); }
   if (activeFinanceTab === 'funcionarios') renderEmployees();
   lucide.createIcons();
 });
@@ -6722,6 +6782,7 @@ function renderFinanceiro() {
   document.getElementById('custos-subnav').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='estoque-custos');
   if (financeUnlocked && activeFinanceTab === 'estoque-custos') renderCustosSubnav();
   else ['fpanel-custos','fpanel-precos','fpanel-cmv','fpanel-estoque-valor','fpanel-saidas-sem-venda'].forEach(id => document.getElementById(id).classList.add('hidden'));
+  document.getElementById('fpanel-analises').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='analises');
   document.getElementById('fpanel-vendas').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='vendas');
   document.getElementById('fpanel-faturamento').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='faturamento');
   document.getElementById('fpanel-dre').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='dre');
@@ -6730,11 +6791,12 @@ function renderFinanceiro() {
   document.getElementById('fpanel-funcionarios').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='funcionarios');
   if (financeUnlocked) {
     renderFinancePending(); renderStockCosts(); renderFinancePrecos(); renderFinanceCMV();
+    if (activeFinanceTab === 'analises') renderAnalises();
     if (activeFinanceTab === 'vendas') { renderSalesSelect(); renderSalesToday(); renderPendingEvents(); if (currentSalesMode==='bulk') { initBulkSalesDate(); } }
     if (activeFinanceTab === 'faturamento') renderFaturamento();
     if (activeFinanceTab === 'dre') renderDRE();
     if (activeFinanceTab === 'despesas') renderExpenses();
-    if (activeFinanceTab === 'config-gastos') { renderExpenseConfig(); renderFixedExpensesConfig(); renderFinanceSettingsConfig(); }
+    if (activeFinanceTab === 'config-gastos') { renderExpenseConfig(); renderFixedExpensesConfig(); renderFinanceSettingsConfig(); renderAnalysisSettingsConfig(); }
     if (activeFinanceTab === 'funcionarios') renderEmployees();
     lucide.createIcons();
   }
@@ -6757,9 +6819,10 @@ async function unlockFinanceiro() {
     financeUnlocked = true;
     await seedDefaultDreGroupsIfNeeded();
     await syncFixedExpenses();
+    await syncStockSnapshot();
     hideLoadingProgress();
     document.getElementById('finance-password-input').value = '';
-    activeFinanceTab = 'dre';
+    activeFinanceTab = 'analises';
     renderFinanceiro();
   } catch (err) {
     hideLoadingProgress();
@@ -8931,6 +8994,557 @@ function renderDRE() {
       ${entries.length === 0 && expenses.length === 0 ? '<p class="text-stone-400 text-center py-4 text-sm">Sem vendas nem gastos no período</p>' : ''}
     </div>
   `;
+}
+
+// ============================================================
+// ANÁLISES — Semanal e Mensal. Responde "quanto realmente sobrou de dinheiro nesse período?".
+//
+// NÃO é um segundo motor de cálculo: reaproveita computeDRE() inteiro (CMV com extrapolação,
+// impostos, taxa de cartão, perdas, consumos, eventos) e só faz por cima o que o DRE não faz:
+//   1. separa as despesas em três baldes com significado gerencial — CMO (mão de obra),
+//      Despesas Fixas e Despesas Operacionais — em vez de uma linha por grupo do DRE;
+//   2. rateia a despesa fixa MENSAL entre as semanas do mês (senão a 1ª semana do mês comeria o
+//      aluguel inteiro e as outras 3-4 apareceriam lucrativas demais — o número mais enganoso
+//      que esse painel poderia mostrar);
+//   3. quebra o lucro em bruto / operacional / líquido, que é o que dá pra agir em cima.
+//
+// Semana = segunda a domingo, domingo sendo o ÚLTIMO dia (padrão operacional da cafeteria, que
+// abre de quarta a domingo — com semana começando no domingo, todo fim de semana ficaria partido
+// entre dois períodos e nenhuma análise semanal faria sentido).
+//
+// type='analysis_settings' -> {id, type, product_name('config'), employee_notes(=JSON com toda a
+//   configuração), updated_at} — singleton. A config inteira mora num JSON só, de propósito: assim
+//   um parâmetro novo não precisa de coluna nova na planilha nem de mudança no Code.gs.
+// type='stock_snapshot'    -> {id, type, spreadsheet_name(=chave do período, 'snap_<periodKey>'),
+//   total_cost(=valor do estoque), expense_date(=data do registro), updated_at}
+// ============================================================
+const ANALYSIS_DEFAULTS = {
+  fixedProration: 'weeks',      // 'weeks' | 'days' | 'none' — como ratear a despesa fixa mensal
+  historyPeriods: 8,            // quantos períodos aparecem no gráfico de evolução
+  excludedGroupIds: [],         // grupos do DRE que ficam de fora das despesas operacionais
+  indicators: {
+    lucroBruto:true, lucroOperacional:true, lucroLiquido:true, margem:true,
+    cmv:true, cmo:true, imposto:true, cartao:true, fixas:true, operacionais:true,
+    saidasSemVenda:true, eventos:true, patrimonio:true, evolucao:true,
+  },
+};
+// Rótulo de cada indicador configurável — fonte única, usada tanto pela tela de configuração
+// (checkboxes) quanto pelo render (decidir o que mostrar), pra não duplicar a lista em dois lugares.
+const ANALYSIS_INDICATOR_LABELS = {
+  lucroBruto:'Lucro bruto', lucroOperacional:'Lucro operacional', lucroLiquido:'Lucro líquido',
+  margem:'Margem de lucro (%)', cmv:'CMV (%)', cmo:'CMO (%)', imposto:'Impostos (%)',
+  cartao:'Taxa de cartão (%)', fixas:'Despesas fixas (%)', operacionais:'Despesas operacionais (%)',
+  saidasSemVenda:'Saídas sem venda', eventos:'Eventos', patrimonio:'Estoque (patrimônio)',
+  evolucao:'Gráfico de evolução',
+};
+function getAnalysisSettingsRecord() { return financeData.find(r => r.type === 'analysis_settings') || null; }
+// Sempre devolve um objeto completo, mesmo que o registro não exista ou tenha JSON quebrado/antigo:
+// faz merge com os padrões, então um parâmetro adicionado depois já nasce com valor válido pra quem
+// salvou a config antes dele existir.
+function getAnalysisSettings() {
+  const rec = getAnalysisSettingsRecord();
+  let saved = {};
+  if (rec && rec.employee_notes) { try { saved = JSON.parse(rec.employee_notes) || {}; } catch(e) { saved = {}; } }
+  return {
+    ...ANALYSIS_DEFAULTS, ...saved,
+    indicators: { ...ANALYSIS_DEFAULTS.indicators, ...(saved.indicators||{}) },
+    excludedGroupIds: Array.isArray(saved.excludedGroupIds) ? saved.excludedGroupIds : [],
+    _rec: rec,
+  };
+}
+async function saveAnalysisSettings(patch) {
+  const current = getAnalysisSettings();
+  const { _rec, ...rest } = current;
+  const next = { ...rest, ...patch, indicators: { ...rest.indicators, ...(patch.indicators||{}) } };
+  const existing = _rec;
+  const payload = { type:'analysis_settings', product_name:'config', employee_notes: JSON.stringify(next), updated_at:new Date().toISOString() };
+  if (existing) {
+    await financeApiCall('update', { data: { ...existing, ...payload } });
+    Object.assign(existing, payload);
+  } else {
+    const r = await financeApiCall('create', { data: payload });
+    financeData.push({ id:r.id, ...payload });
+  }
+  return next;
+}
+
+// ---------- Períodos (semana segunda→domingo, mês cheio) ----------
+// getDay(): 0=domingo ... 6=sábado. Pra semana começando na segunda, domingo precisa contar como
+// o 7º dia (offset 6), não como o 1º — daí o (day+6)%7.
+function getWeekRange(date) {
+  const d = new Date(date);
+  const offset = (d.getDay() + 6) % 7;
+  const start = new Date(d.getFullYear(), d.getMonth(), d.getDate() - offset, 0, 0, 0, 0);
+  const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6, 23, 59, 59, 999);
+  return { start, end };
+}
+function getMonthRange(date) {
+  const d = new Date(date);
+  const start = new Date(d.getFullYear(), d.getMonth(), 1, 0, 0, 0, 0);
+  const end = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
+  return { start, end };
+}
+function analysisPeriodRange(mode, anchorDate) {
+  return mode === 'mensal' ? getMonthRange(anchorDate) : getWeekRange(anchorDate);
+}
+function shiftAnalysisAnchor(mode, anchorDate, delta) {
+  const d = new Date(anchorDate);
+  return mode === 'mensal'
+    ? new Date(d.getFullYear(), d.getMonth() + delta, 1, 12, 0, 0)
+    : new Date(d.getFullYear(), d.getMonth(), d.getDate() + delta * 7, 12, 0, 0);
+}
+function analysisPeriodKey(mode, anchorDate) {
+  const { start } = analysisPeriodRange(mode, anchorDate);
+  return mode === 'mensal' ? `m_${localDateStr(start).slice(0,7)}` : `w_${localDateStr(start)}`;
+}
+function analysisPeriodLabel(mode, anchorDate) {
+  const { start, end } = analysisPeriodRange(mode, anchorDate);
+  if (mode === 'mensal') {
+    const nome = start.toLocaleDateString('pt-BR', { month:'long', year:'numeric' });
+    return nome.charAt(0).toUpperCase() + nome.slice(1);
+  }
+  const fmt = (d) => d.toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit' });
+  return `${fmt(start)} a ${fmt(end)}`;
+}
+// A qual mês uma semana "pertence", quando ela cruza a virada do mês. Regra da ISO-8601 (a mesma
+// que decide de que ano é a semana 1): vale o mês da QUINTA-FEIRA, o dia do meio da semana. Assim
+// cada semana pertence a exatamente um mês, e nenhuma despesa fixa é contada duas vezes nem some.
+function weekOwnerMonth(weekStart) {
+  const thursday = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + 3);
+  return { year: thursday.getFullYear(), month: thursday.getMonth() };
+}
+// Quantas semanas pertencem a esse mês pela regra acima (4 ou 5) — é o divisor do rateio.
+// Contar assim (em vez de "semanas que tocam o mês") é o que garante que a soma do rateio de todas
+// as semanas do mês dê exatamente o valor mensal: cada semana tem um dono só.
+function weeksInMonth(year, month) {
+  let count = 0;
+  const cursor = getWeekRange(new Date(year, month, 1)).start;
+  while (true) {
+    const owner = weekOwnerMonth(cursor);
+    if (owner.year > year || (owner.year === year && owner.month > month)) break;
+    if (owner.year === year && owner.month === month) count++;
+    cursor.setDate(cursor.getDate() + 7);
+  }
+  return count || 1;
+}
+
+// ---------- Rateio das despesas fixas ----------
+// syncFixedExpenses() lança a despesa fixa como um 'expense' único no dia 1 de cada mês, marcado
+// com spreadsheet_name='fixed_<id>_<yyyy-MM>'. Pra análise semanal isso precisa ser diluído: o
+// aluguel não foi "gasto" todo na primeira semana. A taxa é diária, então uma semana que cruza a
+// virada do mês recebe a fatia certa de cada um dos dois meses automaticamente.
+function isGeneratedFixedExpense(ex) { return typeof ex.spreadsheet_name === 'string' && ex.spreadsheet_name.startsWith('fixed_'); }
+function fixedExpenseTotalForMonth(year, month) {
+  const prefix = `${year}-${String(month+1).padStart(2,'0')}`;
+  return getExpenses()
+    .filter(ex => isGeneratedFixedExpense(ex) && (ex.expense_date||'').startsWith(prefix))
+    .reduce((s,ex) => s + (ex.total_cost||0), 0);
+}
+function computeProratedFixedExpenses(start, end, mode) {
+  if (mode === 'none') {
+    return getExpensesInRange(start, end).filter(isGeneratedFixedExpense).reduce((s,ex)=>s+(ex.total_cost||0), 0);
+  }
+  if (mode === 'days') {
+    // Taxa diária = valor mensal / dias do mês. Caminha dia a dia, então uma semana que cruza a
+    // virada do mês recebe a fatia certa de cada um dos dois meses automaticamente.
+    const rateCache = {};
+    const rateForMonth = (y, m) => {
+      const key = `${y}-${m}`;
+      if (rateCache[key] == null) rateCache[key] = fixedExpenseTotalForMonth(y, m) / new Date(y, m+1, 0).getDate();
+      return rateCache[key];
+    };
+    let total = 0;
+    const cursor = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+    const lastDay = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+    while (cursor <= lastDay) {
+      total += rateForMonth(cursor.getFullYear(), cursor.getMonth());
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    return total;
+  }
+  // mode 'weeks': cada semana recebe (valor mensal do mês dono da semana / semanas daquele mês).
+  // Rateio por SEMANA, não por dia — é o que o dono pediu ("dividir entre as 4 ou 5 semanas do
+  // mês") e o que faz a soma das semanas de um mês bater exatamente com o valor mensal. Se o range
+  // pedido for um pedaço de semana, entra proporcional aos dias.
+  let total = 0;
+  const cursor = getWeekRange(start).start;
+  const lastDay = new Date(end.getFullYear(), end.getMonth(), end.getDate(), 23, 59, 59, 999);
+  while (cursor <= lastDay) {
+    const weekStart = new Date(cursor);
+    const weekEnd = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + 6, 23, 59, 59, 999);
+    const owner = weekOwnerMonth(weekStart);
+    const divisor = weeksInMonth(owner.year, owner.month);
+    const weekShare = fixedExpenseTotalForMonth(owner.year, owner.month) / divisor;
+    // Fração da semana que cai dentro do range pedido (1 quando a semana está inteira dentro).
+    const overlapStart = weekStart > start ? weekStart : start;
+    const overlapEnd = weekEnd < lastDay ? weekEnd : lastDay;
+    const days = Math.round((new Date(overlapEnd.getFullYear(), overlapEnd.getMonth(), overlapEnd.getDate()) - new Date(overlapStart.getFullYear(), overlapStart.getMonth(), overlapStart.getDate())) / 86400000) + 1;
+    if (days > 0) total += weekShare * (Math.min(days, 7) / 7);
+    cursor.setDate(cursor.getDate() + 7);
+  }
+  return total;
+}
+
+// ---------- Motor da análise ----------
+// Monta em cima do computeDRE (que já resolve CMV, impostos, perdas, consumos e eventos) só o que
+// é específico da análise gerencial: os três baldes de despesa e os três níveis de lucro.
+function computeAnalysis(mode, anchorDate) {
+  const cfg = getAnalysisSettings();
+  const { start, end } = analysisPeriodRange(mode, anchorDate);
+  const entries = getSaleRevenueEntriesInRange(start, end);
+  const allExpenses = getExpensesInRange(start, end);
+  const stockCosts = getStockCostsInRange(start, end);
+  const losses = computeLossesCost(start, end);
+  const internalConsumption = computeSaidaManualCost('consumo_interno', start, end);
+  const partnerConsumption = computeSaidaManualCost('consumo_socios', start, end);
+  const eventCost = computeSaidaManualCost('uso_evento', start, end);
+  const otherExits = computeSaidaManualCost('outros', start, end);
+  const eventRevenueRecords = getEventRevenueInRange(start, end);
+  const eventExtraCostRecords = getEventExtraCostsInRange(start, end);
+  const dre = computeDRE(entries, allExpenses, stockCosts, losses, internalConsumption, eventCost, eventRevenueRecords, eventExtraCostRecords, partnerConsumption, otherExits);
+
+  // Três baldes. CMO é achado pelo nome do grupo (mesma convenção do Registro Semanal, que lança a
+  // folha nele automaticamente); despesa fixa pela marca de lançamento automático; o resto é
+  // operacional. Grupos marcados como excluídos na configuração ficam fora de tudo.
+  const cmoGroupId = (getDreGroups().find(g => g.product_name === 'CMO') || {}).id || null;
+  const excluded = new Set(cfg.excludedGroupIds || []);
+  let totalCMO = 0, totalOperational = 0, totalExcluded = 0;
+  const operationalByGroup = {};
+  allExpenses.forEach(ex => {
+    const value = ex.total_cost || 0;
+    const groupId = resolveExpenseDreGroupId(ex);
+    if (excluded.has(groupId)) { totalExcluded += value; return; }
+    if (isGeneratedFixedExpense(ex)) return; // entra pelo rateio, não pelo valor bruto do mês
+    if (cmoGroupId && groupId === cmoGroupId) { totalCMO += value; return; }
+    totalOperational += value;
+    const key = groupId || '__sem_grupo__';
+    operationalByGroup[key] = (operationalByGroup[key]||0) + value;
+  });
+  // Mês inteiro não precisa de rateio — o mês É a unidade natural da despesa fixa, ratear ali só
+  // introduziria erro de arredondamento sem ganho nenhum.
+  const prorationMode = mode === 'mensal' ? 'none' : cfg.fixedProration;
+  const totalFixed = computeProratedFixedExpenses(start, end, prorationMode);
+  const fixedIsProrated = prorationMode !== 'none';
+
+  const operationalLines = Object.entries(operationalByGroup)
+    .map(([id,value]) => ({ id, name: id === '__sem_grupo__' ? 'Sem grupo' : ((getDreGroupById(id)||{}).product_name || 'Sem grupo'), value }))
+    .filter(l => l.value > 0).sort((a,b) => b.value - a.value);
+
+  const revenue = dre.totalRevenue;
+  const eventNet = dre.totalEventRevenue - dre.totalEventCost;
+  const totalSaidasSemVenda = dre.totalLosses + dre.totalInternalConsumption + dre.totalPartnerConsumption + dre.totalOtherExits;
+  // Lucro bruto  = faturamento − CMV (o que sobra da mercadoria em si)
+  // Lucro oper.  = lucro bruto − CMO − despesas fixas rateadas − despesas operacionais (o que a
+  //                operação da cafeteria produz, antes de imposto e de perda de estoque)
+  // Lucro líquido= lucro operacional − impostos − taxa de cartão − saídas sem venda + eventos
+  //                (o que realmente sobrou de dinheiro no período)
+  const lucroBruto = revenue - dre.totalCMV;
+  const lucroOperacional = lucroBruto - totalCMO - totalFixed - totalOperational;
+  const lucroLiquido = lucroOperacional - dre.totalTax - dre.totalCardFee - totalSaidasSemVenda + eventNet;
+  const pct = (v) => revenue > 0 ? (v/revenue)*100 : 0;
+
+  return {
+    mode, start, end, cfg, dre, entries,
+    revenue, totalCMV: dre.totalCMV, totalCMVConfirmed: dre.totalCMVConfirmed,
+    totalCMO, totalFixed, totalOperational, operationalLines, totalExcluded, fixedIsProrated, prorationMode,
+    totalTax: dre.totalTax, totalCardFee: dre.totalCardFee, taxPct: dre.taxPct, cardFeePct: dre.cardFeePct,
+    totalLosses: dre.totalLosses, totalInternalConsumption: dre.totalInternalConsumption,
+    totalPartnerConsumption: dre.totalPartnerConsumption, totalOtherExits: dre.totalOtherExits,
+    totalSaidasSemVenda, eventRevenue: dre.totalEventRevenue, eventCost: dre.totalEventCost, eventNet,
+    lucroBruto, lucroOperacional, lucroLiquido,
+    pct: {
+      cmv: pct(dre.totalCMV), cmo: pct(totalCMO), fixas: pct(totalFixed), operacionais: pct(totalOperational),
+      imposto: pct(dre.totalTax), cartao: pct(dre.totalCardFee), saidasSemVenda: pct(totalSaidasSemVenda),
+      lucroBruto: pct(lucroBruto), lucroOperacional: pct(lucroOperacional), margem: pct(lucroLiquido),
+    },
+  };
+}
+
+// ---------- Patrimônio: valor do estoque ao longo do tempo ----------
+// computeInventoryValue() é um instantâneo de AGORA — não dá pra reconstruir o valor do estoque de
+// uma semana passada sem reprocessar todo o histórico de movimentações com o custo vigente em cada
+// data. Em vez disso, o sistema grava um snapshot por período toda vez que a Central Financeira é
+// aberta (regravando o do período corrente, que ainda está em andamento). A variação compara o
+// valor de agora com o último snapshot do período anterior — é aproximado por natureza (vale o
+// último valor registrado naquele período, não o fechamento exato), e a tela diz isso.
+function getStockSnapshots() { return financeData.filter(r => r.type === 'stock_snapshot'); }
+function getStockSnapshotFor(periodKey) { return getStockSnapshots().find(s => s.spreadsheet_name === `snap_${periodKey}`) || null; }
+let stockSnapshotSyncAttempted = false;
+async function syncStockSnapshot() {
+  if (stockSnapshotSyncAttempted) return;
+  stockSnapshotSyncAttempted = true;
+  try {
+    const value = computeInventoryValue().total;
+    if (!(value > 0)) return;
+    const now = new Date();
+    const today = localDateStr(now);
+    // Um snapshot por semana e um por mês — as duas análises precisam de bases diferentes.
+    for (const mode of ['semanal','mensal']) {
+      const key = analysisPeriodKey(mode, now);
+      const existing = getStockSnapshotFor(key);
+      if (existing) {
+        if (existing.expense_date === today && Math.abs((existing.total_cost||0) - value) < 0.01) continue;
+        await financeApiCall('update', { data: { ...existing, total_cost:value, expense_date:today, updated_at:now.toISOString() } });
+        Object.assign(existing, { total_cost:value, expense_date:today, updated_at:now.toISOString() });
+      } else {
+        const payload = { type:'stock_snapshot', spreadsheet_name:`snap_${key}`, total_cost:value, expense_date:today, updated_at:now.toISOString() };
+        const r = await financeApiCall('create', { data: payload });
+        financeData.push({ id:r.id, ...payload });
+      }
+    }
+  } catch (e) {
+    console.error('Erro ao gravar snapshot do estoque:', e);
+    stockSnapshotSyncAttempted = false;
+  }
+}
+// Valor do estoque de um período: o snapshot dele, ou o valor atual quando o período é o corrente
+// (o snapshot do período em andamento pode estar defasado dentro da mesma sessão).
+function stockValueForPeriod(mode, anchorDate) {
+  const key = analysisPeriodKey(mode, anchorDate);
+  const currentKey = analysisPeriodKey(mode, new Date());
+  if (key === currentKey) return { value: computeInventoryValue().total, isLive:true };
+  const snap = getStockSnapshotFor(key);
+  return snap ? { value: snap.total_cost||0, isLive:false } : null;
+}
+
+// ---------- UI ----------
+let analysisMode = 'semanal';
+let analysisAnchor = new Date();
+function switchAnalysisMode(mode) {
+  analysisMode = mode;
+  analysisAnchor = new Date();
+  renderAnalises();
+}
+function shiftAnalysisPeriod(delta) {
+  analysisAnchor = shiftAnalysisAnchor(analysisMode, analysisAnchor, delta);
+  renderAnalises();
+}
+function resetAnalysisPeriod() {
+  analysisAnchor = new Date();
+  renderAnalises();
+}
+function renderAnalises() {
+  const el = document.getElementById('analises-content'); if (!el) return;
+  document.querySelectorAll('.analise-mode-btn').forEach(b => {
+    b.className = `analise-mode-btn px-3 py-1.5 rounded-lg text-xs font-medium ${b.dataset.mode===analysisMode?'bg-stone-800 text-white':'bg-stone-100 text-stone-600 hover:bg-stone-200'}`;
+  });
+  const a = computeAnalysis(analysisMode, analysisAnchor);
+  const ind = a.cfg.indicators;
+  const isCurrent = analysisPeriodKey(analysisMode, analysisAnchor) === analysisPeriodKey(analysisMode, new Date());
+  document.getElementById('analise-period-label').textContent = analysisPeriodLabel(analysisMode, analysisAnchor);
+  document.getElementById('analise-period-sub').textContent = isCurrent ? (analysisMode==='mensal'?'Mês em andamento':'Semana em andamento') : '';
+  const btnNext = document.getElementById('analise-next-btn');
+  if (btnNext) btnNext.disabled = isCurrent;
+  if (btnNext) btnNext.className = `px-2.5 py-1.5 rounded-lg text-sm ${isCurrent?'text-stone-300 cursor-not-allowed':'text-stone-600 hover:bg-stone-100'}`;
+
+  const money = (v) => fmtCurrency(v);
+  const sign = (v) => v >= 0 ? 'text-emerald-700' : 'text-red-600';
+  const pctTag = (v) => `<span class="text-stone-400 font-normal text-xs">(${v.toFixed(1)}%)</span>`;
+  const row = (label, value, pctValue, color, extra) => `
+    <div class="flex justify-between items-center py-1.5 border-b border-stone-100">
+      <span class="text-stone-600">${label}${extra?` <span class="text-[10px] text-stone-400">${extra}</span>`:''}</span>
+      <span class="font-semibold ${color}">${money(value)} ${pctValue!=null?pctTag(pctValue):''}</span>
+    </div>`;
+  const subtotal = (label, value, pctValue) => `
+    <div class="flex justify-between items-center py-2 my-1 px-2 -mx-2 rounded-lg bg-stone-50">
+      <span class="font-bold text-stone-800">${label}</span>
+      <span class="font-bold ${sign(value)}">${money(value)} ${pctTag(pctValue)}</span>
+    </div>`;
+
+  const kpiCard = (label, value, sub, big) => `
+    <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100">
+      <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-1">${label}</p>
+      <p class="${big?'text-2xl':'text-xl'} font-bold ${sign(value)}">${money(value)}</p>
+      <p class="text-[11px] text-stone-400 mt-1">${sub}</p>
+    </div>`;
+  const kpis = [
+    ind.lucroBruto ? kpiCard('Lucro bruto', a.lucroBruto, `${a.pct.lucroBruto.toFixed(1)}% do faturamento · depois do CMV`) : '',
+    ind.lucroOperacional ? kpiCard('Lucro operacional', a.lucroOperacional, `${a.pct.lucroOperacional.toFixed(1)}% · depois de CMO e despesas`) : '',
+    ind.lucroLiquido ? kpiCard('Lucro líquido', a.lucroLiquido, `${a.pct.margem.toFixed(1)}% · o que realmente sobrou`, true) : '',
+  ].filter(Boolean).join('');
+
+  const indicatorChips = [
+    ind.margem ? ['Margem de lucro', a.pct.margem] : null,
+    ind.cmv ? ['CMV', a.pct.cmv] : null,
+    ind.cmo ? ['CMO', a.pct.cmo] : null,
+    ind.imposto ? ['Impostos', a.pct.imposto] : null,
+    ind.cartao ? ['Taxa de cartão', a.pct.cartao] : null,
+    ind.fixas ? ['Despesas fixas', a.pct.fixas] : null,
+    ind.operacionais ? ['Despesas operacionais', a.pct.operacionais] : null,
+    ind.saidasSemVenda ? ['Saídas sem venda', a.pct.saidasSemVenda] : null,
+  ].filter(Boolean).map(([label, value]) => `
+    <div class="bg-white rounded-xl p-3 shadow-sm border border-stone-100">
+      <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-1 truncate">${label}</p>
+      <p class="text-lg font-bold text-stone-800">${value.toFixed(1)}<span class="text-xs font-normal text-stone-400">%</span></p>
+    </div>`).join('');
+
+  el.innerHTML = `
+    ${kpis ? `<div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">${kpis}</div>` : ''}
+    ${indicatorChips ? `<div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-4">${indicatorChips}</div>` : ''}
+    <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 mb-4">
+      <h3 class="font-semibold text-sm mb-3 text-stone-800 flex items-center gap-2"><i data-lucide="list" class="w-4 h-4 text-emerald-600"></i>Do faturamento ao que sobrou</h3>
+      <div class="space-y-1 text-sm">
+        <div class="flex justify-between items-center py-1.5 border-b border-stone-100">
+          <span class="text-stone-600">Faturamento bruto</span>
+          <span class="font-semibold text-stone-800">${money(a.revenue)} ${pctTag(100)}</span>
+        </div>
+        ${row('(–) CMV dos produtos vendidos', a.totalCMV, a.pct.cmv, 'text-red-600')}
+        ${ind.lucroBruto ? subtotal('(=) Lucro bruto', a.lucroBruto, a.pct.lucroBruto) : ''}
+        ${a.totalCMO > 0 ? row('(–) CMO (folha de pagamento)', a.totalCMO, a.pct.cmo, 'text-red-600') : ''}
+        ${a.totalFixed > 0 ? row('(–) Despesas fixas', a.totalFixed, a.pct.fixas, 'text-red-600', a.fixedIsProrated?'rateadas no período':'') : ''}
+        ${a.operationalLines.map(l => row(`(–) ${l.name}`, l.value, a.revenue>0?(l.value/a.revenue)*100:0, 'text-red-600')).join('')}
+        ${ind.lucroOperacional ? subtotal('(=) Lucro operacional', a.lucroOperacional, a.pct.lucroOperacional) : ''}
+        ${a.totalTax > 0 ? row(`(–) Impostos (${a.taxPct}%)`, a.totalTax, a.pct.imposto, 'text-red-600') : ''}
+        ${a.totalCardFee > 0 ? row(`(–) Taxa de cartão (${a.cardFeePct}%)`, a.totalCardFee, a.pct.cartao, 'text-red-600') : ''}
+        ${a.totalLosses > 0 ? row('(–) Perdas', a.totalLosses, a.revenue>0?(a.totalLosses/a.revenue)*100:0, 'text-red-600') : ''}
+        ${a.totalInternalConsumption > 0 ? row('(–) Consumo interno', a.totalInternalConsumption, a.revenue>0?(a.totalInternalConsumption/a.revenue)*100:0, 'text-red-600') : ''}
+        ${a.totalPartnerConsumption > 0 ? row('(–) Consumo dos sócios', a.totalPartnerConsumption, a.revenue>0?(a.totalPartnerConsumption/a.revenue)*100:0, 'text-red-600') : ''}
+        ${a.totalOtherExits > 0 ? row('(–) Outras saídas', a.totalOtherExits, a.revenue>0?(a.totalOtherExits/a.revenue)*100:0, 'text-red-600') : ''}
+        ${ind.eventos && a.eventRevenue > 0 ? row('(+) Faturamento de eventos', a.eventRevenue, a.revenue>0?(a.eventRevenue/a.revenue)*100:0, 'text-emerald-700') : ''}
+        ${ind.eventos && a.eventCost > 0 ? row('(–) Custo de eventos', a.eventCost, a.revenue>0?(a.eventCost/a.revenue)*100:0, 'text-red-600') : ''}
+        ${ind.lucroLiquido ? subtotal('(=) Lucro líquido', a.lucroLiquido, a.pct.margem) : ''}
+      </div>
+      ${a.fixedIsProrated && a.totalFixed > 0 ? `<p class="text-[11px] text-stone-400 mt-3 pt-3 border-t border-stone-100">As despesas fixas mensais foram rateadas ${a.prorationMode==='days'?'por dia do mês':'entre as semanas do mês'} — essa semana recebeu a fatia proporcional dela, não o valor mensal inteiro. Ajuste a regra em Configurações.</p>` : ''}
+      ${a.totalExcluded > 0 ? `<p class="text-[11px] text-stone-400 mt-3 pt-3 border-t border-stone-100">${money(a.totalExcluded)} em gastos ficaram de fora por configuração (grupos excluídos das análises).</p>` : ''}
+      ${a.dre.hasEstimate ? `<p class="text-[11px] text-stone-400 mt-3 pt-3 border-t border-stone-100">${money(a.dre.unknownRevenue)} do faturamento ainda não tem custo de receita confirmado — o CMV desses itens é estimado pela proporção média dos que já têm.</p>` : ''}
+      ${a.revenue === 0 ? '<p class="text-stone-400 text-center py-4 text-sm">Sem faturamento registrado nesse período</p>' : ''}
+    </div>
+    ${ind.patrimonio ? renderAnalisePatrimonio(a) : ''}
+    ${ind.evolucao ? renderAnaliseEvolucao() : ''}
+  `;
+  lucide.createIcons();
+}
+function renderAnalisePatrimonio(a) {
+  const current = stockValueForPeriod(analysisMode, analysisAnchor);
+  const prevAnchor = shiftAnalysisAnchor(analysisMode, analysisAnchor, -1);
+  const previous = stockValueForPeriod(analysisMode, prevAnchor);
+  if (!current) return '';
+  const delta = previous ? current.value - previous.value : null;
+  const deltaPct = previous && previous.value > 0 ? (delta/previous.value)*100 : null;
+  // Estoque subindo não é bom nem ruim por si só — depende de ser reposição planejada ou capital
+  // encalhando. A tela mostra o número e deixa a leitura pro dono, sem pintar de verde/vermelho.
+  return `
+    <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 mb-4">
+      <h3 class="font-semibold text-sm mb-3 text-stone-800 flex items-center gap-2"><i data-lucide="warehouse" class="w-4 h-4 text-emerald-600"></i>Patrimônio em estoque</h3>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-1">Valor atual</p>
+          <p class="text-xl font-bold text-stone-800">${fmtCurrency(current.value)}</p>
+        </div>
+        <div>
+          <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-1">Variação vs ${analysisMode==='mensal'?'mês':'semana'} anterior</p>
+          ${delta == null
+            ? '<p class="text-sm text-stone-400 pt-1">Sem histórico ainda</p>'
+            : `<p class="text-xl font-bold text-stone-800">${delta>=0?'+':''}${fmtCurrency(delta)} ${deltaPct!=null?`<span class="text-xs font-normal text-stone-400">(${deltaPct>=0?'+':''}${deltaPct.toFixed(1)}%)</span>`:''}</p>`}
+        </div>
+      </div>
+      <p class="text-[11px] text-stone-400 mt-3 pt-3 border-t border-stone-100">O valor do estoque é registrado automaticamente cada vez que você abre a Central Financeira. A comparação usa o último valor registrado no período anterior — quanto mais frequente o acesso, mais preciso o histórico.</p>
+    </div>`;
+}
+function renderAnaliseEvolucao() {
+  const cfg = getAnalysisSettings();
+  const n = Math.max(2, Math.min(24, cfg.historyPeriods || 8));
+  const series = [];
+  for (let i = n - 1; i >= 0; i--) {
+    const anchor = shiftAnalysisAnchor(analysisMode, analysisAnchor, -i);
+    const a = computeAnalysis(analysisMode, anchor);
+    series.push({ label: analysisPeriodLabel(analysisMode, anchor), revenue: a.revenue, profit: a.lucroLiquido, margem: a.pct.margem });
+  }
+  const withData = series.filter(s => s.revenue > 0 || s.profit !== 0);
+  if (withData.length === 0) return '';
+  const maxAbs = Math.max(...series.map(s => Math.max(s.revenue, Math.abs(s.profit))), 0.0001);
+  // Rótulo curto: só a data inicial da semana, ou mês/ano abreviado — o label completo não cabe
+  // embaixo de uma barra estreita no celular.
+  const shortLabel = (s) => analysisMode === 'mensal' ? s.label.slice(0,3) : s.label.slice(0,5);
+  const bars = series.map(s => {
+    const hRev = Math.max(2, Math.round((s.revenue/maxAbs)*70));
+    const hProf = Math.max(2, Math.round((Math.abs(s.profit)/maxAbs)*70));
+    return `<div class="flex flex-col items-center gap-1 flex-1 min-w-0">
+      <div class="flex items-end gap-0.5 h-[70px]">
+        <div class="w-2.5 rounded-t bg-emerald-200" style="height:${hRev}px" title="Faturamento: ${fmtCurrency(s.revenue)}"></div>
+        <div class="w-2.5 rounded-t ${s.profit>=0?'bg-blue-500':'bg-red-400'}" style="height:${hProf}px" title="Lucro líquido: ${fmtCurrency(s.profit)}"></div>
+      </div>
+      <span class="text-[9px] text-stone-500 truncate w-full text-center">${shortLabel(s)}</span>
+    </div>`;
+  }).join('');
+  const last = series[series.length-1], prev = series[series.length-2];
+  const cmp = prev ? (() => {
+    const d = last.profit - prev.profit;
+    const dRev = last.revenue - prev.revenue;
+    return `<div class="grid grid-cols-2 gap-3 mt-3 pt-3 border-t border-stone-100 text-sm">
+      <div><p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-0.5">Faturamento vs anterior</p><p class="font-bold ${dRev>=0?'text-emerald-700':'text-red-600'}">${dRev>=0?'+':''}${fmtCurrency(dRev)}</p></div>
+      <div><p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-0.5">Lucro vs anterior</p><p class="font-bold ${d>=0?'text-emerald-700':'text-red-600'}">${d>=0?'+':''}${fmtCurrency(d)}</p></div>
+    </div>`;
+  })() : '';
+  return `
+    <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 mb-4">
+      <div class="flex items-center justify-between gap-2 mb-3 flex-wrap">
+        <h3 class="font-semibold text-sm text-stone-800 flex items-center gap-2"><i data-lucide="bar-chart-3" class="w-4 h-4 text-emerald-600"></i>Evolução</h3>
+        <div class="flex items-center gap-3 text-[10px] text-stone-500">
+          <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-emerald-200"></span>Faturamento</span>
+          <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-blue-500"></span>Lucro líquido</span>
+        </div>
+      </div>
+      <div class="flex items-end gap-1.5">${bars}</div>
+      ${cmp}
+    </div>`;
+}
+
+// ---------- Configuração das Análises ----------
+function renderAnalysisSettingsConfig() {
+  const cfg = getAnalysisSettings();
+  const prorationSel = document.getElementById('analysis-settings-proration');
+  if (prorationSel && document.activeElement !== prorationSel) prorationSel.value = cfg.fixedProration;
+  const periodsInput = document.getElementById('analysis-settings-periods');
+  if (periodsInput && document.activeElement !== periodsInput) periodsInput.value = cfg.historyPeriods;
+  const indEl = document.getElementById('analysis-settings-indicators');
+  if (indEl) {
+    indEl.innerHTML = Object.entries(ANALYSIS_INDICATOR_LABELS).map(([key,label]) => `
+      <label class="flex items-center gap-2 text-sm text-stone-700 py-1 cursor-pointer">
+        <input type="checkbox" data-indicator="${key}" ${cfg.indicators[key]?'checked':''} onchange="handleToggleAnalysisIndicator('${key}', this.checked)" class="rounded border-stone-300">
+        <span class="truncate">${label}</span>
+      </label>`).join('');
+  }
+  const grpEl = document.getElementById('analysis-settings-groups');
+  if (grpEl) {
+    const groups = getDreGroups().slice().sort((a,b)=>(a.product_name||'').localeCompare(b.product_name||''));
+    grpEl.innerHTML = groups.length === 0 ? '<p class="text-stone-400 text-sm py-2">Nenhum grupo cadastrado</p>' : groups.map(g => `
+      <label class="flex items-center gap-2 text-sm text-stone-700 py-1 cursor-pointer">
+        <input type="checkbox" ${cfg.excludedGroupIds.includes(g.id)?'':'checked'} onchange="handleToggleAnalysisGroup('${g.id}', this.checked)" class="rounded border-stone-300">
+        <span class="truncate">${g.product_name}</span>
+      </label>`).join('');
+  }
+}
+async function handleToggleAnalysisIndicator(key, checked) {
+  try {
+    await saveAnalysisSettings({ indicators: { [key]: checked } });
+    if (activeFinanceTab === 'analises') renderAnalises();
+  } catch (err) { console.error('Erro ao salvar indicador:', err); showToast('Erro ao salvar: ' + err.message, true); }
+}
+async function handleToggleAnalysisGroup(groupId, included) {
+  try {
+    const cfg = getAnalysisSettings();
+    const next = included ? cfg.excludedGroupIds.filter(id => id !== groupId) : [...cfg.excludedGroupIds, groupId];
+    await saveAnalysisSettings({ excludedGroupIds: next });
+    if (activeFinanceTab === 'analises') renderAnalises();
+  } catch (err) { console.error('Erro ao salvar grupo:', err); showToast('Erro ao salvar: ' + err.message, true); }
+}
+async function handleSaveAnalysisSettings(e) {
+  e.preventDefault();
+  const fixedProration = document.getElementById('analysis-settings-proration').value;
+  const historyPeriods = parseInt(document.getElementById('analysis-settings-periods').value, 10);
+  if (isNaN(historyPeriods) || historyPeriods < 2 || historyPeriods > 24) { showToast('Use entre 2 e 24 períodos no histórico', true); return; }
+  showLoadingProgress('Salvando configurações...');
+  try {
+    await saveAnalysisSettings({ fixedProration, historyPeriods });
+    hideLoadingProgress();
+    showToast('Configurações das análises salvas!');
+    if (activeFinanceTab === 'analises') renderAnalises();
+  } catch (err) {
+    hideLoadingProgress();
+    console.error('Erro ao salvar configurações das análises:', err);
+    showToast('Erro ao salvar: ' + err.message, true);
+  }
 }
 
 // ============================================================
