@@ -263,15 +263,18 @@
             <div class="manual-exit-unit-wrap"><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Medida</label><select class="manual-exit-unit input-field text-sm w-full"></select></div>
             <button type="button" onclick="removeManualExitItem(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button>
           </div>
-          <div class="grid sm:grid-cols-2 gap-2">
-            <div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Motivo</label><select class="manual-exit-motivo input-field text-sm w-full" onchange="toggleManualExitEventName(this)"><option value="consumo_interno">Consumo Interno</option><option value="consumo_socios">Consumo dos Sócios</option><option value="uso_evento">Uso em Evento</option><option value="outros">Outros</option></select></div>
-            <div class="manual-exit-event-name-wrap hidden"><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Nome do evento</label><input type="text" class="manual-exit-event-name input-field text-sm w-full" placeholder="Ex: Aniversário Maria"></div>
-          </div>
         </div>
       </div>
       <button type="button" onclick="addManualExitItem()" class="text-sm font-medium flex items-center gap-1 mb-4 btn-ghost px-3 py-1.5 rounded-lg"><i data-lucide="plus" class="w-4 h-4"></i>Adicionar outro item</button>
       <p class="text-xs text-stone-500 -mt-3 mb-4">Use "Item de Venda Direta" pra retirar algo já pronto de uma receita (ex: um prato ou suco servido num evento) — desconta os insumos da receita, sem entrar no faturamento.</p>
-      <div class="flex gap-2 items-center mb-4"><input id="manual-exit-reason" type="text" placeholder="Motivo da saída (opcional)" class="flex-1 input-field text-sm"></div>
+      <div class="grid sm:grid-cols-2 gap-2 mb-4">
+        <div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Motivo (vale pra todos os itens acima)</label><select id="manual-exit-motivo-global" class="input-field text-sm w-full" onchange="toggleManualExitEventName(this)"><option value="consumo_interno">Consumo Interno</option><option value="consumo_socios">Consumo dos Sócios</option><option value="uso_evento">Uso em Evento</option><option value="outros">Outros</option></select></div>
+        <div id="manual-exit-event-name-wrap" class="hidden"><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Nome do evento</label><input type="text" id="manual-exit-event-name" class="input-field text-sm w-full" placeholder="Ex: Aniversário Maria"></div>
+      </div>
+      <div class="grid sm:grid-cols-2 gap-2 mb-4">
+        <div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Data da saída</label><input id="manual-exit-date" type="date" class="input-field text-sm w-full"></div>
+        <div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Observação (opcional)</label><input id="manual-exit-reason" type="text" placeholder="Observação (opcional)" class="input-field text-sm w-full"></div>
+      </div>
       <div class="flex gap-2 items-center">
         <button onclick="confirmManualExit()" class="btn-success px-4 py-2.5 rounded-lg text-sm font-medium flex items-center gap-1.5"><i data-lucide="check" class="w-4 h-4"></i>Confirmar Saída</button>
         <button onclick="cancelManualExit()" class="btn-ghost px-4 py-2.5 rounded-lg text-sm font-medium">Cancelar</button>
@@ -988,6 +991,7 @@
           </select>
         </div>
         <div id="ssv-ranking-list"></div>
+        <div id="ssv-unknown-cost-note"></div>
       </div>
     </section>
 
@@ -2804,7 +2808,7 @@ function addManualExitItem() {
   const div = document.createElement('div');
   div.className = 'manual-exit-item bg-stone-50 border border-stone-200 rounded-lg p-4 space-y-2';
   div.dataset.itemType = 'insumo';
-  div.innerHTML = `<div class="flex gap-1.5"><button type="button" class="manual-exit-type-btn flex-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-stone-800 text-white" data-type="insumo" onclick="setManualExitItemType(this,'insumo')">Insumo</button><button type="button" class="manual-exit-type-btn flex-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-type="venda_direta" onclick="setManualExitItemType(this,'venda_direta')">🍽️ Item de Venda Direta</button></div><label class="manual-exit-label text-xs font-semibold text-stone-600 uppercase tracking-wide block">Insumo</label><div class="relative"><i data-lucide="search" class="absolute left-3 top-3 w-4 h-4 text-stone-400"></i><input type="text" class="manual-exit-search input-field text-sm w-full pl-9 pr-4" placeholder="Pesquisar insumo..."><div class="manual-exit-dropdown hidden absolute top-full left-0 right-0 mt-1 bg-white border border-stone-200 rounded-lg shadow-lg z-10 max-h-40 overflow-y-auto"></div></div><select class="manual-exit-product input-field text-sm w-full" required><option value="">Selecione o insumo</option>${products.map(p=>`<option value="${p.id}" data-name="${p.product_name}" data-unit="${p.unit}">${p.product_name} (${p.unit})</option>`).join('')}</select><div class="grid sm:grid-cols-[1fr_110px_auto] gap-2 items-end"><div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Quantidade</label><input type="number" class="manual-exit-qty input-field text-sm w-full" placeholder="Quantidade" min="0.001" step="any" required></div><div class="manual-exit-unit-wrap"><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Medida</label><select class="manual-exit-unit input-field text-sm w-full"></select></div><button type="button" onclick="removeManualExitItem(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button></div><div class="grid sm:grid-cols-2 gap-2"><div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Motivo</label><select class="manual-exit-motivo input-field text-sm w-full" onchange="toggleManualExitEventName(this)"><option value="consumo_interno">Consumo Interno</option><option value="consumo_socios">Consumo dos Sócios</option><option value="uso_evento">Uso em Evento</option><option value="outros">Outros</option></select></div><div class="manual-exit-event-name-wrap hidden"><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Nome do evento</label><input type="text" class="manual-exit-event-name input-field text-sm w-full" placeholder="Ex: Aniversário Maria"></div></div>`;
+  div.innerHTML = `<div class="flex gap-1.5"><button type="button" class="manual-exit-type-btn flex-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-stone-800 text-white" data-type="insumo" onclick="setManualExitItemType(this,'insumo')">Insumo</button><button type="button" class="manual-exit-type-btn flex-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-type="venda_direta" onclick="setManualExitItemType(this,'venda_direta')">🍽️ Item de Venda Direta</button></div><label class="manual-exit-label text-xs font-semibold text-stone-600 uppercase tracking-wide block">Insumo</label><div class="relative"><i data-lucide="search" class="absolute left-3 top-3 w-4 h-4 text-stone-400"></i><input type="text" class="manual-exit-search input-field text-sm w-full pl-9 pr-4" placeholder="Pesquisar insumo..."><div class="manual-exit-dropdown hidden absolute top-full left-0 right-0 mt-1 bg-white border border-stone-200 rounded-lg shadow-lg z-10 max-h-40 overflow-y-auto"></div></div><select class="manual-exit-product input-field text-sm w-full" required><option value="">Selecione o insumo</option>${products.map(p=>`<option value="${p.id}" data-name="${p.product_name}" data-unit="${p.unit}">${p.product_name} (${p.unit})</option>`).join('')}</select><div class="grid sm:grid-cols-[1fr_110px_auto] gap-2 items-end"><div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Quantidade</label><input type="number" class="manual-exit-qty input-field text-sm w-full" placeholder="Quantidade" min="0.001" step="any" required></div><div class="manual-exit-unit-wrap"><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Medida</label><select class="manual-exit-unit input-field text-sm w-full"></select></div><button type="button" onclick="removeManualExitItem(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button></div>`;
   container.appendChild(div);
   attachManualExitSearchListeners(div);
   lucide.createIcons();
@@ -2815,7 +2819,7 @@ function initManualExitSearchListeners() { document.querySelectorAll('#manual-ex
 // Direta" (retira uma receita pronta — ex: um prato servido num evento — descontando os insumos
 // dela, mas sem gerar faturamento, já que em evento o valor é cobrado à parte por pessoa).
 function toggleManualExitEventName(sel) {
-  const wrap = sel.closest('.manual-exit-item').querySelector('.manual-exit-event-name-wrap');
+  const wrap = document.getElementById('manual-exit-event-name-wrap');
   if (wrap) wrap.classList.toggle('hidden', sel.value !== 'uso_evento');
 }
 function setManualExitItemType(btn, type) {
@@ -2905,14 +2909,14 @@ async function confirmManualExit() {
   const itemEls = document.querySelectorAll('#manual-exit-container .manual-exit-item');
   const insumoEntries = []; // {id, name, unit, qty, storageQty}
   const vendaDiretaEntries = []; // {recipeId, name, qty}
+  // Motivo é escolhido uma vez só, vale pra todos os itens do lote (você sempre lança em blocos do
+  // mesmo motivo) — em vez de repetir a escolha item por item.
+  const reasonMotivo = document.getElementById('manual-exit-motivo-global').value;
+  const eventName = reasonMotivo === 'uso_evento' ? document.getElementById('manual-exit-event-name').value.trim() : '';
   for (const item of itemEls) {
     const sel = item.querySelector('.manual-exit-product');
     const qty = parseFloat(item.querySelector('.manual-exit-qty').value);
     if (!sel.value||!qty||qty<=0) { showToast('Preencha todos os campos', true); return; }
-    const motivoSel = item.querySelector('.manual-exit-motivo');
-    const reasonMotivo = motivoSel ? motivoSel.value : 'consumo_interno';
-    const eventNameInput = item.querySelector('.manual-exit-event-name');
-    const eventName = (reasonMotivo === 'uso_evento' && eventNameInput) ? eventNameInput.value.trim() : '';
     if (item.dataset.itemType === 'venda_direta') {
       vendaDiretaEntries.push({ recipeId: sel.value, name: sel.selectedOptions[0]?.dataset.name||'', qty, reason:reasonMotivo, eventName });
     } else {
@@ -2941,6 +2945,8 @@ async function confirmManualExit() {
     }
   }
   const reason = document.getElementById('manual-exit-reason').value.trim();
+  const dateInput = document.getElementById('manual-exit-date').value;
+  const exitDate = dateInput ? parseLocalDate(dateInput) : new Date();
   showLoadingProgress('Confirmando saída...');
   try {
     let done = 0;
@@ -2971,7 +2977,7 @@ async function confirmManualExit() {
     }
     const allExitData = [...insumoEntries, ...vendaDiretaExitData];
     const itemList = allExitData.map(e => e.value ? `${fmtQty(e.qty,'')} ${e.name} (venda direta)` : `${fmtQty(e.qty,e.unit)} ${e.unit} ${e.name}`).join('; ');
-    assertSaved(await dbCreate({ ...blankRecord(), type:'movement', movement_type:'saida_manual', movement_product:itemList, movement_quantity:allExitData.length, movement_date:new Date().toISOString(), movement_note:reason?`Saída Manual: ${itemList} (${reason})`:`Saída Manual: ${itemList}`, batch_items:JSON.stringify(allExitData) }, {silent:true}), 'registro da saída');
+    assertSaved(await dbCreate({ ...blankRecord(), type:'movement', movement_type:'saida_manual', movement_product:itemList, movement_quantity:allExitData.length, movement_date:exitDate.toISOString(), movement_note:reason?`Saída Manual: ${itemList} (${reason})`:`Saída Manual: ${itemList}`, batch_items:JSON.stringify(allExitData) }, {silent:true}), 'registro da saída');
     renderAll();
     hideLoadingProgress();
     showToast('Saída confirmada!'); resetManualExitForm();
@@ -2984,12 +2990,18 @@ async function confirmManualExit() {
 function cancelManualExit() { resetManualExitForm(); }
 function resetManualExitForm() {
   const products = getProducts().filter(productControlsStock).sort((a,b) => a.product_name.localeCompare(b.product_name));
-  document.getElementById('manual-exit-container').innerHTML = `<div class="manual-exit-item bg-stone-50 border border-stone-200 rounded-lg p-4 space-y-2" data-item-type="insumo"><div class="flex gap-1.5"><button type="button" class="manual-exit-type-btn flex-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-stone-800 text-white" data-type="insumo" onclick="setManualExitItemType(this,'insumo')">Insumo</button><button type="button" class="manual-exit-type-btn flex-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-type="venda_direta" onclick="setManualExitItemType(this,'venda_direta')">🍽️ Item de Venda Direta</button></div><label class="manual-exit-label text-xs font-semibold text-stone-600 uppercase tracking-wide block">Insumo</label><div class="relative"><i data-lucide="search" class="absolute left-3 top-3 w-4 h-4 text-stone-400"></i><input type="text" class="manual-exit-search input-field text-sm w-full pl-9 pr-4" placeholder="Pesquisar insumo..."><div class="manual-exit-dropdown hidden absolute top-full left-0 right-0 mt-1 bg-white border border-stone-200 rounded-lg shadow-lg z-10 max-h-40 overflow-y-auto"></div></div><select class="manual-exit-product input-field text-sm w-full" required><option value="">Selecione o insumo</option>${products.map(p=>`<option value="${p.id}" data-name="${p.product_name}" data-unit="${p.unit}">${p.product_name} (${p.unit})</option>`).join('')}</select><div class="grid sm:grid-cols-[1fr_110px_auto] gap-2 items-end"><div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Quantidade</label><input type="number" class="manual-exit-qty input-field text-sm w-full" placeholder="Quantidade" min="0.001" step="any" required></div><div class="manual-exit-unit-wrap"><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Medida</label><select class="manual-exit-unit input-field text-sm w-full"></select></div><button type="button" onclick="removeManualExitItem(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button></div><div class="grid sm:grid-cols-2 gap-2"><div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Motivo</label><select class="manual-exit-motivo input-field text-sm w-full" onchange="toggleManualExitEventName(this)"><option value="consumo_interno">Consumo Interno</option><option value="consumo_socios">Consumo dos Sócios</option><option value="uso_evento">Uso em Evento</option><option value="outros">Outros</option></select></div><div class="manual-exit-event-name-wrap hidden"><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Nome do evento</label><input type="text" class="manual-exit-event-name input-field text-sm w-full" placeholder="Ex: Aniversário Maria"></div></div></div>`;
+  document.getElementById('manual-exit-container').innerHTML = `<div class="manual-exit-item bg-stone-50 border border-stone-200 rounded-lg p-4 space-y-2" data-item-type="insumo"><div class="flex gap-1.5"><button type="button" class="manual-exit-type-btn flex-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-stone-800 text-white" data-type="insumo" onclick="setManualExitItemType(this,'insumo')">Insumo</button><button type="button" class="manual-exit-type-btn flex-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-type="venda_direta" onclick="setManualExitItemType(this,'venda_direta')">🍽️ Item de Venda Direta</button></div><label class="manual-exit-label text-xs font-semibold text-stone-600 uppercase tracking-wide block">Insumo</label><div class="relative"><i data-lucide="search" class="absolute left-3 top-3 w-4 h-4 text-stone-400"></i><input type="text" class="manual-exit-search input-field text-sm w-full pl-9 pr-4" placeholder="Pesquisar insumo..."><div class="manual-exit-dropdown hidden absolute top-full left-0 right-0 mt-1 bg-white border border-stone-200 rounded-lg shadow-lg z-10 max-h-40 overflow-y-auto"></div></div><select class="manual-exit-product input-field text-sm w-full" required><option value="">Selecione o insumo</option>${products.map(p=>`<option value="${p.id}" data-name="${p.product_name}" data-unit="${p.unit}">${p.product_name} (${p.unit})</option>`).join('')}</select><div class="grid sm:grid-cols-[1fr_110px_auto] gap-2 items-end"><div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Quantidade</label><input type="number" class="manual-exit-qty input-field text-sm w-full" placeholder="Quantidade" min="0.001" step="any" required></div><div class="manual-exit-unit-wrap"><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Medida</label><select class="manual-exit-unit input-field text-sm w-full"></select></div><button type="button" onclick="removeManualExitItem(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button></div></div>`;
   document.getElementById('manual-exit-reason').value = '';
+  document.getElementById('manual-exit-motivo-global').value = 'consumo_interno';
+  document.getElementById('manual-exit-event-name').value = '';
+  document.getElementById('manual-exit-event-name-wrap').classList.add('hidden');
+  document.getElementById('manual-exit-date').value = localDateStr(new Date());
   initManualExitSearchListeners();
   lucide.createIcons();
 }
 function renderManualExitsList() {
+  const dateInput = document.getElementById('manual-exit-date');
+  if (dateInput && !dateInput.value) dateInput.value = localDateStr(new Date());
   const exits = getMovements().filter(m=>m.movement_type==='saida_manual').sort((a,b)=>new Date(b.movement_date)-new Date(a.movement_date));
   const el = document.getElementById('manual-exits-list');
   const linkHtml = exits.length > 5 ? `<button onclick="goToHistoryFiltered('saida_manual')" class="w-full text-center text-xs font-medium text-blue-600 hover:text-blue-800 py-2">Ver histórico completo de saídas (${exits.length}) →</button>` : '';
@@ -8645,7 +8657,18 @@ function computeSaidasSemVenda(start, end) {
     { motivo:'Uso em Evento', value: evento.total },
     { motivo:'Outros', value: outros.total },
   ].filter(m => m.value > 0).map(m => ({ ...m, pct: total>0 ? (m.value/total)*100 : 0 })).sort((a,b)=>b.value-a.value);
-  return { total, perda, consumo, socios, evento, outros, ranking, allRows, byMotivo };
+  // Itens com custo desconhecido (insumo sem preço lançado, ou sem conversão de unidade possível)
+  // ficam de fora do total sem nenhum aviso visual — o que já causou confusão real (saída
+  // registrada, estoque baixado certinho, mas valor não aparece em lugar nenhum do financeiro).
+  // Expõe a contagem por motivo pra isso ficar visível em vez de silenciosamente virar R$0.
+  const unknownByMotivo = [
+    { motivo:'Perda', count: perda.unknownCount },
+    { motivo:'Consumo Interno', count: consumo.unknownCount },
+    { motivo:'Consumo dos Sócios', count: socios.unknownCount },
+    { motivo:'Uso em Evento', count: evento.unknownCount },
+    { motivo:'Outros', count: outros.unknownCount },
+  ].filter(m => m.count > 0);
+  return { total, perda, consumo, socios, evento, outros, ranking, allRows, byMotivo, unknownByMotivo };
 }
 function renderSaidasSemVenda() {
   const totalEl = document.getElementById('ssv-kpi-total'); if (!totalEl) return;
@@ -8681,6 +8704,10 @@ function renderSaidasSemVenda() {
       </div>
       <span class="text-sm font-bold text-stone-800 flex-shrink-0 whitespace-nowrap">${fmtCurrency(r.value)} <span class="text-stone-400 font-normal text-xs">(${r.pct.toFixed(1)}%)</span></span>
     </div>`).join('');
+  const unknownEl = document.getElementById('ssv-unknown-cost-note');
+  if (unknownEl) {
+    unknownEl.innerHTML = ssv.unknownByMotivo.length === 0 ? '' : `<p class="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-4">⚠️ ${ssv.unknownByMotivo.map(m=>`${m.count} item(ns) de ${m.motivo}`).join(', ')} sem custo conhecido nesse período (insumo sem preço lançado em Custos Pendentes/Preço Médio, ou sem conversão de unidade possível) — saíram do estoque normalmente, mas não entram nos valores acima nem no DRE. Lance o custo do insumo pra eles aparecerem.</p>`;
+  }
   lucide.createIcons();
 }
 function handleSsvRankingMotivoChange(sel) {
@@ -8704,7 +8731,7 @@ let dreFilter = '7days';
 // estimado. Os grupos de despesa (CMO, e todo grupo que você cadastrar em Config. Gastos) são
 // dinâmicos — o DRE não conhece mais uma lista fixa, só soma cada gasto no grupo que
 // resolveExpenseDreGroupId() encontrar pra ele.
-function computeDRE(entries, expenses, stockCosts, losses, internalConsumption, eventCost, eventRevenueRecords, eventExtraCostRecords, partnerConsumption) {
+function computeDRE(entries, expenses, stockCosts, losses, internalConsumption, eventCost, eventRevenueRecords, eventExtraCostRecords, partnerConsumption, otherExits) {
   const totalRevenue = entries.reduce((s,e)=>s+(e.total_revenue||0), 0);
   let knownCost = 0, knownRevenue = 0, unknownRevenue = 0;
   entries.forEach(e => {
@@ -8743,6 +8770,12 @@ function computeDRE(entries, expenses, stockCosts, losses, internalConsumption, 
   const totalPartnerConsumption = (partnerConsumption && partnerConsumption.total) || 0;
   const partnerConsumptionUnknownCount = (partnerConsumption && partnerConsumption.unknownCount) || 0;
 
+  // Saída Manual motivo "Outros" — estoque saiu, não virou faturamento, não é Perda/Consumo/Evento
+  // (motivo catch-all). Antes essa saída não custava nada na DRE (só aparecia na aba Saídas sem
+  // Venda) — corrigido: agora desconta do lucro igual as outras saídas sem venda.
+  const totalOtherExits = (otherExits && otherExits.total) || 0;
+  const otherExitsUnknownCount = (otherExits && otherExits.unknownCount) || 0;
+
   // Uso em Evento é diferente: o custo sai do estoque na hora da saída, mas a RECEITA do evento só
   // existe quando o valor cobrado é lançado em Vendas > Eventos Pendentes (pode ser um período
   // diferente do da saída). Por isso entram como duas linhas próprias — não somam em totalRevenue
@@ -8764,8 +8797,8 @@ function computeDRE(entries, expenses, stockCosts, losses, internalConsumption, 
   // específica), então desconta nos dois cenários — diferente do CMV por receita, cuja incerteza
   // só existe pra fatia de faturamento sem custo confirmado (unknownRevenue).
   const eventNet = totalEventRevenue - totalEventCost;
-  const confirmedProfit = knownRevenue - totalCMVConfirmed - totalAllExpenses - totalLosses - totalInternalConsumption - totalPartnerConsumption - totalTax - totalCardFee + eventNet;
-  const estimatedProfit = totalRevenue - totalCMV - totalAllExpenses - totalLosses - totalInternalConsumption - totalPartnerConsumption - totalTax - totalCardFee + eventNet;
+  const confirmedProfit = knownRevenue - totalCMVConfirmed - totalAllExpenses - totalLosses - totalInternalConsumption - totalPartnerConsumption - totalOtherExits - totalTax - totalCardFee + eventNet;
+  const estimatedProfit = totalRevenue - totalCMV - totalAllExpenses - totalLosses - totalInternalConsumption - totalPartnerConsumption - totalOtherExits - totalTax - totalCardFee + eventNet;
   const coveragePct = totalRevenue > 0 ? (knownRevenue/totalRevenue)*100 : 0;
   // % sempre sobre o faturamento total do período — é a "representatividade" de cada linha.
   const pctOf = (v) => totalRevenue > 0 ? (v/totalRevenue)*100 : 0;
@@ -8783,6 +8816,7 @@ function computeDRE(entries, expenses, stockCosts, losses, internalConsumption, 
     totalAllExpenses, groupLines, totalLosses, lossesUnknownCount,
     totalInternalConsumption, internalConsumptionUnknownCount,
     totalPartnerConsumption, partnerConsumptionUnknownCount,
+    totalOtherExits, otherExitsUnknownCount,
     totalEventCost, eventCostUnknownCount, totalEventRevenue,
     totalTax, totalCardFee, taxPct: financeSettings.taxPct, cardFeePct: financeSettings.cardFeePct,
     confirmedProfit, estimatedProfit, coveragePct, hasEstimate, pctOf,
@@ -8790,6 +8824,7 @@ function computeDRE(entries, expenses, stockCosts, losses, internalConsumption, 
       cmvConfirmed: pctOf(totalCMVConfirmed), cmvTotal: pctOf(totalCMV),
       confirmedProfit: pctOf(confirmedProfit), estimatedProfit: pctOf(estimatedProfit), losses: pctOf(totalLosses),
       internalConsumption: pctOf(totalInternalConsumption), partnerConsumption: pctOf(totalPartnerConsumption),
+      otherExits: pctOf(totalOtherExits),
       eventRevenue: pctOf(totalEventRevenue), eventCost: pctOf(totalEventCost),
       tax: pctOf(totalTax), cardFee: pctOf(totalCardFee),
     },
@@ -8805,9 +8840,10 @@ function renderDRE() {
   const internalConsumption = computeSaidaManualCost('consumo_interno', start, end);
   const partnerConsumption = computeSaidaManualCost('consumo_socios', start, end);
   const eventCost = computeSaidaManualCost('uso_evento', start, end);
+  const otherExits = computeSaidaManualCost('outros', start, end);
   const eventRevenueRecords = getEventRevenueInRange(start, end);
   const eventExtraCostRecords = getEventExtraCostsInRange(start, end);
-  const dre = computeDRE(entries, expenses, stockCosts, losses, internalConsumption, eventCost, eventRevenueRecords, eventExtraCostRecords, partnerConsumption);
+  const dre = computeDRE(entries, expenses, stockCosts, losses, internalConsumption, eventCost, eventRevenueRecords, eventExtraCostRecords, partnerConsumption, otherExits);
   const el = document.getElementById('dre-content'); if (!el) return;
   const profitColor = (v) => v >= 0 ? 'text-emerald-700' : 'text-red-600';
   const pctTag = (v) => `<span class="text-stone-400 font-normal">(${v.toFixed(1)}%)</span>`;
@@ -8847,6 +8883,7 @@ function renderDRE() {
         ${dre.totalLosses > 0 ? line('(–) Perdas', dre.totalLosses, dre.pct.losses, 'text-red-600') : ''}
         ${dre.totalInternalConsumption > 0 ? line('(–) Consumo Interno', dre.totalInternalConsumption, dre.pct.internalConsumption, 'text-red-600') : ''}
         ${dre.totalPartnerConsumption > 0 ? line('(–) Consumo dos Sócios', dre.totalPartnerConsumption, dre.pct.partnerConsumption, 'text-red-600') : ''}
+        ${dre.totalOtherExits > 0 ? line('(–) Outras Saídas', dre.totalOtherExits, dre.pct.otherExits, 'text-red-600') : ''}
         ${dre.totalEventRevenue > 0 ? line('(+) Faturamento de Evento', dre.totalEventRevenue, dre.pct.eventRevenue, 'text-emerald-700') : ''}
         ${dre.totalEventCost > 0 ? line('(–) Custo de Eventos', dre.totalEventCost, dre.pct.eventCost, 'text-red-600') : ''}
         ${groupLinesHtml || '<p class="text-xs text-stone-400 py-2">Nenhum gasto lançado neste período.</p>'}
@@ -8865,6 +8902,7 @@ function renderDRE() {
       ${dre.lossesUnknownCount > 0 ? `<p class="text-[11px] text-stone-400 mt-3 pt-3 border-t border-stone-100">${dre.lossesUnknownCount} perda(s) no período sem custo conhecido (insumo sem preço lançado, ou sem conversão de unidade possível) — não entram no valor de Perdas acima.</p>` : ''}
       ${dre.internalConsumptionUnknownCount > 0 ? `<p class="text-[11px] text-stone-400 mt-3 pt-3 border-t border-stone-100">${dre.internalConsumptionUnknownCount} item(ns) de Consumo Interno no período sem custo conhecido — não entram no valor acima.</p>` : ''}
       ${dre.partnerConsumptionUnknownCount > 0 ? `<p class="text-[11px] text-stone-400 mt-3 pt-3 border-t border-stone-100">${dre.partnerConsumptionUnknownCount} item(ns) de Consumo dos Sócios no período sem custo conhecido — não entram no valor acima.</p>` : ''}
+      ${dre.otherExitsUnknownCount > 0 ? `<p class="text-[11px] text-stone-400 mt-3 pt-3 border-t border-stone-100">${dre.otherExitsUnknownCount} item(ns) de Outras Saídas no período sem custo conhecido (insumo sem preço lançado, ou sem conversão de unidade possível) — não entram no valor acima.</p>` : ''}
       ${dre.eventCostUnknownCount > 0 ? `<p class="text-[11px] text-stone-400 mt-3 pt-3 border-t border-stone-100">${dre.eventCostUnknownCount} item(ns) de Uso em Evento no período sem custo conhecido — não entram no Custo de Eventos acima.</p>` : ''}
       ${dre.totalTax > 0 || dre.totalCardFee > 0 ? `<p class="text-[11px] text-stone-400 mt-3 pt-3 border-t border-stone-100">Imposto e Taxa de Cartão são calculados automaticamente sobre o faturamento total (aproximação — o sistema não distingue forma de pagamento). Ajuste os percentuais em Configurações > Parâmetros Financeiros.</p>` : ''}
       ${entries.length === 0 && expenses.length === 0 ? '<p class="text-stone-400 text-center py-4 text-sm">Sem vendas nem gastos no período</p>' : ''}
