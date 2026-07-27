@@ -602,6 +602,7 @@
       <button class="custos-sub-tab-btn px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap" data-sub="cmv">CMV</button>
       <button class="custos-sub-tab-btn px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap" data-sub="estoque-valor">Dinheiro em Estoque</button>
       <button class="custos-sub-tab-btn px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap" data-sub="saidas-sem-venda">Saídas sem Venda</button>
+      <button class="custos-sub-tab-btn px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap" data-sub="conferencia">Conferência de Saldo</button>
     </div>
     <!-- Sub-aba: Custos de Estoque -->
     <section id="fpanel-custos" class="hidden fade-in">
@@ -1038,6 +1039,16 @@
         <div id="ssv-ranking-list"></div>
         <div id="ssv-unknown-cost-note"></div>
       </div>
+    </section>
+
+    <!-- Sub-aba: Conferência de Saldo — reconstrói cada saldo pelo histórico e mostra onde não bate -->
+    <section id="fpanel-conferencia" class="hidden fade-in">
+      <div class="flex items-center justify-between mb-1">
+        <h2 class="text-lg font-bold text-stone-800 flex items-center gap-2"><i data-lucide="shield-check" class="w-5 h-5 text-emerald-600"></i>Conferência de Saldo</h2>
+        <button onclick="lockFinanceiro()" class="text-xs text-stone-400 hover:text-stone-600 flex items-center gap-1"><i data-lucide="lock" class="w-3.5 h-3.5"></i>Bloquear</button>
+      </div>
+      <p class="text-xs text-stone-400 mb-4">Reconstrói o saldo de cada item somando todas as movimentações do histórico e compara com o saldo gravado. Se bate, o número é confiável e explicado. Se não bate, a diferença é exatamente o tanto que mudou fora do sistema.</p>
+      <div id="conferencia-content"></div>
     </section>
 
     <!-- Sub-aba: Gastos -->
@@ -1531,9 +1542,18 @@
     <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
       <h3 class="font-bold mb-1 text-stone-800 text-lg">Finalizar Produção</h3>
       <p id="finalize-recipe-name" class="text-sm text-stone-500 mb-5"></p>
+      <!-- DOIS campos, e a distinção é a regra do consumo: o insumo gasto vem das VEZES da receita,
+           o rendimento é só o que saiu. Fazer 1× uma receita de 100 ml de leite gasta 100 ml, tenha
+           rendido 10 ou 9 — a diferença é perda de produção, não economia de insumo. Antes existia só
+           o campo de rendimento, e o sistema creditava o que você digitasse mas descontava sempre 1×
+           a receita: registrar 3 fornadas debitava insumo de uma, e o estoque inflava. -->
+      <label class="text-xs font-semibold text-stone-600 uppercase tracking-wide">Quantas vezes fez a receita:</label>
+      <input id="finalize-times" type="number" min="0.01" step="any" value="1" oninput="updateFinalizePreview()" class="w-full input-field text-sm mt-1 mb-1">
+      <p id="finalize-times-hint" class="text-xs text-stone-400 mb-3"></p>
       <label class="text-xs font-semibold text-stone-600 uppercase tracking-wide">Rendimento real:</label>
-      <input id="finalize-qty" type="number" min="1" step="1" value="1" class="w-full input-field text-sm mt-1 mb-1">
-      <p id="finalize-unit-hint" class="text-xs text-stone-400 mb-4"></p>
+      <input id="finalize-qty" type="number" min="0" step="any" value="1" oninput="updateFinalizePreview()" class="w-full input-field text-sm mt-1 mb-1">
+      <p id="finalize-unit-hint" class="text-xs text-stone-400 mb-2"></p>
+      <div id="finalize-preview" class="text-xs bg-stone-50 rounded-lg p-2.5 mb-4 space-y-1"></div>
       <div id="finalize-error" class="hidden text-red-600 text-xs mb-3 p-2 bg-red-50 rounded-lg"></div>
       <div class="flex gap-2"><button onclick="confirmFinalize()" id="finalize-btn" class="flex-1 btn-success px-4 py-2.5 rounded-lg text-sm font-medium">Finalizar</button><button onclick="closeFinalize()" class="flex-1 btn-ghost px-4 py-2.5 rounded-lg text-sm font-medium">Cancelar</button></div>
     </div>
@@ -2004,6 +2024,256 @@ function getBulkSalesDate() {
   return input && input.value ? parseLocalDate(input.value) : new Date();
 }
 
+// ============================================================
+// RAZÃO DE ESTOQUE — motor único de toda baixa e todo crédito.
+// ============================================================
+// TODA movimentação de estoque do sistema passa por aqui: venda manual, venda em lote, saída manual,
+// produção (pré-preparo e produto pronto) e baixa retroativa.
+//
+// POR QUE ISSO EXISTE: esse cálculo — resolver o insumo pelo nome, converter da unidade da receita
+// pra unidade de estoque, multiplicar pela quantidade, debitar e guardar o rastro — estava copiado em
+// CINCO lugares, e as cópias já tinham divergido entre si: a produção não multiplicava pelas vezes da
+// receita, e cada uma gravava o rastro num formato diferente. Um bug corrigido num caminho continuava
+// vivo nos outros quatro.
+//
+// O motor devolve um PLANO e não grava nada. Quem chama decide quando mandar, o que é o que permite
+// montar a venda inteira em memória e gravar tudo numa viagem atômica só (ou tudo, ou nada).
+//
+// DUAS REGRAS QUE VALEM PRA TODO MUNDO:
+//  1. O rastro (`linhas`) sempre registra a quantidade REAL movimentada, já convertida pra unidade de
+//     estoque do produto. Nunca a quantidade "da receita" — porque quem lê depois (cancelar produção,
+//     desfazer venda, custo de saída sem venda, conferência de saldo) não tem como saber por quantas
+//     vezes multiplicar nem em que unidade estava.
+//  2. Saldo PODE ficar negativo. Antes toda dedução fazia Math.max(0, ...), o que zerava o saldo e
+//     jogava fora a diferença: o rombo sumia, a próxima produção repunha e o número voltava a parecer
+//     certo. Saldo negativo é impossível na vida real, então ele denuncia na hora que falta lançar uma
+//     entrada ou que a receita está errada — em vez de esconder o problema até alguém notar na
+//     prateleira. É o princípio de nunca inventar número, aplicado ao estoque.
+function createStockLedger() {
+  const saldo = {};       // id do produto -> quantidade corrente DENTRO deste plano
+  const alterados = {};   // id do produto -> produto com a quantidade já atualizada
+  const linhas = [];      // rastro uniforme: { name, qty, unit, storageQty, productId, tracked }
+  const faltas = [];      // avisos de saldo insuficiente (não travam nada)
+  const erros = [];       // insumo não encontrado / unidade inconvertível
+  function resolve(name) {
+    return getProducts().find(p => namesMatch(p.product_name, name))
+        || getFinishedProducts().find(p => namesMatch(p.product_name, name))
+        || null;
+  }
+  function currentQty(p) {
+    if (!(p.id in saldo)) saldo[p.id] = Number(p.quantity) || 0;
+    return saldo[p.id];
+  }
+  // Converte pra unidade de estoque do produto. Devolve null quando não há conversão possível — e aí
+  // o chamador registra erro em vez de multiplicar unidades incompatíveis (que daria um número errado
+  // com cara de certo, às vezes ordens de grandeza fora).
+  function toStorage(p, qty, unit) {
+    const su = p.storage_unit || p.unit;
+    if (!unit || namesMatch(unit, su)) return qty;
+    const cc = getCustomConversions(p);
+    const temCustom = cc.some(c => namesMatch(c.unit, su) || namesMatch(c.unit, unit));
+    if (!canConvert(unit, su) && !temCustom) return null;
+    const v = convertQuantity(qty, unit, su, cc);
+    return isFinite(v) ? v : null;
+  }
+  // sinal: -1 consome, +1 credita. `contexto` só entra na mensagem de aviso.
+  function mover(name, qty, unit, sinal, contexto) {
+    const p = resolve(name);
+    if (!p) { erros.push(`${name} não encontrado no cadastro${contexto?` (${contexto})`:''}`); return null; }
+    const su = p.storage_unit || p.unit;
+    const storageQty = toStorage(p, Number(qty) || 0, unit);
+    if (storageQty === null) {
+      erros.push(`${p.product_name}: não dá pra converter ${unit} para ${su}${contexto?` (${contexto})`:''}`);
+      return null;
+    }
+    // Insumo sem controle de estoque entra no RASTRO (o custo dele conta no CMV e nas saídas sem
+    // venda) mas não mexe no saldo — a quantidade dele é declaradamente não confiável, então deixar
+    // ela despencar só encheria a conferência de saldo de ruído.
+    const tracked = productControlsStock(p);
+    if (tracked) {
+      const antes = currentQty(p);
+      const depois = antes + sinal * storageQty;
+      if (sinal < 0 && depois < 0) {
+        faltas.push(`${p.product_name}: saldo ficou ${fmtQty(depois, su)} ${su} (tinha ${fmtQty(antes, su)}, saiu ${fmtQty(storageQty, su)})${contexto?` — ${contexto}`:''}`);
+      }
+      saldo[p.id] = depois;
+      alterados[p.id] = { ...p, quantity: depois };
+    }
+    const linha = { name: p.product_name, qty: storageQty, unit: su, storageQty, productId: p.id, tracked };
+    linhas.push(linha);
+    return linha;
+  }
+  return {
+    resolve, currentQty,
+    consume: (name, qty, unit, ctx) => mover(name, qty, unit, -1, ctx),
+    credit:  (name, qty, unit, ctx) => mover(name, qty, unit, +1, ctx),
+    // Consome os ingredientes de uma receita `times` vezes. Devolve as linhas debitadas, no formato
+    // que já é gravado nas vendas (deductedIngredients) — é esse array que "desfazer" e o custo de
+    // saída sem venda leem depois, então ele precisa ser a verdade do que saiu, não a receita.
+    consumeRecipe(recipe, times, ctx) {
+      let ingredients = []; try { ingredients = JSON.parse(recipe.recipe_ingredients || '[]'); } catch(e) {}
+      const out = [];
+      ingredients.forEach(ing => {
+        const linha = mover(ing.name, (Number(ing.qty) || 0) * times, ing.unit, -1, ctx);
+        if (linha) out.push({ name: linha.name, qty: linha.storageQty, unit: linha.unit });
+      });
+      return out;
+    },
+    // Uma operação de update POR PRODUTO, com o saldo final acumulado — mesmo que ele apareça em
+    // vários itens da mesma venda (leite no cappuccino E no chocolate quente).
+    operations() { return Object.values(alterados).map(data => ({ op:'update', data })); },
+    get linhas() { return linhas; },
+    get faltas() { return faltas; },
+    get erros() { return erros; },
+  };
+}
+
+// ============================================================
+// CONFERÊNCIA DE SALDO — reconstrói o saldo de cada item a partir do histórico e compara com o
+// saldo gravado. É a resposta pra "dá pra confiar nesse número?".
+// ============================================================
+// Reprocessa TODAS as movimentações na ordem cronológica, aplicando o mesmo efeito que elas aplicaram
+// quando aconteceram, e compara o resultado com a quantidade que está gravada no produto. Se os dois
+// baterem, o saldo é explicado inteirinho pelo histórico. Se não baterem, a diferença é exatamente o
+// tanto que mudou sem passar pelo sistema.
+//
+// Lê os DOIS formatos de rastro de propósito: o novo (storageQty gravado = quanto saiu de verdade) e
+// o antigo (quantidade na unidade da receita, precisando de ×vezes e conversão). Sem isso, tudo que é
+// anterior à uniformização apareceria como divergência e a tela viraria ruído.
+//
+// MARCO DE CONFERÊNCIA (type='stock_baseline'): sem ele, essa tela nasceria com 115 divergências que
+// não são erro nenhum — são os saldos que os insumos já tinham antes de existir registro de saldo
+// inicial (dado importado). Uma tela que grita 115 alarmes falsos ninguém olha, e aí ela deixa de
+// avisar quando o alarme é de verdade. O marco congela "neste dia, cada item tinha tanto", e a
+// conferência passa a comparar só o que aconteceu DEPOIS. Assim a tela nasce zerada e qualquer
+// divergência que aparecer é real.
+//   type='stock_baseline' (aba Estoque) -> {id, type, movement_date(=quando foi marcado),
+//     batch_items(=JSON [{productId, qty}] com o saldo de cada item naquele instante), movement_note}
+function getStockBaseline() {
+  const recs = allData.filter(r => r.type === 'stock_baseline');
+  if (!recs.length) return null;
+  // O mais recente vence — remarcar o conferido é uma operação normal, não um erro.
+  const rec = recs.slice().sort((a,b)=>String(b.movement_date).localeCompare(String(a.movement_date)))[0];
+  let saldos = []; try { saldos = JSON.parse(rec.batch_items||'[]'); } catch(e) {}
+  const mapa = {};
+  saldos.forEach(s => { mapa[s.productId] = Number(s.qty) || 0; });
+  return { data: rec.movement_date, saldos: mapa, id: rec.id };
+}
+async function marcarConferenciaDeEstoque() {
+  const agora = new Date().toISOString();
+  const saldos = [...getProducts(), ...getFinishedProducts()]
+    .filter(productControlsStock)
+    .map(p => ({ productId: p.id, qty: Number(p.quantity) || 0 }));
+  showLoadingProgress('Marcando conferência...');
+  try {
+    const r = await dbCreate({ ...blankRecord(), type:'stock_baseline', movement_date:agora,
+      movement_note:`Conferência de estoque: ${saldos.length} item(ns) conferido(s)`,
+      batch_items: JSON.stringify(saldos) }, {silent:true});
+    assertSaved(r, 'marco de conferência');
+    invalidateDataCache();
+    hideLoadingProgress();
+    showToast('Estoque conferido! A partir de agora, qualquer divergência que aparecer é real.');
+    renderStockAudit();
+  } catch (err) {
+    hideLoadingProgress();
+    console.error('Erro ao marcar conferência:', err);
+    showToast('Erro ao marcar conferência: ' + err.message, true);
+  }
+}
+function reconcileStockLedger() {
+  const N = v => { if (v===''||v==null) return 0; const n = Number(String(v).replace(',','.')); return isNaN(n) ? 0 : n; };
+  const baseline = getStockBaseline();
+  const efeito = {};   // id do produto -> efeito líquido do histórico considerado
+  const semRastro = [];
+  const resolve = (name) => getProducts().find(p=>namesMatch(p.product_name,name)) || getFinishedProducts().find(p=>namesMatch(p.product_name,name)) || null;
+  function aplicar(name, qty, unit) {
+    const p = resolve(name); if (!p) return;
+    const su = p.storage_unit || p.unit;
+    let v = qty;
+    if (unit && !namesMatch(unit, su)) {
+      const cc = getCustomConversions(p);
+      const temCustom = cc.some(c => namesMatch(c.unit,su) || namesMatch(c.unit,unit));
+      if (!canConvert(unit, su) && !temCustom) return;
+      v = convertQuantity(qty, unit, su, cc);
+    }
+    efeito[p.id] = (efeito[p.id]||0) + v;
+  }
+  const movs = getMovements()
+    .filter(m => !baseline || String(m.movement_date) > String(baseline.data))
+    .sort((a,b)=>String(a.movement_date).localeCompare(String(b.movement_date)));
+  let considerados = 0;
+  movs.forEach(m => {
+    const nota = String(m.movement_note||'');
+    // Movimentação cancelada/desfeita não conta: o efeito dela já foi revertido no estoque, e o
+    // registro de estorno é só informativo — somar os dois contaria a reversão duas vezes.
+    if (nota.startsWith('🚫 CANCELADA') || nota.startsWith('↩️ DESFEITA')) return;
+    if (m.movement_type === 'estorno' || m.movement_type === 'estorno_producao') return;
+    considerados++;
+    let items = []; try { items = JSON.parse(m.batch_items||'[]'); } catch(e) {}
+    if (!Array.isArray(items)) items = [];
+    const t = m.movement_type;
+    if (t === 'ajuste_manual') { const p = resolve(m.movement_product); if (p) efeito[p.id] = (efeito[p.id]||0) + N(m.movement_quantity); return; }
+    if (t === 'perda') {
+      if (items.length) items.forEach(it => aplicar(it.name, -N(it.storageQty !== undefined ? it.storageQty : it.qty), it.storageQty !== undefined ? null : it.unit));
+      else aplicar(m.movement_product, -N(m.movement_quantity), null);
+      return;
+    }
+    if (t === 'entrada') {
+      if (!items.length) { semRastro.push(m); return; }
+      items.forEach(it => aplicar(it.name, N(it.storageQty !== undefined ? it.storageQty : it.qty), it.storageQty !== undefined ? null : it.unit));
+      return;
+    }
+    if (t === 'saida_manual' || t === 'venda') {
+      let usou = false;
+      items.forEach(it => {
+        if (Array.isArray(it.deductedIngredients)) { it.deductedIngredients.forEach(d => aplicar(d.name, -N(d.qty), d.unit)); usou = true; }
+        else if (String(it.value||'').startsWith('finished_')) { aplicar(it.name, -N(it.qty), null); usou = true; }
+        else if (String(it.value||'').startsWith('uncontrolled_')) { usou = true; }
+        else if (it.name !== undefined) { aplicar(it.name, -N(it.storageQty !== undefined ? it.storageQty : it.qty), it.storageQty !== undefined ? null : it.unit); usou = true; }
+      });
+      if (!usou) semRastro.push(m);
+      return;
+    }
+    if (t === 'producao') {
+      aplicar(m.movement_product, N(m.movement_quantity), null);
+      // Formato novo: storageQty = o que saiu de verdade, nada a reconstruir.
+      // Formato antigo: a receita 1× na unidade da receita — precisa do ×vezes (ver getProductionInfo).
+      const novo = items.some(it => it && it.storageQty !== undefined);
+      let times = 1;
+      if (!novo) { const info = getProductionInfo(m); if (info.times && info.times > 0) times = info.times; }
+      items.forEach(it => aplicar(it.name, -N(it.storageQty !== undefined ? it.storageQty : it.qty) * (novo ? 1 : times), it.storageQty !== undefined ? null : it.unit));
+      return;
+    }
+    semRastro.push(m);
+  });
+  const linhas = [];
+  [...getProducts(), ...getFinishedProducts()].forEach(p => {
+    if (!productControlsStock(p)) return; // sem controle de estoque, o saldo é declaradamente sem valor
+    const su = p.storage_unit || p.unit;
+    const saldo = N(p.quantity);
+    const partida = baseline ? (baseline.saldos[p.id] || 0) : 0;
+    const esperado = partida + (efeito[p.id] || 0);
+    const dif = saldo - esperado;
+    linhas.push({
+      id:p.id, nome:p.product_name, unidade:su, saldo,
+      partida, movimentado: efeito[p.id] || 0, esperado, dif,
+      negativo: saldo < 0, bate: Math.abs(dif) < 0.005,
+      // Item cadastrado depois do marco não tem saldo de partida registrado nele — o saldo inicial
+      // dele veio como movimento de entrada, então continua fechando normalmente.
+      novoDesdeMarco: !!baseline && !(p.id in baseline.saldos),
+    });
+  });
+  return {
+    linhas, baseline,
+    negativos: linhas.filter(l => l.negativo).sort((a,b)=>a.saldo-b.saldo),
+    divergentes: linhas.filter(l => !l.bate).sort((a,b)=>Math.abs(b.dif)-Math.abs(a.dif)),
+    conferem: linhas.filter(l => l.bate).length,
+    total: linhas.length,
+    movimentosConsiderados: considerados,
+    semRastro,
+  };
+}
+
 function blankRecord() {
   return { product_name:'', quantity:0, unit:'', storage_unit:'', critical_stock:0, min_stock:0,
     comfortable_stock:0, category:'', recipe_name:'', recipe_ingredients:'', recipe_yield:0,
@@ -2309,37 +2579,62 @@ function produceNFromSuggestion(recipeId, times) {
   openProductionConfirm(recipeId, times, 'execute');
 }
 
-// Produz `times` vezes a receita (tipo Insumo): desconta ingredientes × times, credita rendimento no insumo vinculado.
-// realYieldOverride: se informado (ex: houve perda na produção), credita esse valor em vez do calculado (recipe_yield × times).
+// Produz `times` vezes a receita (tipo Insumo): desconta ingredientes × times, credita o rendimento
+// no insumo vinculado. realYieldOverride: quanto rendeu DE VERDADE, quando diferente do esperado.
+//
+// REGRA DO CONSUMO — o insumo gasto depende SÓ das vezes da receita, nunca do rendimento.
+// Fazer 1× uma receita que leva 100 ml de leite gasta 100 ml de leite, tenha rendido 10 fatias ou 9.
+// A diferença aparece como perda de PRODUÇÃO (rendeu menos), não como economia de insumo. Fazer 0,5×
+// gasta 50 ml e espera metade do rendimento. Ratear o insumo pelo rendimento seria dizer que um bolo
+// que desandou consumiu menos ingredientes, o que é falso e barateia o CMV indevidamente.
 async function confirmInsumoProduction(recipe, times, realYieldOverride) {
   times = Math.max(0, parseFloat(times) || 0);
   if (times <= 0) return { ok:false, error:'quantidade inválida' };
-  let ingredients = []; try { ingredients = JSON.parse(recipe.recipe_ingredients); } catch(e) {}
   const target = getProducts().find(p => p.linked_recipe_id === recipe.id);
   if (!target) return { ok:false, error:'sem insumo vinculado — edite o insumo e vincule esta receita' };
-  for (const ing of ingredients) {
-    const p = getProducts().find(x => namesMatch(x.product_name, ing.name));
-    if (!p) return { ok:false, error:`${ing.name} não encontrado` };
-    const su = p.storage_unit || p.unit;
-    if (productControlsStock(p) && p.quantity < convertQuantity(ing.qty * times, ing.unit, su, getCustomConversions(p))) return { ok:false, error:`falta ${ing.name}` };
-  }
-  for (const ing of ingredients) {
-    const p = getProducts().find(x => namesMatch(x.product_name, ing.name));
-    const su = p.storage_unit || p.unit;
-    const consumptionQty = convertQuantity(ing.qty * times, ing.unit, su, getCustomConversions(p));
-    const res = await dbUpdate({...p, quantity: Math.max(0, p.quantity - consumptionQty)}, {silent:true});
-    if (!res.isOk) return { ok:false, error:`erro ao descontar ${ing.name}` };
-  }
   const expectedYield = (parseFloat(recipe.recipe_yield)||0) * times;
   const hasLoss = realYieldOverride !== null && realYieldOverride !== undefined && !isNaN(realYieldOverride);
   const yieldQty = hasLoss ? Math.max(0, realYieldOverride) : expectedYield;
-  const targetNow = getProducts().find(p => p.id === target.id);
-  const resTarget = await dbUpdate({...targetNow, quantity: targetNow.quantity + yieldQty}, {silent:true});
-  if (!resTarget.isOk) return { ok:false, error:'erro ao creditar estoque' };
-  const ingNote = ingredients.map(i=>`${fmtQty(i.qty*times,i.unit)} ${i.unit} ${i.name}`).join(', ');
+
+  const ledger = createStockLedger();
+  const consumidos = ledger.consumeRecipe(recipe, times, `produção de ${fmtQty(times,'')}× ${recipe.recipe_name}`);
+  ledger.credit(target.product_name, yieldQty, null, `produção de ${target.product_name}`);
+  if (ledger.erros.length) return { ok:false, error: ledger.erros.join('; ') };
+
+  const ingNote = consumidos.map(c=>`${fmtQty(c.qty,c.unit)} ${c.unit} ${c.name}`).join(', ');
   const lossNote = hasLoss && yieldQty < expectedYield ? ` ⚠️ Perda na produção: esperado ${fmtQty(expectedYield,target.unit)} ${target.unit}, rendeu ${fmtQty(yieldQty,target.unit)} ${target.unit}.` : '';
-  await dbCreate({ ...blankRecord(), type:'movement', movement_type:'producao', movement_product:target.product_name, movement_quantity:yieldQty, movement_date:new Date().toISOString(), movement_note:`Produção: ${fmtQty(yieldQty,target.unit)} ${target.unit} de ${target.product_name} (${fmtQty(times,'')}× receita).${lossNote} Insumos: ${ingNote}`, batch_items:recipe.recipe_ingredients, production_recipe_id:recipe.id, production_real_yield:yieldQty }, {silent:true});
-  return { ok:true };
+  const operations = [
+    ...ledger.operations(),
+    { op:'create', data: buildProductionMovement({ recipe, target, times, yieldQty, consumidos, note:`Produção: ${fmtQty(yieldQty,target.unit)} ${target.unit} de ${target.product_name} (${fmtQty(times,'')}× receita).${lossNote} Insumos: ${ingNote}` }) },
+  ];
+  const res = await dbBatchWrite(operations, {silent:true});
+  if (!res.isOk) return { ok:false, error: res.error || 'erro ao gravar a produção' };
+  return { ok:true, faltas: ledger.faltas };
+}
+// Monta o registro de produção. Centralizado porque os dois caminhos de produção (a partir da
+// sugestão e a partir de Produções Pendentes) precisam gravar EXATAMENTE o mesmo formato.
+//
+// Duas coisas importantes aqui:
+//  • batch_items guarda o que foi REALMENTE consumido, já na unidade de estoque. Antes guardava
+//    `recipe.recipe_ingredients` — a receita crua, 1×, na unidade da receita. Quem lia (cancelar
+//    produção, conferência de saldo) tinha que adivinhar por quantas vezes multiplicar.
+//  • recipe_yield guarda as VEZES da receita. Antes ninguém guardava isso, e getProductionInfo
+//    reconstruía dividindo o rendimento pelo rendimento da receita — conta que dá errado sempre que
+//    houve perda na produção (rendeu 5,0 de 5,4 esperado virava "1,85× receita") ou sempre que o
+//    rendimento da receita fosse editado depois. Cancelar uma produção assim devolvia menos insumo do
+//    que tinha saído, e o estoque encolhia em silêncio.
+function buildProductionMovement({ recipe, target, times, yieldQty, consumidos, note }) {
+  return {
+    ...blankRecord(), type:'movement', movement_type:'producao',
+    movement_product: target.product_name,
+    movement_quantity: yieldQty,
+    movement_date: new Date().toISOString(),
+    movement_note: note,
+    batch_items: JSON.stringify(consumidos.map(c => ({ name:c.name, qty:c.qty, unit:c.unit, storageQty:c.qty }))),
+    production_recipe_id: recipe.id,
+    production_real_yield: yieldQty,
+    recipe_yield: times,
+  };
 }
 
 // ============================================================
@@ -2697,6 +2992,12 @@ async function confirmChangeStorageUnit() {
   showLoadingProgress('Trocando unidade...');
   try {
     const res = await dbUpdate({ ...p, unit:newUnit, storage_unit:newUnit, quantity:newQty, custom_conversions: JSON.stringify(rebased) });
+    // A troca de unidade não muda o estoque FÍSICO, mas muda o NÚMERO gravado (2 caixas viram 24
+    // unidades). Sem um registro, a Conferência de Saldo enxergaria essa diferença como rombo pra
+    // sempre. Fica gravado como ajuste, com a nota explicando que foi conversão e não movimentação.
+    if (res.isOk && newQty !== p.quantity) {
+      await dbCreate({ ...blankRecord(), type:'movement', movement_type:'ajuste_manual', movement_product:p.product_name, movement_quantity:newQty - p.quantity, movement_date:new Date().toISOString(), movement_note:`Conversão de unidade (não é entrada nem saída): ${fmtQty(p.quantity,oldUnit)} ${oldUnit} → ${fmtQty(newQty,newUnit)} ${newUnit}`, batch_items:JSON.stringify([{ name:p.product_name, qty:newQty - p.quantity, unit:newUnit, storageQty:newQty - p.quantity, productId:p.id }]) });
+    }
     hideLoadingProgress();
     if (!res.isOk) { showToast('Erro ao trocar unidade', true); return; }
     const linkedRecipe = p.linked_recipe_id ? getRecipes().find(r => r.id === p.linked_recipe_id) : null;
@@ -3082,20 +3383,20 @@ async function confirmManualExit() {
       insumoEntries.push({ id:sel.value, name:sel.selectedOptions[0]?.dataset.name||'', unit:chosenUnit, qty, storageQty, reason:reasonMotivo, eventName });
     }
   }
+  // Só valida o que impede o cálculo (cadastro faltando). Saldo insuficiente NÃO trava mais: a
+  // retirada já aconteceu de verdade na cafeteria, e travar aqui só faz o sistema ficar mais longe
+  // da realidade do que já está. O saldo vai a negativo e isso é sinalizado no fim e na Conferência
+  // de Saldo — um número negativo denuncia o problema, um zero forçado esconde.
   for (const e of insumoEntries) {
-    const prod = allData.find(r => r.id === e.id); if (!prod) { showToast(`Insumo ${e.name} não encontrado`, true); return; }
-    if (prod.quantity < e.storageQty) { showToast(`Estoque insuficiente de ${e.name}`, true); return; }
+    const prod = allData.find(r => r.id === e.id);
+    if (!prod) { showToast(`Insumo ${e.name} não encontrado`, true); return; }
   }
-  // Confere estoque suficiente pros itens de Venda Direta também, antes de começar a descontar
   for (const vd of vendaDiretaEntries) {
     const recipe = allData.find(r => r.id === vd.recipeId); if (!recipe) { showToast(`Item ${vd.name} não encontrado`, true); return; }
     let ingredients=[]; try{ingredients=JSON.parse(recipe.recipe_ingredients);}catch(e){}
     for (const ing of ingredients) {
       const p = getProducts().find(x => namesMatch(x.product_name, ing.name));
       if (!p) { showToast(`Insumo ${ing.name} (usado em ${vd.name}) não encontrado`, true); return; }
-      const storageUnit = p.storage_unit||p.unit;
-      const needed = convertQuantity(ing.qty*vd.qty, ing.unit, storageUnit, getCustomConversions(p));
-      if (productControlsStock(p) && p.quantity < needed) { showToast(`Estoque insuficiente de ${ing.name} pra retirar ${vd.name}`, true); return; }
     }
   }
   const reason = document.getElementById('manual-exit-reason').value.trim();
@@ -3103,38 +3404,41 @@ async function confirmManualExit() {
   const exitDate = dateInput ? parseLocalDate(dateInput) : new Date();
   showLoadingProgress('Confirmando saída...');
   try {
-    let done = 0;
-    const totalSteps = insumoEntries.length + vendaDiretaEntries.length;
+    // Mesmo motor da venda, e agora numa gravação atômica só: antes cada insumo era um dbUpdate
+    // separado, então uma falha no meio deixava metade do estoque baixado E nenhum registro no
+    // histórico — estoque mudado sem rastro, que é justamente o que impede auditar depois.
+    const ledger = createStockLedger();
+    updateLoadingProgress('Calculando a baixa...');
     for (const e of insumoEntries) {
-      updateLoadingProgress(`Retirando ${done+1}/${totalSteps}: ${e.name}`);
       const prod = allData.find(r => r.id === e.id);
-      assertSaved(await dbUpdate({...prod, quantity: Math.max(0, prod.quantity - e.storageQty)}, {silent:true}), e.name);
-      done++;
+      ledger.consume(prod.product_name, e.storageQty, null, `saída manual de ${e.name}`);
     }
     const vendaDiretaExitData = [];
     for (const vd of vendaDiretaEntries) {
-      updateLoadingProgress(`Retirando ${done+1}/${totalSteps}: ${vd.name}`);
       const recipe = allData.find(r => r.id === vd.recipeId);
-      let ingredients=[]; try{ingredients=JSON.parse(recipe.recipe_ingredients);}catch(e){}
-      const deductedIngredients = [];
-      for (const ing of ingredients) {
-        const p = getProducts().find(x => namesMatch(x.product_name, ing.name));
-        const storageUnit = p.storage_unit||p.unit;
-        const deduct = convertQuantity(ing.qty*vd.qty, ing.unit, storageUnit, getCustomConversions(p));
-        assertSaved(await dbUpdate({...p, quantity: Math.max(0, p.quantity - deduct)}, {silent:true}), ing.name);
-        deductedIngredients.push({ name: ing.name, qty: deduct, unit: storageUnit });
-      }
+      const deductedIngredients = ledger.consumeRecipe(recipe, vd.qty, `saída manual de ${vd.qty}× ${vd.name}`);
       // Guarda no mesmo formato usado nas vendas (value:'recipe_<id>' + deductedIngredients), pra
       // reaproveitar toda a lógica que já sabe ler isso: desfazer, saldo calculado, saídas recentes.
       vendaDiretaExitData.push({ value:`recipe_${vd.recipeId}`, name: vd.name, unit: recipe.recipe_yield_unit, type:'venda_direta', qty: vd.qty, deductedIngredients, reason:vd.reason, eventName:vd.eventName });
-      done++;
     }
+    if (ledger.erros.length) throw new Error(ledger.erros.join('; '));
     const allExitData = [...insumoEntries, ...vendaDiretaExitData];
     const itemList = allExitData.map(e => e.value ? `${fmtQty(e.qty,'')} ${e.name} (venda direta)` : `${fmtQty(e.qty,e.unit)} ${e.unit} ${e.name}`).join('; ');
-    assertSaved(await dbCreate({ ...blankRecord(), type:'movement', movement_type:'saida_manual', movement_product:itemList, movement_quantity:allExitData.length, movement_date:exitDate.toISOString(), movement_note:reason?`Saída Manual: ${itemList} (${reason})`:`Saída Manual: ${itemList}`, batch_items:JSON.stringify(allExitData) }, {silent:true}), 'registro da saída');
+    const operations = [
+      ...ledger.operations(),
+      { op:'create', data: { ...blankRecord(), type:'movement', movement_type:'saida_manual', movement_product:itemList, movement_quantity:allExitData.length, movement_date:exitDate.toISOString(), movement_note:reason?`Saída Manual: ${itemList} (${reason})`:`Saída Manual: ${itemList}`, batch_items:JSON.stringify(allExitData) } },
+    ];
+    updateLoadingProgress(`Salvando ${operations.length} mudança(s) numa viagem só...`);
+    const batchResult = await dbBatchWrite(operations, {silent:true});
+    if (!batchResult.isOk) throw new Error(batchResult.error || 'falha ao gravar a saída');
     renderAll();
     hideLoadingProgress();
-    showToast('Saída confirmada!'); resetManualExitForm();
+    if (ledger.faltas.length) {
+      showResultModal('Saída confirmada, com saldo negativo', ['A saída foi registrada, mas estes itens ficaram com saldo negativo — sinal de que falta lançar entrada ou que a receita está errada:', ...ledger.faltas], true);
+    } else {
+      showToast('Saída confirmada!');
+    }
+    resetManualExitForm();
   } catch (err) {
     hideLoadingProgress();
     console.error('Erro ao confirmar saída:', err);
@@ -3523,84 +3827,126 @@ function openFinalize(prodId) {
   finalizingProductionId = prodId;
   const prod = allData.find(r => r.id === prodId);
   document.getElementById('finalize-recipe-name').textContent = prod.recipe_name;
+  document.getElementById('finalize-times').value = 1;
+  document.getElementById('finalize-times-hint').textContent = `1× rende ${fmtQty(prod.recipe_yield, prod.recipe_yield_unit)} ${prod.recipe_yield_unit}`;
   document.getElementById('finalize-qty').value = prod.recipe_yield;
   document.getElementById('finalize-unit-hint').textContent = `Unidade: ${prod.recipe_yield_unit}`;
   document.getElementById('finalize-error').classList.add('hidden');
   document.getElementById('finalize-modal').classList.remove('hidden');
+  updateFinalizePreview();
+}
+// Mostra, ANTES de gravar, exatamente o que vai sair do estoque e o que vai entrar. É o que torna a
+// regra "consumo vem das vezes, não do rendimento" visível em vez de implícita.
+function updateFinalizePreview() {
+  const el = document.getElementById('finalize-preview'); if (!el) return;
+  const prod = allData.find(r => r.id === finalizingProductionId); if (!prod) return;
+  const times = Math.max(0, parseFloat(document.getElementById('finalize-times').value) || 0);
+  const realYield = Math.max(0, parseFloat(document.getElementById('finalize-qty').value) || 0);
+  const esperado = (parseFloat(prod.recipe_yield) || 0) * times;
+  let ingredients=[]; try{ingredients=JSON.parse(prod.recipe_ingredients||'[]');}catch(e){}
+  const linhas = ingredients.map(ing => {
+    const p = getProducts().find(x => namesMatch(x.product_name, ing.name));
+    if (!p) return `<div class="text-red-600">• ${ing.name} — não encontrado no cadastro</div>`;
+    const su = p.storage_unit || p.unit;
+    const q = convertQuantity((parseFloat(ing.qty)||0) * times, ing.unit, su, getCustomConversions(p));
+    const depois = (Number(p.quantity)||0) - q;
+    return `<div class="flex justify-between gap-2"><span class="text-stone-600 truncate">− ${fmtQty(q,su)} ${su} ${p.product_name}</span><span class="${depois<0?'text-red-600 font-semibold':'text-stone-400'} whitespace-nowrap">fica ${fmtQty(depois,su)}</span></div>`;
+  });
+  const perda = esperado > 0 && realYield < esperado
+    ? `<div class="text-amber-700 pt-1 border-t border-stone-200 mt-1">⚠️ Perda de produção: esperado ${fmtQty(esperado, prod.recipe_yield_unit)}, rendeu ${fmtQty(realYield, prod.recipe_yield_unit)} ${prod.recipe_yield_unit}. O insumo gasto é o mesmo.</div>`
+    : '';
+  el.innerHTML = `<p class="font-semibold text-stone-700">Vai sair do estoque:</p>${linhas.join('') || '<div class="text-stone-400 italic">Receita sem ingredientes</div>'}${perda}`;
 }
 function closeFinalize() { document.getElementById('finalize-modal').classList.add('hidden'); finalizingProductionId = null; }
 function confirmFinalize() {
   const prod = allData.find(r => r.id === finalizingProductionId); if (!prod) return;
+  const erro = (msg) => { const e=document.getElementById('finalize-error'); e.textContent=msg; e.classList.remove('hidden'); };
+  const times = Math.max(0, parseFloat(document.getElementById('finalize-times').value) || 0);
   const realYield = Math.max(0, parseFloat(document.getElementById('finalize-qty').value) || 0);
-  if (realYield < 1) { document.getElementById('finalize-error').textContent='Rendimento deve ser pelo menos 1'; document.getElementById('finalize-error').classList.remove('hidden'); return; }
+  if (times <= 0) { erro('Informe quantas vezes a receita foi feita'); return; }
+  if (realYield <= 0) { erro('Informe o rendimento real'); return; }
   let ingredients=[]; try{ingredients=JSON.parse(prod.recipe_ingredients);}catch(e){}
-  const products = getProducts();
+  // Só valida cadastro. Saldo insuficiente não trava: a produção já aconteceu, e o saldo negativo
+  // resultante é o sinal de que falta lançar entrada — ver a decisão registrada em createStockLedger.
   for (const ing of ingredients) {
-    const p = products.find(x => x.product_name === ing.name);
-    if (!p) { document.getElementById('finalize-error').textContent=`Insumo ${ing.name} não encontrado`; document.getElementById('finalize-error').classList.remove('hidden'); return; }
-    const storageUnit = p.storage_unit || p.unit;
-    const consumptionQty = convertQuantity(ing.qty, ing.unit, storageUnit, getCustomConversions(p));
-    if (productControlsStock(p) && p.quantity < consumptionQty) { document.getElementById('finalize-error').textContent=`Estoque insuficiente de ${ing.name}`; document.getElementById('finalize-error').classList.remove('hidden'); return; }
+    if (!getProducts().find(x => namesMatch(x.product_name, ing.name))) { erro(`Insumo ${ing.name} não encontrado`); return; }
   }
   document.getElementById('finalize-btn').disabled = true;
   document.getElementById('finalize-btn').textContent = 'Processando...';
-  processFinalization(prod, realYield, ingredients);
+  processFinalization(prod, times, realYield);
 }
-async function processFinalization(prod, realYield, ingredients) {
+// times = quantas vezes a receita foi feita (define o CONSUMO).
+// realYield = quanto saiu de verdade (define o CRÉDITO). Os dois são independentes: render menos que o
+// esperado é perda de produção, não economia de insumo.
+async function processFinalization(prod, times, realYield) {
   showLoadingProgress('Finalizando produção...');
   try {
-    let done = 0;
-    for (const ing of ingredients) {
-      updateLoadingProgress(`Descontando ${done+1}/${ingredients.length}: ${ing.name}`);
-      const p = getProducts().find(x => namesMatch(x.product_name, ing.name));
-      const storageUnit = p.storage_unit || p.unit;
-      const consumptionQty = convertQuantity(ing.qty, ing.unit, storageUnit, getCustomConversions(p));
-      await dbUpdate({...p, quantity: Math.max(0, p.quantity - consumptionQty)}, {silent:true});
-      done++;
-    }
-    const ingNote = ingredients.map(i=>`${fmtQty(i.qty,i.unit)} ${i.unit} ${i.name}`).join(', ');
+    const recipe = allData.find(r => r.id === prod.production_recipe_id && r.type === 'recipe');
+    // A produção pendente guarda um snapshot da receita; se a receita ainda existe, ela é a fonte
+    // preferida (reflete correção de ingrediente feita depois de agendar a produção).
+    const fonte = recipe || { id: prod.production_recipe_id, recipe_ingredients: prod.recipe_ingredients, recipe_name: prod.recipe_name, recipe_yield: prod.recipe_yield };
 
+    // Descobre o destino ANTES de mexer em qualquer estoque — assim uma receita sem insumo vinculado
+    // não deixa mais os ingredientes descontados sem nada creditado (era o que acontecia: o erro era
+    // mostrado depois de já ter debitado tudo).
+    let target, isFinished = false;
     if (prod.recipe_type === 'Insumo') {
-      // Receita tipo Insumo: credita o insumo VINCULADO (não cria um "produto pronto")
-      const target = getProducts().find(p => p.linked_recipe_id === prod.production_recipe_id);
+      target = getProducts().find(p => p.linked_recipe_id === prod.production_recipe_id);
       if (!target) {
-        renderAll(); // os insumos já foram descontados acima — reflete isso na tela mesmo com o erro abaixo
         hideLoadingProgress();
-        document.getElementById('finalize-error').textContent = 'Sem insumo vinculado a esta receita — edite o insumo e vincule esta receita antes de finalizar.';
+        document.getElementById('finalize-error').textContent = 'Sem insumo vinculado a esta receita — edite o insumo e vincule esta receita antes de finalizar. Nada foi descontado.';
         document.getElementById('finalize-error').classList.remove('hidden');
         document.getElementById('finalize-btn').disabled = false;
         document.getElementById('finalize-btn').textContent = 'Finalizar';
         return;
       }
-      updateLoadingProgress(`Creditando ${target.product_name}...`);
-      await dbUpdate({...target, quantity: target.quantity + realYield}, {silent:true});
-      await dbCreate({ ...blankRecord(), type:'movement', movement_type:'producao', movement_product:target.product_name, movement_quantity:realYield, movement_date:new Date().toISOString(), movement_note:`Produção: ${fmtQty(realYield,target.unit)} ${target.unit} de ${target.product_name}. Insumos: ${ingNote}`, batch_items:prod.recipe_ingredients, production_recipe_id:prod.production_recipe_id, production_real_yield:realYield }, {silent:true});
-      await dbUpdate({...prod, production_status:'done', production_real_yield:realYield}, {silent:true});
-      renderAll();
-      document.getElementById('finalize-btn').disabled = false;
-      document.getElementById('finalize-btn').textContent = 'Finalizar';
-      hideLoadingProgress();
-      closeFinalize();
-      showToast(`${fmtQty(realYield,target.unit)} ${target.unit} de ${target.product_name} produzido!`);
-      return;
+    } else {
+      isFinished = true;
+      const finishedName = prod.recipe_product_name || prod.recipe_name;
+      target = getFinishedProducts().find(f => namesMatch(f.product_name, finishedName))
+            || { product_name: finishedName, unit: prod.recipe_yield_unit, _novo: true };
     }
 
-    const finishedName = prod.recipe_product_name || prod.recipe_name;
-    const finishedUnit = prod.recipe_yield_unit;
-    updateLoadingProgress(`Creditando ${finishedName}...`);
-    const existing = getFinishedProducts().find(f => f.product_name === finishedName);
-    if (existing) { await dbUpdate({...existing, quantity: existing.quantity + realYield}, {silent:true}); }
-    else { await dbCreate({ ...blankRecord(), type:'finished_product', product_name:finishedName, quantity:realYield, unit:finishedUnit, storage_unit:finishedUnit, critical_stock:2, min_stock:5, comfortable_stock:10, linked_recipe_id:prod.production_recipe_id }, {silent:true}); }
-    await dbCreate({ ...blankRecord(), type:'movement', movement_type:'producao', movement_product:finishedName, movement_quantity:realYield, movement_date:new Date().toISOString(), movement_note:`Produção: ${fmtQty(realYield,finishedUnit)} ${finishedUnit} de ${finishedName}. Insumos: ${ingNote}`, batch_items:prod.recipe_ingredients, production_recipe_id:prod.production_recipe_id, production_real_yield:realYield }, {silent:true});
-    await dbUpdate({...prod, production_status:'done', production_real_yield:realYield}, {silent:true});
+    const ledger = createStockLedger();
+    const consumidos = ledger.consumeRecipe(fonte, times, `produção de ${fmtQty(times,'')}× ${fonte.recipe_name}`);
+    if (ledger.erros.length) throw new Error(ledger.erros.join('; '));
+    const operations = [...ledger.operations()];
+
+    // Produto pronto que ainda não existe precisa ser criado com o rendimento; os demais são creditados
+    // pelo mesmo motor de sempre.
+    if (isFinished && target._novo) {
+      operations.push({ op:'create', data: { ...blankRecord(), type:'finished_product', product_name:target.product_name, quantity:realYield, unit:prod.recipe_yield_unit, storage_unit:prod.recipe_yield_unit, critical_stock:2, min_stock:5, comfortable_stock:10, linked_recipe_id:prod.production_recipe_id } });
+    } else {
+      const credito = createStockLedger();
+      credito.credit(target.product_name, realYield, null, `produção de ${target.product_name}`);
+      operations.push(...credito.operations());
+    }
+
+    const ingNote = consumidos.map(c=>`${fmtQty(c.qty,c.unit)} ${c.unit} ${c.name}`).join(', ');
+    const esperado = (parseFloat(fonte.recipe_yield)||0) * times;
+    const lossNote = realYield < esperado ? ` ⚠️ Perda na produção: esperado ${fmtQty(esperado,prod.recipe_yield_unit)} ${prod.recipe_yield_unit}, rendeu ${fmtQty(realYield,prod.recipe_yield_unit)} ${prod.recipe_yield_unit}.` : '';
+    operations.push({ op:'create', data: buildProductionMovement({
+      recipe: fonte, target: { product_name: target.product_name, unit: target.unit || prod.recipe_yield_unit },
+      times, yieldQty: realYield, consumidos,
+      note: `Produção: ${fmtQty(realYield,prod.recipe_yield_unit)} ${prod.recipe_yield_unit} de ${target.product_name} (${fmtQty(times,'')}× receita).${lossNote} Insumos: ${ingNote}`,
+    }) });
+    operations.push({ op:'update', data: { ...prod, production_status:'done', production_real_yield:realYield, recipe_yield: prod.recipe_yield } });
+
+    updateLoadingProgress(`Salvando ${operations.length} mudança(s) numa viagem só...`);
+    const res = await dbBatchWrite(operations, {silent:true});
+    if (!res.isOk) throw new Error(res.error || 'falha ao gravar a produção');
     renderAll();
     document.getElementById('finalize-btn').disabled = false;
     document.getElementById('finalize-btn').textContent = 'Finalizar';
     hideLoadingProgress();
     closeFinalize();
-    showToast(`${fmtQty(realYield,finishedUnit)} ${finishedUnit} de ${finishedName} produzido!`);
+    if (ledger.faltas.length) {
+      showResultModal('Produção registrada, com saldo negativo', ['A produção foi registrada, mas estes insumos ficaram com saldo negativo — falta lançar entrada ou a receita está errada:', ...ledger.faltas], true);
+    } else {
+      showToast(`${fmtQty(realYield,prod.recipe_yield_unit)} ${prod.recipe_yield_unit} de ${target.product_name} produzido!`);
+    }
   } catch (err) {
-    renderAll(); // pode ter descontado insumos antes do erro — garante que a tela reflita o que já foi salvo
+    renderAll();
     hideLoadingProgress();
     document.getElementById('finalize-btn').disabled = false;
     document.getElementById('finalize-btn').textContent = 'Finalizar';
@@ -3688,7 +4034,15 @@ async function handleAddFinishedProduct(e) {
   if (!name||!unit) { showToast('Preencha todos os campos obrigatórios', true); return; }
   if (getFinishedProducts().some(f=>f.product_name.toLowerCase()===name.toLowerCase())) { showToast('Produto já cadastrado', true); return; }
   const r = await dbCreate({ ...blankRecord(), type:'finished_product', product_name:name, quantity:qty, unit, storage_unit:unit, critical_stock:critical, min_stock:min, comfortable_stock:comfortable });
-  if (r.isOk) { showToast('Produto pronto cadastrado!'); hideAddFinishedProduct(); e.target.reset(); } else showToast('Erro', true);
+  if (r.isOk) {
+    // Mesmo registro de saldo inicial que o cadastro de insumo já fazia — sem ele, o produto pronto
+    // nascia com estoque que não vinha de movimento nenhum, e a Conferência de Saldo acusaria uma
+    // divergência permanente que na verdade nunca foi erro.
+    if (qty > 0) {
+      await dbCreate({ ...blankRecord(), type:'movement', movement_type:'entrada', movement_product:name, movement_quantity:qty, movement_date:new Date().toISOString(), movement_note:`Estoque inicial ao cadastrar: ${fmtQty(qty,unit)} ${unit} ${name}`, batch_items:JSON.stringify([{name, unit, qty, storageQty:qty}]) });
+    }
+    showToast('Produto pronto cadastrado!'); hideAddFinishedProduct(); e.target.reset();
+  } else showToast('Erro', true);
 }
 function deleteFinishedProduct() {
   const f = allData.find(r => r.id === editingFinishedId); if (!f) return;
@@ -3840,44 +4194,26 @@ async function confirmSales() {
   const notesParts = [];
   const stockShortfalls = []; // avisa no final, nunca trava a venda no meio
   const operations = []; // tudo montado na memória primeiro — mesma confiabilidade da Venda em Lote
-  const qtySnapshot = {};
-  function currentQty(product) {
-    if (!(product.id in qtySnapshot)) qtySnapshot[product.id] = product.quantity;
-    return qtySnapshot[product.id];
-  }
+  const ledger = createStockLedger();
   try {
     for (const s of salesData) {
       if (s.value.startsWith('finished_')) {
         const id = s.value.replace('finished_','');
         const fp = allData.find(r => r.id === id);
-        const before = currentQty(fp);
-        if (before < s.qty) stockShortfalls.push(`${fp.product_name}: faltou ${fmtQty(s.qty-before,fp.unit)} ${fp.unit} (tinha ${fmtQty(before,fp.unit)}, vendeu ${fmtQty(s.qty,fp.unit)})`);
-        const after = Math.max(0, before - s.qty);
-        qtySnapshot[fp.id] = after;
-        operations.push({ op:'update', data: {...fp, quantity: after} });
+        ledger.consume(fp.product_name, s.qty, null, `venda de ${s.qty}× ${s.name}`);
         notesParts.push(`${s.qty} ${s.name}`);
       } else if (s.value.startsWith('recipe_')) {
         const id = s.value.replace('recipe_','');
         const recipe = allData.find(r => r.id === id);
-        let ingredients=[]; try{ingredients=JSON.parse(recipe.recipe_ingredients);}catch(e){}
-        const deductedIngredients = [];
-        for (const ing of ingredients) {
-          const p = getProducts().find(x => namesMatch(x.product_name, ing.name));
-          const storageUnit = p.storage_unit||p.unit;
-          const deduct = convertQuantity(ing.qty * s.qty, ing.unit, storageUnit, getCustomConversions(p));
-          const before = currentQty(p);
-          if (before < deduct) stockShortfalls.push(`${p.product_name}: faltou ${fmtQty(deduct-before,storageUnit)} ${storageUnit} (tinha ${fmtQty(before,storageUnit)}, precisava ${fmtQty(deduct,storageUnit)} pra ${s.qty}× ${s.name})`);
-          const after = Math.max(0, before - deduct);
-          qtySnapshot[p.id] = after;
-          operations.push({ op:'update', data: {...p, quantity: after} });
-          // Guarda o valor EXATO descontado (já na unidade de estoque) direto na venda, pra "desfazer"
-          // no futuro devolver certinho mesmo que a receita seja editada depois.
-          deductedIngredients.push({ name: ing.name, qty: deduct, unit: storageUnit });
-        }
-        s.deductedIngredients = deductedIngredients;
+        // Guarda o valor EXATO descontado (já na unidade de estoque) direto na venda, pra "desfazer"
+        // no futuro devolver certinho mesmo que a receita seja editada depois.
+        s.deductedIngredients = ledger.consumeRecipe(recipe, s.qty, `venda de ${s.qty}× ${s.name}`);
         notesParts.push(`${s.qty} ${s.name}`);
       }
     }
+    operations.push(...ledger.operations());
+    stockShortfalls.push(...ledger.faltas);
+    if (ledger.erros.length) throw new Error(ledger.erros.join('; '));
 
     // O registro da venda entra NO MESMO PACOTE dos descontos — ou os dois são gravados juntos, ou
     // nenhum é (mesma garantia que a Venda em Lote já tem — antes, a Venda Manual gravava cada
@@ -4442,56 +4778,32 @@ async function processBulkSales(priceHints, prebuiltSalesData) {
   const notesParts = [];
   const stockShortfalls = []; // avisa no final, nunca trava a venda no meio
   const operations = []; // tudo que precisa ser gravado, montado na memória primeiro
-  // Quantidade "corrente" de cada insumo NESTA venda — necessário porque, como tudo é calculado
-  // antes de mandar pro servidor (nenhuma gravação no meio do loop), o mesmo insumo usado em dois
-  // itens diferentes da mesma venda (ex: leite no cappuccino E no chocolate quente) precisa somar
-  // os dois descontos, não recalcular do zero pra cada um.
-  const qtySnapshot = {};
-  function currentQty(product) {
-    if (!(product.id in qtySnapshot)) qtySnapshot[product.id] = product.quantity;
-    return qtySnapshot[product.id];
-  }
+  // O razão acumula o consumo do mesmo insumo usado em itens diferentes da mesma venda (leite no
+  // cappuccino E no chocolate quente) e devolve uma operação só por produto — ver createStockLedger.
+  const ledger = createStockLedger();
   try {
     for (const s of salesData) {
       if (s.value.startsWith('finished_')) {
         const id = s.value.replace('finished_','');
         const fp = allData.find(r => r.id === id);
         if (!fp) { hideLoadingProgress(); salesSubmitInProgress=false; showToast(`Produto ${s.name} não encontrado`, true); return; }
-        const before = currentQty(fp);
-        if (before < s.qty) stockShortfalls.push(`${fp.product_name}: faltou ${fmtQty(s.qty-before,fp.unit)} ${fp.unit} (tinha ${fmtQty(before,fp.unit)}, vendeu ${fmtQty(s.qty,fp.unit)})`);
-        const after = Math.max(0, before - s.qty);
-        qtySnapshot[fp.id] = after;
-        operations.push({ op:'update', data: {...fp, quantity: after} });
+        ledger.consume(fp.product_name, s.qty, null, `venda de ${s.qty}× ${s.name}`);
         notesParts.push(`${s.qty} ${s.name}`);
       } else if (s.value.startsWith('recipe_')) {
         const id = s.value.replace('recipe_','');
         const recipe = allData.find(r => r.id === id);
-        let ingredients=[]; try{ingredients=JSON.parse(recipe.recipe_ingredients);}catch(e){}
-        const deductedIngredients = [];
-        for (const ing of ingredients) {
-          const p = getProducts().find(x => namesMatch(x.product_name, ing.name));
-          if (!p) { hideLoadingProgress(); salesSubmitInProgress=false; showToast(`Insumo ${ing.name} não encontrado`, true); return; }
-          const storageUnit = p.storage_unit||p.unit;
-          const deduct = convertQuantity(ing.qty*s.qty, ing.unit, storageUnit, getCustomConversions(p));
-          const before = currentQty(p);
-          // Se o insumo tiver menos do que precisava, desconta até zero mesmo assim (a venda já
-          // aconteceu de verdade — se estava zerado é sinal de erro de entrada no estoque, não de
-          // venda errada) e guarda um aviso pra mostrar no final, sem travar a operação no meio.
-          if (before < deduct) stockShortfalls.push(`${p.product_name}: faltou ${fmtQty(deduct-before,storageUnit)} ${storageUnit} (tinha ${fmtQty(before,storageUnit)}, precisava ${fmtQty(deduct,storageUnit)} pra ${s.qty}× ${s.name})`);
-          const after = Math.max(0, before - deduct);
-          qtySnapshot[p.id] = after;
-          operations.push({ op:'update', data: {...p, quantity: after} });
-          // Guarda o valor EXATO descontado (já na unidade de estoque) direto na venda, pra "desfazer"
-          // no futuro devolver certinho mesmo que a receita seja editada depois.
-          deductedIngredients.push({ name: ing.name, qty: deduct, unit: storageUnit });
-        }
-        s.deductedIngredients = deductedIngredients;
+        // Guarda o valor EXATO descontado (já na unidade de estoque) direto na venda, pra "desfazer"
+        // no futuro devolver certinho mesmo que a receita seja editada depois.
+        s.deductedIngredients = ledger.consumeRecipe(recipe, s.qty, `venda de ${s.qty}× ${s.name}`);
         notesParts.push(`${s.qty} ${s.name}`);
       } else if (s.value.startsWith('uncontrolled_')) {
         // Item não controlado: não desconta nenhum estoque, só entra no registro da venda e no faturamento.
         notesParts.push(`${s.qty} ${s.name} (não controlado)`);
       }
     }
+    operations.push(...ledger.operations());
+    stockShortfalls.push(...ledger.faltas);
+    if (ledger.erros.length) throw new Error(ledger.erros.join('; '));
 
     // O registro da venda entra NO MESMO PACOTE dos descontos — ou os dois são gravados juntos,
     // ou nenhum é. É isso que garante que o estoque nunca muda sem deixar rastro no Histórico.
@@ -4600,13 +4912,31 @@ async function handleRegisterLoss(e) {
   const baseUnit = product.storage_unit || product.unit;
   const unit = chosenUnit || baseUnit;
   const storageQty = convertQuantity(qty, unit, baseUnit, getCustomConversions(product));
-  if (storageQty > product.quantity) { errorEl.textContent=`Quantidade indisponível. Estoque: ${fmtQty(product.quantity,product.unit)} ${product.unit}`; errorEl.classList.remove('hidden'); return; }
   showLoadingProgress('Registrando perda...');
   try {
-    await dbUpdate({...product, quantity: Math.max(0, product.quantity - storageQty)});
-    await dbCreate({ ...blankRecord(), type:'movement', movement_type:'perda', movement_product:product.product_name, movement_quantity:qty, movement_date:new Date().toISOString(), movement_note:reason?`Perda: ${fmtQty(qty,unit)} ${unit} ${product.product_name} (${reason})`:`Perda: ${fmtQty(qty,unit)} ${unit} ${product.product_name}`, loss_reason:reason, loss_type:'product', batch_items:JSON.stringify([{name:product.product_name, qty, unit}]) });
+    // Mesmo motor das demais saídas, e numa gravação atômica: antes o desconto e o registro da perda
+    // eram duas chamadas soltas, então uma falha no meio baixava o estoque sem deixar rastro.
+    // Perda maior que o saldo não trava mais — o produto estragado saiu de verdade, e o saldo negativo
+    // resultante é o aviso de que falta lançar entrada.
+    const ledger = createStockLedger();
+    ledger.consume(product.product_name, qty, unit, `perda de ${product.product_name}`);
+    if (ledger.erros.length) throw new Error(ledger.erros.join('; '));
+    // movement_quantity passa a ficar na unidade de ESTOQUE. Antes ficava na unidade digitada, e o
+    // custo saía certo porque batch_items guardava a mesma unidade — mas isso obrigava todo leitor a
+    // buscar a unidade no batch_items pra interpretar o número. Agora todo movimento guarda a
+    // quantidade na unidade de estoque, que é a regra única do razão.
+    const linha = ledger.linhas[0];
+    const operations = [
+      ...ledger.operations(),
+      { op:'create', data: { ...blankRecord(), type:'movement', movement_type:'perda', movement_product:product.product_name, movement_quantity:linha ? linha.storageQty : storageQty, movement_date:new Date().toISOString(), movement_note:reason?`Perda: ${fmtQty(qty,unit)} ${unit} ${product.product_name} (${reason})`:`Perda: ${fmtQty(qty,unit)} ${unit} ${product.product_name}`, loss_reason:reason, loss_type:'product', batch_items:JSON.stringify([{ name:product.product_name, qty:linha?linha.storageQty:storageQty, unit:baseUnit, storageQty:linha?linha.storageQty:storageQty }]) } },
+    ];
+    const res = await dbBatchWrite(operations, {silent:true});
+    if (!res.isOk) throw new Error(res.error || 'falha ao gravar a perda');
+    renderAll();
     hideLoadingProgress();
-    showToast('Perda registrada!'); resetLossForm();
+    if (ledger.faltas.length) showResultModal('Perda registrada, com saldo negativo', ['A perda foi registrada, mas o saldo ficou negativo — falta lançar entrada desse insumo:', ...ledger.faltas], true);
+    else showToast('Perda registrada!');
+    resetLossForm();
   } catch (err) {
     hideLoadingProgress();
     console.error('Erro ao registrar perda:', err);
@@ -4649,8 +4979,13 @@ let historyGroupByDay = false;
 function getMovementDetailItems(m) {
   let items = []; try { items = JSON.parse(m.batch_items || '[]'); } catch(e) {}
   if (!Array.isArray(items)) return [];
+  // Produções gravadas a partir da correção do consumo já trazem storageQty = o que saiu de verdade,
+  // então não há nada pra reconstruir. Só as antigas (que guardavam a receita 1×) precisam do ×times,
+  // e nelas o times continua sendo reconstruído do jeito que era — é o melhor que dá pra fazer com o
+  // dado que ficou gravado.
   let times = 1;
-  if (m.movement_type === 'producao') {
+  const formatoAntigo = m.movement_type === 'producao' && !items.some(it => it && it.storageQty !== undefined);
+  if (formatoAntigo) {
     const info = getProductionInfo(m);
     if (info.times && info.times > 0) times = info.times;
   }
@@ -4669,8 +5004,11 @@ function getMovementDetailItems(m) {
 function getProductionInfo(m) {
   const recipe = allData.find(r => r.id === m.production_recipe_id && r.type === 'recipe');
   const realYield = parseFloat(m.production_real_yield || m.movement_quantity) || 0;
-  let times = null;
-  if (recipe && parseFloat(recipe.recipe_yield) > 0) times = realYield / parseFloat(recipe.recipe_yield);
+  // As vezes da receita agora são GRAVADAS no movimento (recipe_yield). A divisão abaixo é só o
+  // fallback pros registros antigos: ela erra sempre que houve perda na produção, porque um lote de
+  // 2× que rendeu menos que o esperado aparece como "1,85× receita".
+  let times = parseFloat(m.recipe_yield) || null;
+  if (!times && recipe && parseFloat(recipe.recipe_yield) > 0) times = realYield / parseFloat(recipe.recipe_yield);
   const target = getProducts().find(p=>p.product_name===m.movement_product) || getFinishedProducts().find(p=>p.product_name===m.movement_product);
   const unit = recipe ? recipe.recipe_yield_unit : (target ? target.unit : '');
   return { recipeName: recipe ? recipe.recipe_name : null, times, realYield, unit };
@@ -4827,31 +5165,34 @@ async function confirmCancelProduction() {
   showLoadingProgress('Cancelando produção...');
   try {
     const items = getMovementDetailItems(m);
-    let done = 0;
-    for (const it of items) {
-      updateLoadingProgress(`Devolvendo ${done+1}/${items.length}: ${it.name}`);
-      const p = getProducts().find(x => x.product_name === it.name);
-      if (p) {
-        const storageUnit = p.storage_unit || p.unit;
-        const returnQty = convertQuantity(it.qty, it.unit, storageUnit, getCustomConversions(p));
-        assertSaved(await dbUpdate({...p, quantity: p.quantity + returnQty}, {silent:true}), it.name);
-      }
-      done++;
-    }
-    updateLoadingProgress(`Removendo crédito de ${m.movement_product}...`);
+    const ledger = createStockLedger();
+    updateLoadingProgress('Devolvendo insumos...');
+    items.forEach(it => ledger.credit(it.name, it.qty, it.unit, `cancelamento de produção de ${m.movement_product}`));
     const creditedQty = parseFloat(m.production_real_yield || m.movement_quantity) || 0;
-    const target = getProducts().find(p => p.product_name === m.movement_product) || getFinishedProducts().find(p => p.product_name === m.movement_product);
-    if (target) {
-      assertSaved(await dbUpdate({...target, quantity: Math.max(0, target.quantity - creditedQty)}, {silent:true}), m.movement_product);
-    }
-    // Marca a movimentação original como cancelada (mantém no histórico, só sinaliza)
-    assertSaved(await dbUpdate({...m, movement_note: `🚫 CANCELADA — ${m.movement_note||''}`}, {silent:true}), 'marcação da produção cancelada');
-    // Cria um registro do estorno, pra ficar rastreável no histórico
+    // O alvo é achado pela RECEITA VINCULADA primeiro, não pelo nome do movimento. A produção credita
+    // o insumo por linked_recipe_id, então procurar por nome aqui quebrava o cancelamento sempre que o
+    // pré-preparo tivesse sido renomeado depois de produzido — o crédito ficava no estoque pra sempre.
+    const target = getProducts().find(p => p.linked_recipe_id && p.linked_recipe_id === m.production_recipe_id)
+                || getFinishedProducts().find(p => p.linked_recipe_id && p.linked_recipe_id === m.production_recipe_id)
+                || getProducts().find(p => namesMatch(p.product_name, m.movement_product))
+                || getFinishedProducts().find(p => namesMatch(p.product_name, m.movement_product));
+    if (target) ledger.consume(target.product_name, creditedQty, null, `remoção do crédito de ${target.product_name}`);
+    if (ledger.erros.length) throw new Error(ledger.erros.join('; '));
     const itemsNote = items.map(it=>`${fmtQty(it.qty,it.unit)} ${it.unit} ${it.name}`).join(', ') || 'nenhum insumo detalhado';
-    assertSaved(await dbCreate({ ...blankRecord(), type:'movement', movement_type:'estorno_producao', movement_product:m.movement_product, movement_quantity:creditedQty, movement_date:new Date().toISOString(), movement_note:`Cancelamento de produção: removido ${fmtQty(creditedQty,'')} de ${m.movement_product}. Devolvido ao estoque: ${itemsNote}`, batch_items:JSON.stringify(items), production_recipe_id:m.production_recipe_id||'' }, {silent:true}), 'registro do estorno');
+    const operations = [
+      ...ledger.operations(),
+      // Marca a movimentação original como cancelada (mantém no histórico, só sinaliza)
+      { op:'update', data: { ...m, movement_note: `🚫 CANCELADA — ${m.movement_note||''}` } },
+      // Registro do estorno, pra ficar rastreável no histórico
+      { op:'create', data: { ...blankRecord(), type:'movement', movement_type:'estorno_producao', movement_product:m.movement_product, movement_quantity:creditedQty, movement_date:new Date().toISOString(), movement_note:`Cancelamento de produção: removido ${fmtQty(creditedQty,'')} de ${m.movement_product}. Devolvido ao estoque: ${itemsNote}`, batch_items:JSON.stringify(items.map(it=>({ name:it.name, qty:it.qty, unit:it.unit, storageQty:it.qty }))), production_recipe_id:m.production_recipe_id||'' } },
+    ];
+    updateLoadingProgress(`Salvando ${operations.length} mudança(s) numa viagem só...`);
+    const res = await dbBatchWrite(operations, {silent:true});
+    if (!res.isOk) throw new Error(res.error || 'falha ao cancelar a produção');
     hideLoadingProgress();
     renderAll();
-    showToast('Produção cancelada — insumos devolvidos ao estoque!');
+    if (ledger.faltas.length) showResultModal('Produção cancelada, com saldo negativo', ['Os insumos voltaram, mas remover o crédito deixou saldo negativo — parte do que foi produzido já tinha sido consumida:', ...ledger.faltas], true);
+    else showToast('Produção cancelada — insumos devolvidos ao estoque!');
   } catch (err) {
     hideLoadingProgress();
     console.error('Erro ao cancelar produção:', err);
@@ -5260,22 +5601,21 @@ async function confirmUndoMovement() {
   if (!preview) return;
   showLoadingProgress('Desfazendo...');
   try {
-    let done = 0;
     const notFoundItems = [];
-    for (const it of preview.items) {
-      updateLoadingProgress(`Ajustando ${done+1}/${preview.items.length}: ${it.name}`);
-      const p = getProducts().find(x => x.product_name === it.name) || getFinishedProducts().find(x => x.product_name === it.name);
-      if (p) {
-        const storageUnit = p.storage_unit || p.unit;
-        const qtyInStorageUnit = it.unit ? convertQuantity(it.qty, it.unit, storageUnit, getCustomConversions(p)) : it.qty;
-        const newQty = preview.verb === 'add' ? p.quantity + qtyInStorageUnit : Math.max(0, p.quantity - qtyInStorageUnit);
-        assertSaved(await dbUpdate({...p, quantity: newQty}, {silent:true}), it.name);
-      } else {
-        // Não silencia mais: se o insumo não existe mais (renomeado/excluído), avisa no final em
-        // vez de simplesmente não devolver a quantidade sem ninguém perceber.
-        notFoundItems.push(`${fmtQty(it.qty,it.unit)} ${it.unit} ${it.name}`);
-      }
-      done++;
+    const ledger = createStockLedger();
+    updateLoadingProgress('Revertendo o estoque...');
+    preview.items.forEach(it => {
+      const linha = preview.verb === 'add'
+        ? ledger.credit(it.name, it.qty, it.unit, `desfazer ${movementTypeLabel(m.movement_type)}`)
+        : ledger.consume(it.name, it.qty, it.unit, `desfazer ${movementTypeLabel(m.movement_type)}`);
+      // Não silencia: se o insumo não existe mais (renomeado/excluído), avisa no final em vez de
+      // simplesmente não devolver a quantidade sem ninguém perceber.
+      if (!linha) notFoundItems.push(`${fmtQty(it.qty,it.unit)} ${it.unit} ${it.name}`);
+    });
+    const stockOps = ledger.operations();
+    if (stockOps.length) {
+      const r = await dbBatchWrite(stockOps, {silent:true});
+      if (!r.isOk) throw new Error(r.error || 'falha ao reverter o estoque');
     }
     // Reverte o lado financeiro ANTES de marcar como desfeita: se falhar aqui, a movimentação
     // continua válida e íntegra (estoque já voltou, mas o registro não está marcado), o que é mais
@@ -5294,7 +5634,8 @@ async function confirmUndoMovement() {
     // Toda pendência do lado do dinheiro é dita em voz alta: valor que continua contando no DRE sem
     // a movimentação que o originou é justamente o erro que ninguém percebe olhando a tela.
     const pending = [];
-    if (notFoundItems.length) pending.push(`Insumo(s) não devolvido(s) ao estoque (não encontrado[s] no cadastro):\n${notFoundItems.join('\n')}`);
+    if (notFoundItems.length) pending.push(`Insumo(s) não revertido(s) no estoque:\n${notFoundItems.join('\n')}\n${ledger.erros.join('\n')}`);
+    if (ledger.faltas.length) pending.push(`Saldo ficou negativo:\n${ledger.faltas.join('\n')}`);
     if (fin.locked) pending.push('A Central Financeira estava bloqueada: os lançamentos financeiros desta movimentação NÃO foram removidos e continuam contando no DRE. Desbloqueie o financeiro e remova em Faturamento (venda) ou Gastos (compra).');
     if (fin.orphanCount > 0) pending.push(`${fin.orphanCount} lançamento(s) de faturamento desse dia não têm vínculo com esta venda (venda antiga) e NÃO foram removidos — confira em Faturamento se algum deles era desta venda.`);
     if (fin.failed.length > 0) pending.push(`${fin.failed.length} lançamento(s) financeiro(s) não puderam ser removidos — confira em Faturamento/Gastos.`);
@@ -5963,21 +6304,27 @@ function gotoEstoque() {
   document.getElementById('header-subtitle').textContent = 'Gestão Operacional';
   lucide.createIcons();
 }
-// Sub-navegação do grupo "Estoque & Custos" (Custos Pendentes / Preço Médio / CMV / Dinheiro em
-// Estoque) — 4 telas que antes ocupavam 4 espaços na nav principal, agora atrás de 1 só.
+// Sub-navegação do grupo "Estoque & Custos" — telas que antes ocupavam um espaço cada na nav
+// principal, agora atrás de uma só. Painéis e renders vêm de um mapa único pra que acrescentar uma
+// sub-aba seja UMA linha, e não uma linha aqui + uma no toggle + uma no dispatch.
+const CUSTOS_SUBTABS = {
+  'custos':           { panel:'fpanel-custos',            render:null },
+  'precos':           { panel:'fpanel-precos',            render:()=>renderFinancePrecos() },
+  'cmv':              { panel:'fpanel-cmv',               render:()=>renderFinanceCMV() },
+  'estoque-valor':    { panel:'fpanel-estoque-valor',     render:()=>renderInventoryPanel() },
+  'saidas-sem-venda': { panel:'fpanel-saidas-sem-venda',  render:()=>renderSaidasSemVenda() },
+  'conferencia':      { panel:'fpanel-conferencia',       render:()=>renderStockAudit() },
+};
 function renderCustosSubnav() {
   document.querySelectorAll('.custos-sub-tab-btn').forEach(b => {
     b.className = `custos-sub-tab-btn px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap ${b.dataset.sub===custosSubTab?'bg-stone-800 text-white':'bg-stone-100 text-stone-600 hover:bg-stone-200'}`;
   });
-  document.getElementById('fpanel-custos').classList.toggle('hidden', custosSubTab!=='custos');
-  document.getElementById('fpanel-precos').classList.toggle('hidden', custosSubTab!=='precos');
-  document.getElementById('fpanel-cmv').classList.toggle('hidden', custosSubTab!=='cmv');
-  document.getElementById('fpanel-estoque-valor').classList.toggle('hidden', custosSubTab!=='estoque-valor');
-  document.getElementById('fpanel-saidas-sem-venda').classList.toggle('hidden', custosSubTab!=='saidas-sem-venda');
-  if (custosSubTab === 'precos') renderFinancePrecos();
-  if (custosSubTab === 'cmv') renderFinanceCMV();
-  if (custosSubTab === 'estoque-valor') renderInventoryPanel();
-  if (custosSubTab === 'saidas-sem-venda') renderSaidasSemVenda();
+  Object.entries(CUSTOS_SUBTABS).forEach(([key, cfg]) => {
+    const el = document.getElementById(cfg.panel);
+    if (el) el.classList.toggle('hidden', custosSubTab !== key);
+  });
+  const ativa = CUSTOS_SUBTABS[custosSubTab];
+  if (ativa && ativa.render) ativa.render();
   lucide.createIcons();
 }
 document.addEventListener('click', (e) => {
@@ -5987,7 +6334,7 @@ document.addEventListener('click', (e) => {
   document.getElementById('estoque-custos-header').classList.toggle('hidden', activeFinanceTab!=='estoque-custos');
   document.getElementById('custos-subnav').classList.toggle('hidden', activeFinanceTab!=='estoque-custos');
   if (activeFinanceTab === 'estoque-custos') renderCustosSubnav();
-  else ['fpanel-custos','fpanel-precos','fpanel-cmv','fpanel-estoque-valor','fpanel-saidas-sem-venda'].forEach(id => document.getElementById(id).classList.add('hidden'));
+  else Object.values(CUSTOS_SUBTABS).forEach(cfg => { const el = document.getElementById(cfg.panel); if (el) el.classList.add('hidden'); });
   document.getElementById('fpanel-analises').classList.toggle('hidden', activeFinanceTab!=='analises');
   document.getElementById('fpanel-vendas').classList.toggle('hidden', activeFinanceTab!=='vendas');
   document.getElementById('fpanel-faturamento').classList.toggle('hidden', activeFinanceTab!=='faturamento');
@@ -6867,47 +7214,41 @@ async function confirmRetroactiveStockDeduction() {
   const vendaDireta = getRecipes().filter(r => r.recipe_type === 'Venda Direta');
   const salesData = [];
   try {
-    let done = 0;
-    const stockShortfalls = [];
+    // Mesmo motor da venda e da saída manual. Antes esta era a 5ª cópia do mesmo cálculo, e gravava
+    // insumo a insumo (uma viagem por item), o que deixava uma falha no meio baixar metade do estoque.
+    const ledger = createStockLedger();
+    updateLoadingProgress('Calculando a baixa...');
     for (const m of toProcess) {
-      updateLoadingProgress(`Descontando ${done+1}/${toProcess.length}: ${m.name}`);
       if (m.type === 'finished') {
         const fp = finished.find(f => f.product_name === m.match);
-        if (!fp) { done++; continue; }
-        if (fp.quantity < m.qty) stockShortfalls.push(`${fp.product_name}: faltou ${fmtQty(m.qty-fp.quantity,fp.unit)} ${fp.unit}`);
-        assertSaved(await dbUpdate({...fp, quantity: Math.max(0, fp.quantity - m.qty)}, {silent:true}), m.match);
+        if (!fp) continue;
+        ledger.consume(fp.product_name, m.qty, null, `baixa retroativa de ${m.qty}× ${m.name}`);
         salesData.push({ value:`finished_${fp.id}`, name: fp.product_name, unit: fp.unit, type:'finished', qty: m.qty });
       } else {
         const recipe = vendaDireta.find(r => r.recipe_name === m.match);
-        if (!recipe) { done++; continue; } // receita não existe mais — pula em vez de quebrar tudo
-        const deductedIngredients = [];
+        if (!recipe) continue; // receita não existe mais — pula em vez de quebrar tudo
+        let deductedIngredients;
         if (m.snapshot) {
           // Já sabe exatamente quanto descontar de cada insumo (veio gravado na própria venda) —
-          // não precisa recalcular pela receita atual, que pode ter mudado desde então.
-          for (const d of m.snapshot) {
-            const p = getProducts().find(x => x.product_name === d.name);
-            if (!p) continue;
-            if (p.quantity < d.qty) stockShortfalls.push(`${p.product_name}: faltou ${fmtQty(d.qty-p.quantity,d.unit)} ${d.unit} (pra ${m.qty}× ${m.name})`);
-            assertSaved(await dbUpdate({...p, quantity: Math.max(0, p.quantity - d.qty)}, {silent:true}), d.name);
-            deductedIngredients.push({ name: d.name, qty: d.qty, unit: d.unit });
-          }
+          // não recalcula pela receita atual, que pode ter mudado desde então.
+          deductedIngredients = [];
+          m.snapshot.forEach(d => {
+            const linha = ledger.consume(d.name, d.qty, d.unit, `baixa retroativa de ${m.qty}× ${m.name}`);
+            if (linha) deductedIngredients.push({ name: linha.name, qty: linha.storageQty, unit: linha.unit });
+          });
         } else {
-          let ingredients=[]; try{ingredients=JSON.parse(recipe.recipe_ingredients);}catch(e){}
-          for (const ing of ingredients) {
-            const p = getProducts().find(x => namesMatch(x.product_name, ing.name));
-            if (!p) continue;
-            const storageUnit = p.storage_unit||p.unit;
-            const deduct = convertQuantity(ing.qty*m.qty, ing.unit, storageUnit, getCustomConversions(p));
-            // A venda já aconteceu de verdade — desconta até zero mesmo que falte, e avisa no final
-            // (se estava zerado é sinal de erro de entrada no estoque, não de venda errada).
-            if (p.quantity < deduct) stockShortfalls.push(`${p.product_name}: faltou ${fmtQty(deduct-p.quantity,storageUnit)} ${storageUnit} (pra ${m.qty}× ${m.name})`);
-            assertSaved(await dbUpdate({...p, quantity: Math.max(0, p.quantity - deduct)}, {silent:true}), ing.name);
-            deductedIngredients.push({ name: ing.name, qty: deduct, unit: storageUnit });
-          }
+          deductedIngredients = ledger.consumeRecipe(recipe, m.qty, `baixa retroativa de ${m.qty}× ${m.name}`);
         }
         salesData.push({ value:`recipe_${recipe.id}`, name: recipe.recipe_name, unit: recipe.recipe_yield_unit, type:'venda_direta', qty: m.qty, deductedIngredients });
       }
-      done++;
+    }
+    const stockShortfalls = ledger.faltas.slice();
+    if (ledger.erros.length) throw new Error(ledger.erros.join('; '));
+    updateLoadingProgress('Aplicando a baixa no estoque...');
+    const stockOps = ledger.operations();
+    if (stockOps.length) {
+      const r = await dbBatchWrite(stockOps, {silent:true});
+      if (!r.isOk) throw new Error(r.error || 'falha ao aplicar a baixa de estoque');
     }
     let created = false;
     if (mode === 'movement') {
@@ -7021,7 +7362,7 @@ function renderFinanceiro() {
   document.getElementById('estoque-custos-header').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='estoque-custos');
   document.getElementById('custos-subnav').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='estoque-custos');
   if (financeUnlocked && activeFinanceTab === 'estoque-custos') renderCustosSubnav();
-  else ['fpanel-custos','fpanel-precos','fpanel-cmv','fpanel-estoque-valor','fpanel-saidas-sem-venda'].forEach(id => document.getElementById(id).classList.add('hidden'));
+  else Object.values(CUSTOS_SUBTABS).forEach(cfg => { const el = document.getElementById(cfg.panel); if (el) el.classList.add('hidden'); });
   document.getElementById('fpanel-analises').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='analises');
   document.getElementById('fpanel-vendas').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='vendas');
   document.getElementById('fpanel-faturamento').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='faturamento');
@@ -9277,6 +9618,66 @@ function computeSaidasSemVenda(start, end) {
   ].filter(m => m.count > 0);
   return { total, totalDescontado, totalComEvento, perda, consumo, socios, evento, outros, ranking, allRows, byMotivo, unknownByMotivo };
 }
+// ---------- Conferência de Saldo ----------
+let conferenciaMostrarTudo = false;
+function toggleConferenciaTudo() { conferenciaMostrarTudo = !conferenciaMostrarTudo; renderStockAudit(); }
+function renderStockAudit() {
+  const el = document.getElementById('conferencia-content'); if (!el) return;
+  const r = reconcileStockLedger();
+  const money = (v, u) => `${fmtQty(v,u)} ${u}`;
+  const card = (label, valor, cor, sub) => `
+    <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100">
+      <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-1">${label}</p>
+      <p class="text-2xl font-bold ${cor}">${valor}</p>
+      <p class="text-[11px] text-stone-400 mt-1">${sub}</p>
+    </div>`;
+  const marco = r.baseline
+    ? `Conferido em ${new Date(r.baseline.data).toLocaleDateString('pt-BR')} — a checagem considera as ${r.movimentosConsiderados} movimentação(ões) desde então.`
+    : `Ainda sem marco de conferência: a checagem tenta reconstruir desde o começo do histórico, e itens que já tinham estoque antes de existir registro de saldo inicial aparecem como divergência sem serem erro.`;
+
+  const linhaTabela = (l) => {
+    const sinal = l.dif > 0 ? '+' : '';
+    return `<div class="flex items-center justify-between gap-2 py-2 border-b border-stone-50 last:border-b-0">
+      <div class="min-w-0">
+        <p class="text-sm text-stone-700 truncate">${l.nome}${l.negativo?' <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-red-50 text-red-700 font-semibold">saldo negativo</span>':''}${l.novoDesdeMarco?' <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-stone-100 text-stone-500">novo</span>':''}</p>
+        <p class="text-[11px] text-stone-400">partida ${money(l.partida,l.unidade)} · movimentou ${l.movimentado>=0?'+':''}${money(l.movimentado,l.unidade)} · deveria estar em ${money(l.esperado,l.unidade)}</p>
+      </div>
+      <div class="text-right flex-shrink-0">
+        <p class="text-sm font-bold ${l.negativo?'text-red-600':'text-stone-800'}">${money(l.saldo,l.unidade)}</p>
+        ${l.bate ? '<p class="text-[11px] text-emerald-700">confere</p>' : `<p class="text-[11px] text-amber-700 font-semibold">${sinal}${money(l.dif,l.unidade)}</p>`}
+      </div>
+    </div>`;
+  };
+
+  const problemas = [...r.negativos, ...r.divergentes.filter(l => !l.negativo)];
+  const listar = conferenciaMostrarTudo ? r.linhas.slice().sort((a,b)=>a.nome.localeCompare(b.nome)) : problemas.slice(0, 40);
+
+  el.innerHTML = `
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+      ${card('Saldos que conferem', `${r.conferem}<span class="text-base font-normal text-stone-400">/${r.total}</span>`, r.conferem===r.total?'text-emerald-700':'text-stone-800', 'explicados inteiramente pelo histórico')}
+      ${card('Saldo negativo', r.negativos.length, r.negativos.length?'text-red-600':'text-stone-400', 'impossível na prática — falta lançar entrada ou a receita está errada')}
+      ${card('Divergentes', r.divergentes.length, r.divergentes.length?'text-amber-600':'text-stone-400', 'mudaram sem passar pelo sistema')}
+    </div>
+    <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 mb-4">
+      <div class="flex items-start justify-between gap-3 flex-wrap">
+        <p class="text-xs text-stone-500 flex-1 min-w-[240px]">${marco}</p>
+        <button onclick="marcarConferenciaDeEstoque()" class="btn-primary px-4 py-2 rounded-lg text-xs font-medium flex-shrink-0">Conferi tudo — marcar como certo agora</button>
+      </div>
+      <p class="text-[11px] text-stone-400 mt-2">Use depois de conferir o estoque físico e ajustar o que estiver errado. O marco congela os saldos atuais como ponto de partida, e daí em diante qualquer divergência que aparecer é de verdade.</p>
+    </div>
+    ${r.semRastro.length ? `<p class="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-4">${r.semRastro.length} movimentação(ões) antiga(s) sem detalhamento de itens não puderam ser reprocessadas — elas contribuem para as diferenças abaixo.</p>` : ''}
+    <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100">
+      <div class="flex items-center justify-between gap-2 mb-2">
+        <h3 class="font-semibold text-sm text-stone-800">${conferenciaMostrarTudo ? `Todos os itens (${r.linhas.length})` : `Precisam de atenção (${problemas.length})`}</h3>
+        <button onclick="toggleConferenciaTudo()" class="text-xs text-emerald-700 hover:text-emerald-900 underline font-medium">${conferenciaMostrarTudo ? 'Ver só os problemas' : 'Ver todos os itens'}</button>
+      </div>
+      ${listar.length === 0
+        ? '<p class="text-stone-400 text-center py-6 text-sm">Nenhum problema: todo saldo é explicado pelo histórico.</p>'
+        : listar.map(linhaTabela).join('') + (!conferenciaMostrarTudo && problemas.length > 40 ? `<p class="text-[11px] text-stone-400 pt-2">Mostrando os 40 maiores de ${problemas.length}.</p>` : '')}
+    </div>`;
+  lucide.createIcons();
+}
+
 function renderSaidasSemVenda() {
   invalidateFinanceCache(); // números da tela toda saem da mesma foto dos dados
   const totalEl = document.getElementById('ssv-kpi-total'); if (!totalEl) return;
