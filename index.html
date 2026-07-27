@@ -955,19 +955,27 @@
         <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100">
           <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-1">Perda</p>
           <p class="text-xl font-bold text-red-600" id="ssv-kpi-perda">R$ 0,00</p>
+          <p class="text-[10px] text-amber-600 mt-1" id="ssv-kpi-perda-note"></p>
         </div>
         <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100">
           <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-1">Consumo Interno</p>
           <p class="text-xl font-bold text-amber-700" id="ssv-kpi-consumo">R$ 0,00</p>
+          <p class="text-[10px] text-amber-600 mt-1" id="ssv-kpi-consumo-note"></p>
         </div>
         <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100">
           <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-1">Consumo dos Sócios</p>
           <p class="text-xl font-bold text-purple-700" id="ssv-kpi-socios">R$ 0,00</p>
+          <p class="text-[10px] text-amber-600 mt-1" id="ssv-kpi-socios-note"></p>
         </div>
         <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100">
           <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-1">Uso em Evento (custo)</p>
           <p class="text-xl font-bold text-blue-700" id="ssv-kpi-evento">R$ 0,00</p>
           <p class="text-[10px] text-stone-400 mt-1" id="ssv-kpi-evento-note"></p>
+        </div>
+        <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100">
+          <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-1">Outros</p>
+          <p class="text-xl font-bold text-stone-700" id="ssv-kpi-outros">R$ 0,00</p>
+          <p class="text-[10px] text-amber-600 mt-1" id="ssv-kpi-outros-note"></p>
         </div>
         <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100">
           <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-1">Total saído sem venda</p>
@@ -5860,21 +5868,26 @@ let faturamentoCustomTo = '';
 // renderFaturamento() e pelo toggle de dia da semana, pra não duplicar essa decisão em dois lugares.
 function getFaturamentoRange() {
   if (faturamentoFilter === 'custom' && faturamentoCustomFrom && faturamentoCustomTo) {
-    const start = parseLocalDate(faturamentoCustomFrom); start.setHours(12,0,0,0);
-    const end = parseLocalDate(faturamentoCustomTo); end.setHours(12,0,0,0);
+    const start = parseLocalDate(faturamentoCustomFrom); start.setHours(0,0,0,0);
+    const end = parseLocalDate(faturamentoCustomTo); end.setHours(23,59,59,999);
     if (start <= end) return { start, end };
   }
   return faturamentoRangeForFilter(faturamentoFilter === 'custom' ? '7days' : faturamentoFilter);
 }
+// end fica em 23:59:59.999 (não meio-dia) — se fosse meio-dia, qualquer lançamento feito à tarde
+// no dia de hoje ficaria de fora do próprio filtro "hoje" (bug real: saída registrada às 15h
+// sumia da aba porque o corte era ao meio-dia). start fica em 00:00:00 pelo mesmo motivo, do lado
+// oposto (senão a manhã do primeiro dia do período ficaria de fora).
 function faturamentoRangeForFilter(filter) {
-  const end = new Date(); end.setHours(12,0,0,0);
-  let start = new Date(end);
+  const end = new Date(); end.setHours(23,59,59,999);
+  let start = new Date(end); start.setHours(0,0,0,0);
   if (filter === '30days') start.setDate(end.getDate() - 29);
-  else if (filter === 'month') start = new Date(end.getFullYear(), end.getMonth(), 1, 12, 0, 0);
-  else if (filter === 'year') start = new Date(end.getFullYear(), 0, 1, 12, 0, 0);
+  else if (filter === 'month') start = new Date(end.getFullYear(), end.getMonth(), 1, 0, 0, 0, 0);
+  else if (filter === 'year') start = new Date(end.getFullYear(), 0, 1, 0, 0, 0, 0);
   else if (filter === 'all') {
     const dates = getSaleRevenueEntries().map(e => e.sale_price_updated_at).filter(Boolean).sort();
     start = dates.length ? parseLocalDate(dates[0]) : new Date(end);
+    start.setHours(0,0,0,0);
   }
   else start.setDate(end.getDate() - 6); // 7days (padrão)
   return { start, end };
@@ -5887,8 +5900,8 @@ function getSaleRevenueEntriesInRange(start, end) {
 // Funciona igual pros 3 filtros (7 dias, 30 dias, mês) sem precisar de uma regra por filtro.
 function faturamentoPreviousRange(start, end) {
   const days = Math.round((end - start) / 86400000) + 1;
-  const prevEnd = new Date(start); prevEnd.setDate(prevEnd.getDate() - 1); prevEnd.setHours(12,0,0,0);
-  const prevStart = new Date(prevEnd); prevStart.setDate(prevStart.getDate() - (days - 1)); prevStart.setHours(12,0,0,0);
+  const prevEnd = new Date(start); prevEnd.setDate(prevEnd.getDate() - 1); prevEnd.setHours(23,59,59,999);
+  const prevStart = new Date(prevEnd); prevStart.setDate(prevStart.getDate() - (days - 1)); prevStart.setHours(0,0,0,0);
   return { start: prevStart, end: prevEnd };
 }
 // Lucro/CMV estimados: soma custo (getProductCMV) só dos itens vendidos que têm receita com custo
@@ -7748,9 +7761,11 @@ let expenseCategoryFilter = '';
 let currentExpenseMode = 'simple';
 function getExpenses() { return financeData.filter(r => r.type === 'expense'); }
 function expenseRangeForFilter(filter) {
-  const end = new Date(); end.setHours(12,0,0,0);
-  let start = new Date(end);
-  if (filter === 'month') start = new Date(end.getFullYear(), end.getMonth(), 1, 12, 0, 0);
+  // end em 23:59:59.999 (não meio-dia) — mesmo motivo do fix em faturamentoRangeForFilter: um
+  // gasto lançado à tarde de hoje não pode sumir do filtro só porque o corte era ao meio-dia.
+  const end = new Date(); end.setHours(23,59,59,999);
+  let start = new Date(end); start.setHours(0,0,0,0);
+  if (filter === 'month') start = new Date(end.getFullYear(), end.getMonth(), 1, 0, 0, 0, 0);
   else if (filter === 'all') start = null;
   else start.setDate(end.getDate() - 29); // 30days (padrão)
   return { start, end };
@@ -8679,9 +8694,17 @@ function renderSaidasSemVenda() {
   document.getElementById('ssv-kpi-consumo').textContent = fmtCurrency(ssv.consumo.total);
   document.getElementById('ssv-kpi-socios').textContent = fmtCurrency(ssv.socios.total);
   document.getElementById('ssv-kpi-evento').textContent = fmtCurrency(ssv.evento.total);
+  document.getElementById('ssv-kpi-outros').textContent = fmtCurrency(ssv.outros.total);
   totalEl.textContent = fmtCurrency(ssv.total);
   const pendingCount = getPendingEvents().length;
   document.getElementById('ssv-kpi-evento-note').textContent = pendingCount > 0 ? `${pendingCount} evento(s) aguardando faturamento em Vendas` : '';
+  // Aviso de custo desconhecido direto embaixo do KPI de cada motivo — sem isso, um item sem custo
+  // cadastrado (ex: insumo sem preço lançado) some silenciosamente do KPI e vira R$0 sem explicação.
+  const kpiUnknownMap = { 'ssv-kpi-perda-note': ssv.perda.unknownCount, 'ssv-kpi-consumo-note': ssv.consumo.unknownCount, 'ssv-kpi-socios-note': ssv.socios.unknownCount, 'ssv-kpi-outros-note': ssv.outros.unknownCount };
+  Object.entries(kpiUnknownMap).forEach(([id, count]) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = count > 0 ? `⚠️ ${count} sem custo` : '';
+  });
   const breakdownEl = document.getElementById('ssv-motivo-breakdown');
   breakdownEl.innerHTML = ssv.byMotivo.length === 0 ? '<p class="text-stone-400 text-center py-4 text-sm">Nenhuma saída sem venda nesse período</p>' : ssv.byMotivo.map(m => `
     <div>
