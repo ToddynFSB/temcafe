@@ -1682,7 +1682,896 @@ function roundQtyField(data) {
     data.quantity = Math.round(data.quantity * 1e6) / 1e6;
   }
 }
+// ============================================================
+// 🔌 ADAPTADOR SUPABASE — fase 2 do MIGRACAO-SUPABASE.md
+// ============================================================
+// COM USE_SUPABASE = false, NADA DAQUI RODA. O sistema continua no Google Sheets, igual a hoje.
+// Trocar para true é o único ponto de virada, e voltar é trocar de novo — é exatamente esse o objetivo
+// do flag: poder desistir a qualquer momento sem desfazer código.
+//
+// POR QUE UM ADAPTADOR E NÃO UMA REESCRITA: 166 pontos deste arquivo leem allData/financeData no
+// formato da planilha. Reescrever os 166 junto com a troca de banco misturaria duas mudanças de risco
+// no mesmo movimento — e o domínio (DRE, CMV, razão de estoque) acabou de ser auditado e estabilizado.
+// Então o adaptador REMONTA allData/financeData no formato antigo a partir das tabelas novas, e o resto
+// do app não percebe diferença nenhuma. Na fase 6 cada leitor migra para o formato novo e isto encolhe
+// até desaparecer.
+//
+// ONDE ELE SE ENCAIXA: em apiCall e financeApiCall, e SÓ nelas. dbCreate/dbUpdate/dbDelete/
+// dbBatchWrite/financeBatchWrite ficam byte por byte iguais, porque eles já falam com o banco só
+// através dessas duas funções, e a contabilidade em memória (allData.push, invalidateDataCache,
+// renderAll) é a mesma nos dois caminhos. O plano previa substituir 8 funções; na prática existem 2
+// costuras, o que é bem menos superfície para dar errado.
+//
+// A DIFERENÇA DE MODELO QUE IMPORTA: a tabela `products` NÃO tem coluna de quantidade. O saldo é a view
+// current_stock, somando o razão. Então um {op:'update'} de produto que muda `quantity` não vira um
+// UPDATE de saldo — vira uma LINHA DO RAZÃO com o delta. É isso que torna impossível o saldo divergir
+// do histórico, que é a classe de bug que originou toda esta migração (o sistema dizia 3,1 L de
+// chocolate quente e o razão dizia outra coisa).
+// ============================================================
+
+// ⚙️ CONFIGURAÇÃO DO SUPABASE
+//
+// SUPABASE_MODE é a chave da migração. Três posições:
+//
+//   'off'      Google Sheets e mais nada. O adaptador fica inteiro sem rodar.
+//   'espelho'  ← FASE 3, onde estamos. O Sheets continua sendo a verdade: é dele que tudo é lido, e é a
+//              resposta dele que a tela mostra. Toda GRAVAÇÃO é repetida no Supabase depois, em segundo
+//              plano. Se a cópia falhar, ela NÃO quebra a sua ação nem trava a tela — só conta a falha
+//              e avisa. O objetivo é usar o sistema normalmente por alguns dias e comparar os dois
+//              lados antes de confiar em um só.
+//   'on'       Supabase é a verdade. O Sheets sai do caminho. Ponto de não retorno prático (fase 4).
+//
+// Voltar para 'off' desfaz tudo a qualquer momento, porque o Sheets nunca deixou de ser gravado até a
+// posição 'on'.
+const SUPABASE_MODE = 'espelho';
+const USE_SUPABASE     = SUPABASE_MODE === 'on';
+const SUPABASE_ESPELHO = SUPABASE_MODE === 'espelho';
+const SUPABASE_URL = 'https://zoaqnaxwldsqmrzoajse.supabase.co';
+// Chave PÚBLICA (anon). Pode ficar aqui à vista: é feita para viver no frontend, exatamente como a URL
+// do Apps Script acima. Quem protege o financeiro são as políticas de RLS no servidor, não o segredo da
+// chave — com ela é possível ler o estoque (como hoje) e NADA do financeiro sem sessão.
+// A chave `service_role` / `sb_secret_...` NUNCA entra neste arquivo.
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpvYXFuYXh3bGRzcW1yem9hanNlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxOTE4MjksImV4cCI6MjEwMDc2NzgyOX0.oilqsoElKSxJUyFvMsUBBwmaC0QgKgpdmmn5LiZcew8';
+// O usuário criado em Authentication → Users do Supabase, com a senha do financeiro. A senha continua
+// sendo digitada na tela de sempre; o que muda é que ela vai para o supabase.auth em vez de para o
+// Apps Script. Isto é só o identificador da conta — a senha não está em lugar nenhum deste arquivo.
+const SUPABASE_FINANCE_EMAIL = 'luis.siriani@gmail.com';
+
+let _sbClient = null;
+async function sb() {
+  if (_sbClient) return _sbClient;
+  // Import ESM do CDN: sem npm, sem build, o sistema segue sendo um arquivo só.
+  const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
+  _sbClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    // persistSession: false de propósito. Guardar a sessão no navegador faria o financeiro abrir sem
+    // pedir senha depois de um F5 — comportamento DIFERENTE do de hoje, e mais frouxo. Fechar a aba
+    // volta a exigir a senha, como sempre foi.
+    auth: { persistSession: false, autoRefreshToken: true },
+  });
+  return _sbClient;
+}
+
+// Lê uma tabela inteira. A paginação NÃO é zelo excessivo: o PostgREST corta em 1000 linhas por
+// resposta, e stock_movement_lines já tem 1006. Sem isto, 6 linhas do razão sumiriam em silêncio e o
+// saldo de algum item sairia errado — o pior jeito possível de errar.
+async function sbAll(tabela, colunas = '*') {
+  const c = await sb();
+  const PAGINA = 1000, tudo = [];
+  for (let de = 0; ; de += PAGINA) {
+    const { data, error } = await c.from(tabela).select(colunas).range(de, de + PAGINA - 1);
+    if (error) throw new Error(`${tabela}: ${error.message}`);
+    tudo.push(...data);
+    if (data.length < PAGINA) break;
+  }
+  return tudo;
+}
+
+// ------------------------------------------------------------
+// O MAPA DE IDS — o que faz o modo espelho funcionar
+// ------------------------------------------------------------
+// No modo espelho, o registro é criado primeiro na planilha, que dá a ele um id próprio ('R_1784…').
+// O Supabase precisa de um uuid. Se eu sorteasse o uuid, toda referência cruzada quebraria: um gasto
+// novo apontando para o grupo do DRE 'X' iria apontar para um uuid que não existe.
+//
+// A solução é o mapeamento ser DETERMINÍSTICO e o MESMO que a importação usou: uuid = md5(id da
+// planilha), formatado. Assim, um gasto que aponta para o grupo 'X' gera automaticamente o uuid que
+// aquele grupo JÁ TEM no banco, sem eu precisar guardar tabela de correspondência nenhuma.
+//
+// Tem de ser md5 (o WebCrypto só tem SHA nativo, que não serve aqui) porque foi md5 que o
+// migracao-gerar-sql.js usou. Conferido contra o md5 do Node em 518 casos, incluindo as bordas de bloco
+// de 55/56/57/63/64/65 bytes e texto com acento.
+function md5(input) {
+  function rl(n, c) { return (n << c) | (n >>> (32 - c)); }
+  function ad(x, y) { const l = (x & 0xFFFF) + (y & 0xFFFF); return ((((x >> 16) + (y >> 16) + (l >> 16)) << 16) | (l & 0xFFFF)); }
+  function cmn(q, a, b, x, s, t) { return ad(rl(ad(ad(a, q), ad(x, t)), s), b); }
+  const FF = (a,b,c,d,x,s,t) => cmn((b & c) | (~b & d), a, b, x, s, t);
+  const GG = (a,b,c,d,x,s,t) => cmn((b & d) | (c & ~d), a, b, x, s, t);
+  const HH = (a,b,c,d,x,s,t) => cmn(b ^ c ^ d, a, b, x, s, t);
+  const II = (a,b,c,d,x,s,t) => cmn(c ^ (b | ~d), a, b, x, s, t);
+  const bytes = new TextEncoder().encode(String(input));
+  const n = bytes.length;
+  const len = (((n + 8) >> 6) + 1) * 16;
+  const w = new Array(len).fill(0);
+  for (let i = 0; i < n; i++) w[i >> 2] |= bytes[i] << ((i % 4) * 8);
+  w[n >> 2] |= 0x80 << ((n % 4) * 8);
+  w[len - 2] = n * 8;
+  let a = 1732584193, b = -271733879, c = -1732584194, d = 271733878;
+  for (let i = 0; i < len; i += 16) {
+    const oa = a, ob = b, oc = c, od = d;
+    a=FF(a,b,c,d,w[i+ 0], 7,-680876936); d=FF(d,a,b,c,w[i+ 1],12,-389564586); c=FF(c,d,a,b,w[i+ 2],17,606105819); b=FF(b,c,d,a,w[i+ 3],22,-1044525330);
+    a=FF(a,b,c,d,w[i+ 4], 7,-176418897); d=FF(d,a,b,c,w[i+ 5],12,1200080426); c=FF(c,d,a,b,w[i+ 6],17,-1473231341); b=FF(b,c,d,a,w[i+ 7],22,-45705983);
+    a=FF(a,b,c,d,w[i+ 8], 7,1770035416); d=FF(d,a,b,c,w[i+ 9],12,-1958414417); c=FF(c,d,a,b,w[i+10],17,-42063); b=FF(b,c,d,a,w[i+11],22,-1990404162);
+    a=FF(a,b,c,d,w[i+12], 7,1804603682); d=FF(d,a,b,c,w[i+13],12,-40341101); c=FF(c,d,a,b,w[i+14],17,-1502002290); b=FF(b,c,d,a,w[i+15],22,1236535329);
+    a=GG(a,b,c,d,w[i+ 1], 5,-165796510); d=GG(d,a,b,c,w[i+ 6], 9,-1069501632); c=GG(c,d,a,b,w[i+11],14,643717713); b=GG(b,c,d,a,w[i+ 0],20,-373897302);
+    a=GG(a,b,c,d,w[i+ 5], 5,-701558691); d=GG(d,a,b,c,w[i+10], 9,38016083); c=GG(c,d,a,b,w[i+15],14,-660478335); b=GG(b,c,d,a,w[i+ 4],20,-405537848);
+    a=GG(a,b,c,d,w[i+ 9], 5,568446438); d=GG(d,a,b,c,w[i+14], 9,-1019803690); c=GG(c,d,a,b,w[i+ 3],14,-187363961); b=GG(b,c,d,a,w[i+ 8],20,1163531501);
+    a=GG(a,b,c,d,w[i+13], 5,-1444681467); d=GG(d,a,b,c,w[i+ 2], 9,-51403784); c=GG(c,d,a,b,w[i+ 7],14,1735328473); b=GG(b,c,d,a,w[i+12],20,-1926607734);
+    a=HH(a,b,c,d,w[i+ 5], 4,-378558); d=HH(d,a,b,c,w[i+ 8],11,-2022574463); c=HH(c,d,a,b,w[i+11],16,1839030562); b=HH(b,c,d,a,w[i+14],23,-35309556);
+    a=HH(a,b,c,d,w[i+ 1], 4,-1530992060); d=HH(d,a,b,c,w[i+ 4],11,1272893353); c=HH(c,d,a,b,w[i+ 7],16,-155497632); b=HH(b,c,d,a,w[i+10],23,-1094730640);
+    a=HH(a,b,c,d,w[i+13], 4,681279174); d=HH(d,a,b,c,w[i+ 0],11,-358537222); c=HH(c,d,a,b,w[i+ 3],16,-722521979); b=HH(b,c,d,a,w[i+ 6],23,76029189);
+    a=HH(a,b,c,d,w[i+ 9], 4,-640364487); d=HH(d,a,b,c,w[i+12],11,-421815835); c=HH(c,d,a,b,w[i+15],16,530742520); b=HH(b,c,d,a,w[i+ 2],23,-995338651);
+    a=II(a,b,c,d,w[i+ 0], 6,-198630844); d=II(d,a,b,c,w[i+ 7],10,1126891415); c=II(c,d,a,b,w[i+14],15,-1416354905); b=II(b,c,d,a,w[i+ 5],21,-57434055);
+    a=II(a,b,c,d,w[i+12], 6,1700485571); d=II(d,a,b,c,w[i+ 3],10,-1894986606); c=II(c,d,a,b,w[i+10],15,-1051523); b=II(b,c,d,a,w[i+ 1],21,-2054922799);
+    a=II(a,b,c,d,w[i+ 8], 6,1873313359); d=II(d,a,b,c,w[i+15],10,-30611744); c=II(c,d,a,b,w[i+ 6],15,-1560198380); b=II(b,c,d,a,w[i+13],21,1309151649);
+    a=II(a,b,c,d,w[i+ 4], 6,-145523070); d=II(d,a,b,c,w[i+11],10,-1120210379); c=II(c,d,a,b,w[i+ 2],15,718787259); b=II(b,c,d,a,w[i+ 9],21,-343485551);
+    a = ad(a, oa); b = ad(b, ob); c = ad(c, oc); d = ad(d, od);
+  }
+  return [a, b, c, d].map(x => { let s = ''; for (let i = 0; i < 4; i++) s += ((x >> (i * 8)) & 0xFF).toString(16).padStart(2, '0'); return s; }).join('');
+}
+function sbUuidDe(idAntigo) {
+  const h = md5(String(idAntigo));
+  return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20,32)}`;
+}
+// TODO id que cruza para uma linha do banco passa por aqui. No modo espelho vira uuid derivado; no modo
+// 'on' os ids em memória JÁ são uuids do Supabase e não podem ser re-hasheados. Como SUPABASE_MODE é
+// const, a decisão é fixa na sessão inteira — sem estado escondido.
+function sbMapId(v) { return v ? (SUPABASE_ESPELHO ? sbUuidDe(v) : v) : null; }
+
+// ------------------------------------------------------------
+// A FILA DO ESPELHO
+// ------------------------------------------------------------
+// SERIAL de propósito: as gravações têm de chegar ao Supabase na mesma ordem em que foram feitas, senão
+// uma venda poderia ser copiada antes do produto que ela desconta existir.
+//
+// NUNCA lança: uma falha na cópia não pode atrapalhar quem está atendendo no caixa. Mas também não pode
+// ser silenciosa — silêncio aqui viraria "achei que estava espelhando" no dia de virar a chave. Então
+// conta, guarda o erro, e avisa na tela UMA vez.
+let _sbFila = Promise.resolve();
+const sbEspelho = { enviadas: 0, falhas: 0, erros: [], avisou: false, authOk: null };
+function sbEspelhoStatus() {
+  console.log(`Espelho Supabase: ${sbEspelho.enviadas} gravação(ões) copiada(s), ${sbEspelho.falhas} falha(s).`);
+  console.log(`Sessão do financeiro: ${sbEspelho.authOk === null ? 'ainda não tentou' : sbEspelho.authOk ? 'ok' : 'FALHOU'}`);
+  if (sbEspelho.erros.length) console.log('Erros:', sbEspelho.erros);
+  return sbEspelho;
+}
+function sbAvisarFalhaEspelho(msg) {
+  sbEspelho.falhas++;
+  sbEspelho.erros.push(msg);
+  console.error('[espelho Supabase]', msg);
+  if (!sbEspelho.avisou) {
+    sbEspelho.avisou = true;
+    try { showToast('A cópia para o Supabase falhou. Seus dados estão salvos normalmente na planilha — me avise para eu conferir.', true); } catch (e) {}
+  }
+}
+// Enfileira a cópia de uma gravação que a planilha JÁ aceitou.
+//
+// Duas coisas têm de ser capturadas AGORA, não quando a fila rodar:
+//   1. uma cópia do registro — quem chamou vai alterar o objeto original em seguida (dbCreate faz
+//      data.id = ... e allData.push(data));
+//   2. a quantidade ANTERIOR de cada produto — o delta do razão sai da diferença, e quando a fila rodar
+//      o allData já vai ter o valor novo, o que daria delta zero e estoque não descontado.
+function sbEspelharEscrita(action, payload, resposta) {
+  if (!SUPABASE_ESPELHO || action === 'getAll') return;
+  let ops;
+  if (action === 'batchWrite') {
+    ops = (payload.data || []).map((o, i) => ({
+      op: o.op,
+      data: { ...o.data, id: o.data.id || ((resposta.results || [])[i] || {}).id },
+    }));
+  } else if (action === 'create') {
+    ops = [{ op: 'create', data: { ...payload.data, id: payload.data.id || resposta.id } }];
+  } else if (action === 'update') {
+    ops = [{ op: 'update', data: { ...payload.data } }];
+  } else if (action === 'delete') {
+    ops = [{ op: 'delete', data: { id: payload.id } }];
+  } else return;
+
+  ops.forEach(o => {
+    const d = o.data || {};
+    if (o.op === 'update' && (d.type === 'product' || d.type === 'finished_product')) {
+      const antes = allData.find(r => r.id === d.id);
+      o._antes = antes ? sbN(antes.quantity) : 0;
+    }
+    if (o.op === 'delete') {
+      const alvo = allData.find(r => r.id === d.id) || financeData.find(r => r.id === d.id);
+      if (alvo) o._tipo = alvo.type;
+    }
+  });
+
+  _sbFila = _sbFila.then(async () => {
+    try {
+      const r = await sbAplicar(ops, true);
+      if (r.ok) sbEspelho.enviadas += ops.length;
+      else sbAvisarFalhaEspelho(`${action}: ${r.error}`);
+    } catch (e) {
+      sbAvisarFalhaEspelho(`${action}: ${e.message}`);
+    }
+  });
+}
+
+// Aceita vírgula decimal. Number('16,66') é NaN, e um NaN virando 0 aqui gravaria salário 0, gasto 0,
+// custo 0 — errado em dinheiro, e silencioso. O caminho normal entrega número, mas basta uma vírgula
+// chegar de um campo de texto ou de um dado antigo para o estrago acontecer sem aviso. Só trata o caso
+// pt-BR inequívoco (uma vírgula, nenhum ponto): '1,5' -> 1.5, e '1.234,56' também. Nunca chuta.
+function sbN(v) {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
+  const n = Number(v);
+  if (Number.isFinite(n) && String(v).indexOf(',') < 0) return n;
+  const s = String(v == null ? '' : v).trim();
+  if (/^-?\d{1,3}(\.\d{3})*,\d+$/.test(s)) { const x = Number(s.replace(/\./g, '').replace(',', '.')); return Number.isFinite(x) ? x : 0; }
+  if (/^-?\d*,\d+$/.test(s)) { const x = Number(s.replace(',', '.')); return Number.isFinite(x) ? x : 0; }
+  return Number.isFinite(n) ? n : 0;
+}
+function sbTexto(v) { return (v === null || v === undefined) ? '' : String(v); }
+function sbData(v) { const s = String(v || '').slice(0, 10); return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null; }
+function sbTs(v) { return v ? new Date(v).toISOString() : null; }
+function sbJson(v, padrao) { try { const o = JSON.parse(v); return o == null ? padrao : o; } catch (e) { return padrao; } }
+function sbBool(v) { return v === true || v === 'true' || v === 'TRUE'; }
+
+// ------------------------------------------------------------
+// LEITURA — Supabase -> allData (formato da planilha)
+// ------------------------------------------------------------
+async function sbCarregarEstoque() {
+  const [prods, saldos, cats, convs, recs, ings, movs, linhas, ordens, cfgs] = await Promise.all([
+    sbAll('products'), sbAll('current_stock'), sbAll('product_categories'),
+    sbAll('product_unit_conversions'), sbAll('recipes'), sbAll('recipe_ingredients'),
+    sbAll('stock_movements'), sbAll('stock_movement_lines'), sbAll('production_orders'),
+    sbAll('app_settings'),
+  ]);
+
+  const nomeDoProduto = new Map(prods.map(p => [p.id, p.name]));
+  const unidadeDoProduto = new Map(prods.map(p => [p.id, p.storage_unit]));
+  const saldoDoProduto = new Map(saldos.map(s => [s.product_id, sbN(s.quantity)]));
+  const nomeDaCategoria = new Map(cats.map(c => [c.id, c.name]));
+  const receitaPorId = new Map(recs.map(r => [r.id, r]));
+
+  const convDoProduto = {};
+  convs.forEach(c => { (convDoProduto[c.product_id] = convDoProduto[c.product_id] || []).push({ unit: c.unit, equals: sbN(c.equals) }); });
+  const ingDaReceita = {};
+  ings.forEach(i => { (ingDaReceita[i.recipe_id] = ingDaReceita[i.recipe_id] || []).push({ name: nomeDoProduto.get(i.product_id) || '', qty: sbN(i.qty), unit: i.unit }); });
+  const linhasDoMov = {};
+  linhas.forEach(l => { (linhasDoMov[l.movement_id] = linhasDoMov[l.movement_id] || []).push(l); });
+
+  const records = [];
+
+  // Insumos e produtos prontos: uma tabela só no banco (products.kind), dois types aqui.
+  prods.forEach(p => records.push({ ...blankRecord(), id: p.id,
+    type: p.kind === 'produto_pronto' ? 'finished_product' : 'product',
+    product_name: p.name,
+    quantity: saldoDoProduto.get(p.id) || 0,   // vem da VIEW, não de uma célula gravada
+    unit: p.storage_unit, storage_unit: p.storage_unit,
+    category: nomeDaCategoria.get(p.category_id) || '',
+    // tracks_stock virou coluna de verdade; aqui volta a ser a marca no recipe_type que o app conhece.
+    recipe_type: p.tracks_stock ? '' : 'sem_controle_estoque',
+    critical_stock: sbN(p.critical_stock), min_stock: sbN(p.min_stock),
+    comfortable_stock: sbN(p.comfortable_stock),
+    linked_recipe_id: p.linked_recipe_id || '',
+    custom_conversions: JSON.stringify(convDoProduto[p.id] || []),
+  }));
+
+  recs.forEach(r => records.push({ ...blankRecord(), id: r.id, type: 'recipe',
+    recipe_name: r.name, recipe_type: r.kind,
+    recipe_yield: sbN(r.yield_qty), recipe_yield_unit: r.yield_unit,
+    recipe_sector: sbTexto(r.sector),
+    recipe_favorite: r.is_favorite ? 'true' : 'false',
+    recipe_ingredients: JSON.stringify(ingDaReceita[r.id] || []),
+  }));
+
+  cats.forEach(c => records.push({ ...blankRecord(), id: c.id, type: 'product_category',
+    product_name: c.name, category: c.dre_group_id || '', movement_date: c.created_at }));
+
+  movs.forEach(m => records.push(sbMovimentoParaRegistro(m, linhasDoMov[m.id] || [], nomeDoProduto, unidadeDoProduto, receitaPorId)));
+
+  ordens.forEach(o => {
+    const r = receitaPorId.get(o.recipe_id);
+    records.push({ ...blankRecord(), id: o.id, type: 'production',
+      production_status: o.status === 'pending' ? 'pending' : o.status,
+      production_recipe_id: o.recipe_id || '', movement_date: o.planned_at,
+      recipe_name: r ? r.name : '', recipe_type: r ? r.kind : '',
+      recipe_yield: r ? sbN(r.yield_qty) : 0, recipe_yield_unit: r ? r.yield_unit : '',
+      recipe_sector: r ? sbTexto(r.sector) : '',
+      recipe_ingredients: JSON.stringify(ingDaReceita[o.recipe_id] || []),
+    });
+  });
+
+  // Dois "registros" que na planilha moram na aba Estoque e aqui viraram chaves de app_settings.
+  cfgs.forEach(s => {
+    if (s.key === 'consumption_reset') {
+      records.push({ ...blankRecord(), id: 'consumption_reset', type: 'consumption_reset', movement_date: (s.value || {}).at || '' });
+    } else if (s.key === 'stock_baseline') {
+      const v = s.value || {};
+      records.push({ ...blankRecord(), id: 'stock_baseline', type: 'stock_baseline',
+        movement_date: v.at || '', movement_note: v.note || '', batch_items: JSON.stringify(v.saldos || []) });
+    }
+  });
+
+  return { records };
+}
+
+// Um movimento novo (cabeçalho + linhas) remontado no formato de uma linha da planilha.
+//
+// O QUE ESTA FUNÇÃO NORMALIZA, DE PROPÓSITO: o batch_items histórico tinha vários formatos (o antigo em
+// unidade de receita, o `deductedIngredients` aninhado das vendas, o novo com storageQty). Aqui todos
+// saem no formato ÚNICO que o código pós-auditoria lê: {name, qty, unit, storageQty}, com qty já na
+// unidade de estoque. É simplificação real, não perda: a informação de auditoria do que foi digitado
+// continua nas colunas source_qty/source_unit da linha do razão, que é o lugar certo dela.
+//
+// O SINAL: na planilha, quase todo tipo de movimentação guarda MAGNITUDE positiva e o sinal vem do tipo
+// (uma perda de 2 grava "2", não "-2"). O AJUSTE MANUAL é a exceção: ele grava o delta com sinal, porque
+// pode ser para cima ou para baixo, e é assim que reconcileStockLedger o lê. Errei isso na primeira
+// versão — usei Math.abs em tudo — e o teste pegou: 67 dos 121 itens passaram a "não fechar", porque
+// todo ajuste para baixo virava ajuste para cima. Na tela isso apareceria como 67 divergências falsas na
+// Conferência de Saldo, ou seja, a tela que existe para avisar de problema real viraria ruído.
+// 'saldo_inicial' entra na mesma exceção, e por um motivo concreto: o saldo de abertura da migração tem
+// uma linha NEGATIVA (Amendoas, −75), porque o histórico da planilha registrava mais saída do que
+// entrada nesse item. É dado errado de origem, não erro da migração — e o razão tem de reproduzir o dado
+// como ele é, não como devia ser. Perder esse sinal fazia o saldo dele "não fechar" por 150 (2 × 75).
+function qtyDaPlanilha(kind, delta) {
+  const assinado = (kind === 'ajuste' || kind === 'saldo_inicial');
+  return assinado ? sbN(delta) : Math.abs(sbN(delta));
+}
+function sbMovimentoParaRegistro(m, ls, nomeDoProduto, unidadeDoProduto, receitaPorId) {
+  const TIPO = { entrada:'entrada', producao:'producao', venda:'venda', saida_manual:'saida_manual',
+                 perda:'perda', ajuste:'ajuste_manual', saldo_inicial:'entrada' };
+  const rec = { ...blankRecord(), id: m.id, type: 'movement',
+    movement_type: TIPO[m.kind] || m.kind,
+    movement_date: m.occurred_at,
+    movement_note: sbTexto(m.note),
+    movement_user: sbTexto(m.user_name),
+    loss_reason: sbTexto(m.loss_reason),
+  };
+
+  let itens = ls;
+  if (m.kind === 'producao') {
+    // A linha positiva é o que FOI PRODUZIDO; as negativas são os insumos gastos. Só as negativas vão
+    // para batch_items, porque é isso que "cancelar produção" devolve ao estoque.
+    const produzida = ls.find(l => sbN(l.delta) > 0) || null;
+    itens = ls.filter(l => l !== produzida);
+    rec.production_recipe_id = m.recipe_id || '';
+    // recipe_yield num movimento significa "número de vezes da receita" — o campo com dois sentidos
+    // que virou a coluna `times`. Voltando por aqui, o cancelamento continua devolvendo o certo.
+    rec.recipe_yield = sbN(m.times);
+    rec.production_real_yield = sbN(m.yield_qty);
+    const r = receitaPorId.get(m.recipe_id);
+    if (r) { rec.recipe_name = r.name; rec.recipe_yield_unit = r.yield_unit; }
+    if (produzida) {
+      rec.movement_product = nomeDoProduto.get(produzida.product_id) || '';
+      rec.movement_quantity = Math.abs(sbN(produzida.delta));
+    }
+  } else if (ls.length === 1) {
+    rec.movement_product = nomeDoProduto.get(ls[0].product_id) || '';
+    rec.movement_quantity = qtyDaPlanilha(m.kind, ls[0].delta);
+  } else if (ls.length > 1) {
+    // Lote: o app mostra a lista de nomes nesta coluna e usa movement_quantity como nº de itens.
+    rec.movement_product = itens.map(l => nomeDoProduto.get(l.product_id) || '').filter(Boolean).join(', ');
+    rec.movement_quantity = itens.length;
+  }
+
+  rec.batch_items = JSON.stringify(itens.map(l => {
+    const q = qtyDaPlanilha(m.kind, l.delta);
+    const it = { name: nomeDoProduto.get(l.product_id) || '', qty: q,
+                 unit: unidadeDoProduto.get(l.product_id) || '', storageQty: q };
+    if (l.exit_reason) it.reason = l.exit_reason;
+    if (l.parent_item) it.parent = l.parent_item;
+    return it;
+  }));
+  return rec;
+}
+
+// ------------------------------------------------------------
+// LEITURA — Supabase -> financeData
+// ------------------------------------------------------------
+async function sbCarregarFinanceiro() {
+  const [grupos, catsD, gastos, fixas, custos, custeadas, itensVenda, vendas, aliases,
+         funcs, folhas, snaps, custosEst, eventos, extras, cfgs] = await Promise.all([
+    sbAll('dre_groups'), sbAll('expense_categories'), sbAll('expenses'), sbAll('fixed_expenses'),
+    sbAll('product_costs'), sbAll('costed_purchase_entries'), sbAll('sale_items'), sbAll('sales'),
+    sbAll('sale_aliases'), sbAll('employees'), sbAll('weekly_timesheets'), sbAll('stock_snapshots'),
+    sbAll('stock_costs'), sbAll('events'), sbAll('event_extra_costs'), sbAll('app_settings'),
+  ]);
+
+  const nomeDoProduto = new Map(getProducts().concat(getFinishedProducts()).map(p => [p.id, p.product_name]));
+  const vendaPorId = new Map(vendas.map(v => [v.id, v]));
+  const nomeDoFunc = new Map(funcs.map(f => [f.id, f.name]));
+  const eventoPorId = new Map(eventos.map(e => [e.id, e]));
+  const records = [];
+
+  grupos.forEach(g => records.push({ id: g.id, type: 'dre_group', product_name: g.name,
+    skipped: g.is_protected, updated_at: g.created_at }));
+
+  catsD.forEach(c => records.push({ id: c.id, type: 'expense_category', product_name: c.name,
+    movement_id: c.dre_group_id, system_name: c.proration, updated_at: c.created_at }));
+
+  gastos.forEach(e => records.push({ id: e.id, type: 'expense', product_name: e.description,
+    total_cost: sbN(e.amount), expense_date: sbData(e.expense_date) || '',
+    // cost_unit guarda um id que pode ser de GRUPO ou de CATEGORIA — é assim que
+    // resolveExpenseDreGroupId espera receber. A categoria vence quando existe, igual a hoje.
+    cost_unit: e.expense_category_id || e.dre_group_id,
+    system_name: sbTexto(e.proration),
+    spreadsheet_name: sbTexto(e.origin_ref),
+    linked_employee_id: e.employee_id || '', updated_at: e.created_at }));
+
+  fixas.forEach(f => records.push({ id: f.id, type: 'fixed_expense', product_name: f.name,
+    cost_unit: f.dre_group_id, cost_price: sbN(f.monthly_amount), system_name: 'mensal',
+    skipped: !f.active, updated_at: f.created_at }));
+
+  // O histórico de custo é a novidade aprovada, mas o app espera UM registro 'cost' por insumo.
+  // Então aqui só o vigente vira registro — o histórico completo fica no banco, disponível para quando
+  // alguma tela quiser "o custo que valia em tal mês".
+  const vigente = new Map();
+  custos.forEach(c => {
+    const atual = vigente.get(c.product_id);
+    if (!atual || String(c.effective_at) > String(atual.effective_at)) vigente.set(c.product_id, c);
+  });
+  vigente.forEach((c, pid) => records.push({ id: c.id, type: 'cost',
+    product_name: nomeDoProduto.get(pid) || '', cost_price: sbN(c.unit_cost),
+    cost_unit: c.unit, cost_updated_at: c.effective_at, updated_at: c.effective_at }));
+
+  custeadas.forEach(c => records.push({ id: c.movement_id, type: 'costed_entry',
+    movement_id: c.movement_id, total_cost: sbN(c.total_cost), skipped: c.skipped,
+    costed_at: c.costed_at, updated_at: c.costed_at }));
+
+  itensVenda.forEach(i => {
+    const v = vendaPorId.get(i.sale_id) || {};
+    records.push({ id: i.id, type: 'sale_revenue', product_name: i.item_name,
+      total_qty_sold: sbN(i.qty), cost_unit: sbTexto(i.unit), sale_price: sbN(i.unit_price),
+      total_revenue: sbN(i.total_revenue), sale_price_updated_at: sbData(v.sold_at) || '',
+      movement_id: v.movement_id || '', updated_at: v.created_at });
+  });
+
+  aliases.forEach(a => records.push({ id: a.id, type: 'sale_alias',
+    spreadsheet_name: a.external_name, system_name: a.system_name }));
+
+  funcs.forEach(f => records.push({ id: f.id, type: 'employee', product_name: f.name,
+    employee_pay_value: sbN(f.hourly_rate), employee_status: f.active ? 'ativo' : 'inativo',
+    updated_at: f.created_at }));
+
+  folhas.forEach(t => records.push({ id: t.id, type: 'weekly_timesheet',
+    product_name: nomeDoFunc.get(t.employee_id) || '', linked_employee_id: t.employee_id,
+    expense_date: sbData(t.week_ref) || '', employee_work_days: JSON.stringify(t.days || []),
+    employee_pay_value: sbN(t.hourly_rate_snapshot), total_qty_sold: sbN(t.total_hours),
+    total_cost: sbN(t.labor_cost), sale_price: sbN(t.service_fee),
+    // A correlação por string 'wk_...' virou FK no banco; aqui ela é reconstruída para as telas que
+    // ainda casam os dois por esse campo.
+    spreadsheet_name: t.expense_id ? `wk_${t.employee_id}_${sbData(t.week_ref)}` : '',
+    updated_at: t.created_at }));
+
+  snaps.forEach(s => records.push({ id: s.id, type: 'stock_snapshot',
+    spreadsheet_name: `snap_${s.period_key}`, total_cost: sbN(s.total_value),
+    expense_date: sbData(s.taken_at) || '', updated_at: s.taken_at }));
+
+  custosEst.forEach(c => records.push({ id: c.id, type: 'stock_cost', product_name: c.description,
+    category: c.reason, total_cost: sbN(c.amount), expense_date: sbData(c.expense_date) || '',
+    updated_at: c.created_at }));
+
+  // Evento com faturamento preenchido = registro 'event_revenue'. Sem faturamento = ainda pendente, e
+  // pendente na planilha era a AUSÊNCIA do registro — então aqui também não gera nada.
+  eventos.forEach(e => {
+    if (e.revenue === null || e.revenue === undefined) return;
+    records.push({ id: e.id, type: 'event_revenue', movement_id: e.movement_id || '',
+      product_name: e.name, total_cost: sbN(e.revenue), expense_date: sbData(e.event_date) || '',
+      updated_at: e.created_at });
+  });
+  extras.forEach(x => {
+    const ev = eventoPorId.get(x.event_id) || {};
+    records.push({ id: x.id, type: 'event_extra_cost', movement_id: ev.movement_id || '',
+      product_name: x.description, total_cost: sbN(x.amount), expense_date: sbData(x.cost_date) || '' });
+  });
+
+  cfgs.forEach(s => {
+    if (s.key === 'analysis') {
+      records.push({ id: 'analysis', type: 'analysis_settings', product_name: 'config',
+        employee_notes: JSON.stringify(s.value || {}), updated_at: s.updated_at });
+    } else if (s.key === 'finance') {
+      const v = s.value || {};
+      records.push({ id: 'finance', type: 'finance_settings', cost_price: sbN(v.taxPct),
+        unit_cost: sbN(v.cardFeePct), updated_at: s.updated_at });
+    }
+  });
+
+  return { records };
+}
+
+// ------------------------------------------------------------
+// ESCRITA — registro no formato da planilha -> tabelas
+// ------------------------------------------------------------
+// Onde cada type legado mora agora. 'product' e 'finished_product' na mesma tabela; os quatro
+// singletons de configuração em app_settings.
+const SB_TABELA = {
+  product:'products', finished_product:'products', recipe:'recipes', movement:'stock_movements',
+  production:'production_orders', product_category:'product_categories',
+  dre_group:'dre_groups', expense_category:'expense_categories', expense:'expenses',
+  fixed_expense:'fixed_expenses', cost:'product_costs', costed_entry:'costed_purchase_entries',
+  sale_revenue:'sale_items', sale_alias:'sale_aliases', employee:'employees',
+  weekly_timesheet:'weekly_timesheets', stock_snapshot:'stock_snapshots', stock_cost:'stock_costs',
+  event_revenue:'events', event_extra_cost:'event_extra_costs',
+  analysis_settings:'app_settings', finance_settings:'app_settings',
+  consumption_reset:'app_settings', stock_baseline:'app_settings',
+};
+const SB_CHAVE_CONFIG = { analysis_settings:'analysis', finance_settings:'finance',
+  consumption_reset:'consumption_reset', stock_baseline:'stock_baseline' };
+const SB_KIND = { entrada:'entrada', producao:'producao', venda:'venda', saida_manual:'saida_manual',
+  perda:'perda', ajuste_manual:'ajuste', ajuste_manual_pronto:'ajuste' };
+
+function sbIdProdutoPorNome(nome) {
+  const p = getProducts().find(x => namesMatch(x.product_name, nome))
+         || getFinishedProducts().find(x => namesMatch(x.product_name, nome));
+  return p ? sbMapId(p.id) : null;
+}
+function sbIdCategoriaProdutoPorNome(nome) {
+  if (!nome) return null;
+  const c = getProductCategories().find(x => namesMatch(x.product_name, nome));
+  return c ? sbMapId(c.id) : null;
+}
+// Reconstrói {grupo, categoria} a partir do cost_unit legado, que pode ser um ou o outro.
+function sbGrupoECategoriaDoGasto(costUnit) {
+  if (!costUnit) return { grupo: null, categoria: null };
+  if (financeData.some(r => r.type === 'dre_group' && r.id === costUnit)) return { grupo: costUnit, categoria: null };
+  const cat = financeData.find(r => r.type === 'expense_category' && r.id === costUnit);
+  if (cat) return { grupo: cat.movement_id || null, categoria: cat.id };
+  return { grupo: null, categoria: null };
+}
+
+// Cada função recebe o registro legado e devolve a linha da tabela. Só campos que existem no schema —
+// nenhum campo com dois significados sobreviveu à travessia, que era a regra desta migração.
+const SB_LINHA = {
+  product: d => ({ id: sbMapId(d.id), name: d.product_name,
+    kind: d.type === 'finished_product' ? 'produto_pronto' : 'insumo',
+    category_id: sbIdCategoriaProdutoPorNome(d.category),
+    storage_unit: d.storage_unit || d.unit || 'unidade',
+    tracks_stock: d.recipe_type !== 'sem_controle_estoque',
+    critical_stock: sbN(d.critical_stock), min_stock: sbN(d.min_stock),
+    comfortable_stock: sbN(d.comfortable_stock),
+    linked_recipe_id: sbMapId(d.linked_recipe_id), updated_at: new Date().toISOString() }),
+  recipe: d => ({ id: sbMapId(d.id), name: d.recipe_name,
+    kind: d.recipe_type === 'insumo' ? 'insumo' : 'venda_direta',
+    yield_qty: sbN(d.recipe_yield) || 1, yield_unit: d.recipe_yield_unit || 'unidade',
+    sector: d.recipe_sector || null, is_favorite: sbBool(d.recipe_favorite),
+    updated_at: new Date().toISOString() }),
+  product_category: d => ({ id: sbMapId(d.id), name: d.product_name, dre_group_id: sbMapId(d.category) }),
+  production: d => ({ id: sbMapId(d.id), recipe_id: sbMapId(d.production_recipe_id),
+    status: ['pending','done','cancelled'].includes(d.production_status) ? d.production_status : 'pending',
+    planned_at: sbTs(d.movement_date) || new Date().toISOString() }),
+  dre_group: d => ({ id: sbMapId(d.id), name: d.product_name, is_protected: sbBool(d.skipped) || d.skipped === true }),
+  expense_category: d => ({ id: sbMapId(d.id), name: d.product_name, dre_group_id: sbMapId(d.movement_id),
+    proration: d.system_name === 'mensal' ? 'mensal' : 'pontual' }),
+  expense: d => { const g = sbGrupoECategoriaDoGasto(d.cost_unit);
+    const marca = String(d.spreadsheet_name || '');
+    const origem = marca.startsWith('fixed_') ? 'despesa_fixa' : marca.startsWith('buy_') ? 'compra'
+                 : marca.startsWith('wk_') ? 'registro_semanal' : marca.startsWith('exb_') ? 'lote' : null;
+    return { id: sbMapId(d.id), description: d.product_name, amount: sbN(d.total_cost),
+      expense_date: sbData(d.expense_date), dre_group_id: sbMapId(g.grupo), expense_category_id: sbMapId(g.categoria),
+      proration: ['mensal','pontual'].includes(d.system_name) ? d.system_name : null,
+      origin: origem, origin_ref: origem ? marca : null,
+      employee_id: sbMapId(d.linked_employee_id) }; },
+  fixed_expense: d => ({ id: sbMapId(d.id), name: d.product_name, dre_group_id: sbMapId(d.cost_unit),
+    monthly_amount: sbN(d.cost_price), active: !(d.skipped === true || d.skipped === 'true') }),
+  cost: d => ({ id: sbMapId(d.id), product_id: sbIdProdutoPorNome(d.product_name), unit_cost: sbN(d.cost_price),
+    unit: d.cost_unit || 'unidade', effective_at: sbTs(d.cost_updated_at) || new Date().toISOString(),
+    source: 'manual' }),
+  costed_entry: d => ({ movement_id: sbMapId(d.movement_id), total_cost: sbN(d.total_cost),
+    skipped: sbBool(d.skipped) || d.skipped === true, costed_at: sbTs(d.costed_at) || new Date().toISOString() }),
+  sale_alias: d => ({ id: sbMapId(d.id), external_name: d.spreadsheet_name, system_name: d.system_name }),
+  employee: d => ({ id: sbMapId(d.id), name: d.product_name, hourly_rate: sbN(d.employee_pay_value),
+    active: d.employee_status !== 'inativo' }),
+  weekly_timesheet: d => ({ id: sbMapId(d.id), employee_id: sbMapId(d.linked_employee_id),
+    week_ref: sbData(d.expense_date), days: sbJson(d.employee_work_days, []),
+    hourly_rate_snapshot: sbN(d.employee_pay_value), total_hours: sbN(d.total_qty_sold),
+    labor_cost: sbN(d.total_cost), service_fee: sbN(d.sale_price),
+    expense_id: sbMapId((financeData.find(r => r.type === 'expense' && r.spreadsheet_name && r.spreadsheet_name === d.spreadsheet_name) || {}).id) }),
+  stock_snapshot: d => ({ id: sbMapId(d.id), period_key: String(d.spreadsheet_name || '').replace(/^snap_/, ''),
+    total_value: sbN(d.total_cost), taken_at: sbTs(d.updated_at) || new Date().toISOString() }),
+  stock_cost: d => ({ id: sbMapId(d.id), description: d.product_name, reason: d.category || 'outros',
+    amount: sbN(d.total_cost), expense_date: sbData(d.expense_date) }),
+  event_revenue: d => ({ id: sbMapId(d.id), movement_id: sbMapId(d.movement_id), name: d.product_name,
+    event_date: sbData(d.expense_date), revenue: sbN(d.total_cost) }),
+};
+SB_LINHA.finished_product = SB_LINHA.product;
+
+// Configuração: os quatro singletons viram uma linha de app_settings, com o JSONB montado aqui.
+function sbLinhaConfig(d) {
+  const key = SB_CHAVE_CONFIG[d.type];
+  const value =
+    d.type === 'analysis_settings'   ? sbJson(d.employee_notes, {}) :
+    d.type === 'finance_settings'    ? { taxPct: sbN(d.cost_price), cardFeePct: sbN(d.unit_cost) } :
+    d.type === 'consumption_reset'   ? { at: d.movement_date } :
+    /* stock_baseline */               { at: d.movement_date, note: d.movement_note, saldos: sbJson(d.batch_items, []) };
+  return { key, value, updated_at: new Date().toISOString() };
+}
+
+// sale_items exige um cabeçalho em `sales`. Na planilha o faturamento era solto, ligado à venda só por
+// movement_id (quando havia). Aqui o cabeçalho é criado sob demanda e reaproveitado.
+async function sbGarantirVenda(movementId, dataStr) {
+  const c = await sb();
+  if (movementId) {
+    const { data } = await c.from('sales').select('id').eq('movement_id', movementId).limit(1);
+    if (data && data.length) return data[0].id;
+  }
+  const dia = sbData(dataStr) || sbData(new Date().toISOString());
+  if (!movementId) {
+    // Sem vínculo com movimento, o agrupamento é por dia — o mesmo critério usado na importação.
+    const { data } = await c.from('sales').select('id').eq('sold_at', dia).is('movement_id', null).limit(1);
+    if (data && data.length) return data[0].id;
+  }
+  const id = crypto.randomUUID();
+  const { error } = await c.from('sales').insert({ id, sold_at: dia, movement_id: movementId || null });
+  if (error) throw new Error(`sales: ${error.message}`);
+  return id;
+}
+// event_extra_costs aponta para `events` por FK, mas na planilha o custo extra podia ser lançado ANTES
+// do faturamento do evento existir. Então o evento é criado com revenue null (= pendente).
+async function sbGarantirEvento(movementId, nome, dataStr) {
+  const c = await sb();
+  if (movementId) {
+    const { data } = await c.from('events').select('id').eq('movement_id', movementId).limit(1);
+    if (data && data.length) return data[0].id;
+  }
+  const id = crypto.randomUUID();
+  const { error } = await c.from('events').insert({ id, movement_id: movementId || null,
+    name: nome || 'Evento', event_date: sbData(dataStr) || sbData(new Date().toISOString()), revenue: null });
+  if (error) throw new Error(`events: ${error.message}`);
+  return id;
+}
+
+// ------------------------------------------------------------
+// O aplicador de um lote
+// ------------------------------------------------------------
+// Recebe as operações no formato que dbBatchWrite já monta e devolve a resposta no formato que ele já
+// espera ({ok, results:[{ok,id}]}), para que nada acima disto precise mudar.
+//
+// A TRADUÇÃO CENTRAL: mudança de `quantity` de produto não é UPDATE, é linha do razão. O delta sai da
+// comparação com o que está em allData — que é confiável porque quem escreve sempre passa uma CÓPIA do
+// produto ({...p, quantity: novo}), deixando o original em memória com o valor antigo.
+//
+// `espelho = true` muda duas coisas, e as duas importam:
+//   1. NÃO mexe no objeto recebido. No modo espelho o registro pertence à planilha e já tem o id dela;
+//      escrever o uuid nele corromperia o dado que está em produção.
+//   2. O delta vem de `o._antes`, capturado no momento da gravação. Quando a fila do espelho roda, o
+//      allData já foi atualizado — buscar ali daria delta zero e estoque não descontado.
+async function sbAplicar(ops, espelho = false) {
+  const c = await sb();
+  const resultados = ops.map(() => ({ ok: false }));
+  const linhasRazao = [];       // { productId, delta, nome }
+  const cabecalhos = [];        // { i, data, id }
+  const diretas = [];           // { i, op, data }
+  // Registra o resultado e, fora do espelho, devolve o id para quem chamou.
+  const feito = (i, id, d) => { if (!espelho && d && id) d.id = id; resultados[i] = { ok: true, id }; };
+
+  ops.forEach((o, i) => {
+    const d = o.data || {};
+    if (o.op === 'delete') { diretas.push({ i, op: 'delete', data: d, tipo: o._tipo }); return; }
+    if (d.type === 'movement' && o.op === 'create') {
+      cabecalhos.push({ i, data: d, id: sbMapId(d.id) || crypto.randomUUID() });
+      return;
+    }
+    if (d.type === 'product' || d.type === 'finished_product') {
+      const antes = o._antes !== undefined ? o._antes
+        : (o.op === 'update' ? sbN((allData.find(r => r.id === d.id) || {}).quantity) : 0);
+      const delta = sbN(d.quantity) - antes;
+      // Insumo sem controle de estoque não move saldo — igual ao createStockLedger de hoje, que o deixa
+      // no rastro mas fora do saldo. Manter idêntico é requisito da fase 2: nenhuma mudança de número.
+      if (Math.abs(delta) > 1e-9 && d.recipe_type !== 'sem_controle_estoque') {
+        linhasRazao.push({ productId: sbMapId(d.id), delta, nome: d.product_name });
+      }
+      diretas.push({ i, op: o.op, data: d });
+      return;
+    }
+    diretas.push({ i, op: o.op, data: d });
+  });
+
+  // Cada linha do razão pertence ao movimento do lote que menciona aquele produto no batch_items. Com
+  // um movimento só (o caso normal) todas vão para ele. O fallback existe porque uma alteração de saldo
+  // SEM movimento seria estoque mudando sem rastro — exatamente o furo que a auditoria fechou quando a
+  // troca de unidade rebaseava a quantidade sem registrar nada.
+  let movimentoAvulso = null;
+  if (linhasRazao.length && !cabecalhos.length) {
+    movimentoAvulso = { kind: 'ajuste', occurred_at: new Date().toISOString(),
+      note: 'Ajuste automático de saldo (alteração direta do cadastro)', origin: null };
+  }
+
+  // --- 1. produtos e demais tabelas, em ordem (FKs primeiro) ---
+  for (const { i, op, data, tipo: tipoDoDelete } of diretas) {
+    try {
+      const tabela = SB_TABELA[data.type];
+      if (op === 'delete') {
+        // `tipoDoDelete` vem capturado no enfileiramento: no modo espelho, quando a fila roda, o
+        // registro já saiu do allData, e sem o tipo não haveria como saber de que tabela apagar.
+        const alvo = allData.find(r => r.id === data.id) || financeData.find(r => r.id === data.id);
+        const tipo = tipoDoDelete || (alvo || {}).type;
+        const t = SB_TABELA[tipo];
+        if (!t) throw new Error(`não sei de que tabela apagar o id ${data.id}`);
+        const chave = t === 'app_settings' ? 'key' : (t === 'costed_purchase_entries' ? 'movement_id' : 'id');
+        const valor = chave === 'key' ? SB_CHAVE_CONFIG[tipo] : sbMapId(data.id);
+        const { error } = await c.from(t).delete().eq(chave, valor);
+        if (error) throw new Error(error.message);
+        resultados[i] = { ok: true, id: data.id };
+        continue;
+      }
+      if (!tabela) throw new Error(`type "${data.type}" não tem tabela no Supabase`);
+
+      // Configuração: upsert pela chave, não pelo id.
+      if (tabela === 'app_settings') {
+        const linha = sbLinhaConfig(data);
+        const { error } = await c.from('app_settings').upsert(linha, { onConflict: 'key' });
+        if (error) throw new Error(error.message);
+        feito(i, linha.key, data);
+        continue;
+      }
+      // Custo de insumo: alterar preço INSERE uma linha nova, nunca sobrescreve. É o histórico
+      // aprovado. O id em memória é atualizado no lugar para continuar apontando para a linha vigente.
+      if (data.type === 'cost') {
+        const linha = SB_LINHA.cost(data);
+        linha.id = crypto.randomUUID();
+        linha.effective_at = new Date().toISOString();
+        if (!linha.product_id) throw new Error(`custo de "${data.product_name}" sem insumo correspondente`);
+        const { error } = await c.from('product_costs').insert(linha);
+        if (error) throw new Error(error.message);
+        feito(i, linha.id, data);
+        continue;
+      }
+      if (data.type === 'costed_entry') {
+        const { error } = await c.from('costed_purchase_entries').upsert(SB_LINHA.costed_entry(data), { onConflict: 'movement_id' });
+        if (error) throw new Error(error.message);
+        feito(i, data.movement_id, data);
+        continue;
+      }
+      if (data.type === 'sale_revenue') {
+        const saleId = await sbGarantirVenda(sbMapId(data.movement_id), data.sale_price_updated_at);
+        const rec = getRecipes().find(r => namesMatch(r.recipe_name, data.product_name));
+        const linha = { id: sbMapId(data.id) || crypto.randomUUID(), sale_id: saleId,
+          recipe_id: rec ? sbMapId(rec.id) : null, product_id: rec ? null : sbIdProdutoPorNome(data.product_name),
+          item_name: data.product_name, qty: sbN(data.total_qty_sold), unit: data.cost_unit || null,
+          unit_price: sbN(data.sale_price), total_revenue: sbN(data.total_revenue) };
+        const { error } = await c.from('sale_items').upsert(linha);
+        if (error) throw new Error(error.message);
+        feito(i, linha.id, data);
+        continue;
+      }
+      if (data.type === 'event_extra_cost') {
+        const eventoId = await sbGarantirEvento(sbMapId(data.movement_id), 'Evento', data.expense_date);
+        const linha = { id: sbMapId(data.id) || crypto.randomUUID(), event_id: eventoId,
+          description: data.product_name, amount: sbN(data.total_cost), cost_date: sbData(data.expense_date) };
+        const { error } = await c.from('event_extra_costs').upsert(linha);
+        if (error) throw new Error(error.message);
+        feito(i, linha.id, data);
+        continue;
+      }
+      if (data.type === 'event_revenue') {
+        // O evento pode já existir como pendente (criado por um custo extra): completa em vez de duplicar.
+        const eventoId = await sbGarantirEvento(sbMapId(data.movement_id), data.product_name, data.expense_date);
+        const { error } = await c.from('events').update({ name: data.product_name,
+          event_date: sbData(data.expense_date), revenue: sbN(data.total_cost) }).eq('id', eventoId);
+        if (error) throw new Error(error.message);
+        feito(i, eventoId, data);
+        continue;
+      }
+
+      const monta = SB_LINHA[data.type];
+      if (!monta) throw new Error(`type "${data.type}" não tem tradução para o Supabase`);
+      const linha = monta(data);
+      if (!linha.id) linha.id = crypto.randomUUID();
+      if (data.type === 'product' || data.type === 'finished_product') delete linha.quantity; // saldo é view
+      const { error } = await c.from(tabela).upsert(linha);
+      if (error) throw new Error(error.message);
+      feito(i, linha.id, data);
+
+      // Filhos que na planilha eram JSON dentro do próprio registro: substitui em bloco.
+      if (data.type === 'product' || data.type === 'finished_product') {
+        await c.from('product_unit_conversions').delete().eq('product_id', linha.id);
+        const convs = getCustomConversions(data).filter(x => x && x.unit && sbN(x.equals) > 0)
+          .map(x => ({ product_id: linha.id, unit: x.unit, equals: sbN(x.equals) }));
+        if (convs.length) { const r = await c.from('product_unit_conversions').insert(convs); if (r.error) throw new Error(r.error.message); }
+      }
+      if (data.type === 'recipe') {
+        await c.from('recipe_ingredients').delete().eq('recipe_id', linha.id);
+        const vistos = new Set();
+        const ings = sbJson(data.recipe_ingredients, []).map(ing => {
+          const pid = sbIdProdutoPorNome(ing.name);
+          if (!pid || vistos.has(pid) || sbN(ing.qty) <= 0) return null;
+          vistos.add(pid);
+          return { recipe_id: linha.id, product_id: pid, qty: sbN(ing.qty), unit: ing.unit || 'unidade' };
+        }).filter(Boolean);
+        if (ings.length) { const r = await c.from('recipe_ingredients').insert(ings); if (r.error) throw new Error(r.error.message); }
+      }
+    } catch (e) {
+      resultados[i] = { ok: false, error: e.message };
+      console.error('sbAplicar falhou em', data.type, e);
+    }
+  }
+
+  // --- 2. movimentos: cabeçalho + linhas num statement só (transação de verdade) ---
+  const porNome = new Map();
+  linhasRazao.forEach(l => porNome.set(normalizeName(l.nome || ''), l));
+  const usadas = new Set();
+
+  for (const cab of cabecalhos) {
+    const d = cab.data;
+    const itens = sbJson(d.batch_items, []);
+    const nomesDoMov = new Set(itens.map(it => normalizeName(it && it.name || '')));
+    if (d.movement_product) nomesDoMov.add(normalizeName(d.movement_product));
+
+    const minhas = linhasRazao.filter(l => !usadas.has(l) && (cabecalhos.length === 1 || nomesDoMov.has(normalizeName(l.nome || ''))));
+    minhas.forEach(l => usadas.add(l));
+
+    // Detalhes de auditoria (o que a pessoa digitou, o item pai, a classificação da saída) vêm do
+    // batch_items, casados por nome. O delta NUNCA vem daí: vem da mudança real de saldo.
+    const detalhe = new Map();
+    itens.forEach(it => { if (it && it.name) detalhe.set(normalizeName(it.name), it); });
+
+    const kind = SB_KIND[d.movement_type];
+    if (!kind) { resultados[cab.i] = { ok: false, error: `movimento de tipo "${d.movement_type}" não existe no Supabase` }; continue; }
+
+    const payload = { id: cab.id, kind, occurred_at: sbTs(d.movement_date) || new Date().toISOString(),
+      note: d.movement_note || null, user_name: d.movement_user || null, loss_reason: d.loss_reason || null,
+      recipe_id: sbMapId(d.production_recipe_id),
+      times: kind === 'producao' ? sbN(d.recipe_yield) || null : null,
+      yield_qty: kind === 'producao' ? sbN(d.production_real_yield) || sbN(d.movement_quantity) || null : null };
+
+    const linhas = minhas.map(l => {
+      const it = detalhe.get(normalizeName(l.nome || '')) || {};
+      return { product_id: l.productId, delta: l.delta,
+        source_qty: it.qty !== undefined ? sbN(it.qty) : Math.abs(l.delta),
+        source_unit: it.unit || null, parent_item: it.parent || null, exit_reason: it.reason || null };
+    });
+
+    // Movimento sem nenhuma linha é o estrago silencioso que este modelo existe para impedir: apareceria
+    // no histórico sem ter mexido no estoque. Melhor falhar alto — assertSaved já para tudo e avisa.
+    if (!linhas.length && kind !== 'ajuste') {
+      resultados[cab.i] = { ok: false, error: `${d.movement_type}: nenhuma alteração de saldo acompanhou o movimento — nada foi gravado` };
+      continue;
+    }
+    try {
+      const { data: novoId, error } = await c.rpc('register_movement', { p_movement: payload, p_lines: linhas });
+      if (error) throw new Error(error.message);
+      feito(cab.i, novoId || cab.id, d);
+    } catch (e) {
+      resultados[cab.i] = { ok: false, error: e.message };
+      console.error('register_movement falhou:', e);
+    }
+  }
+
+  // Sobrou mudança de saldo sem movimento nenhum: grava o ajuste automático, para não existir saldo
+  // mudando sem rastro.
+  const orfas = linhasRazao.filter(l => !usadas.has(l));
+  if (orfas.length && movimentoAvulso) {
+    try {
+      const { error } = await c.rpc('register_movement', {
+        p_movement: movimentoAvulso,
+        p_lines: orfas.map(l => ({ product_id: l.productId, delta: l.delta, source_qty: Math.abs(l.delta) })),
+      });
+      if (error) throw new Error(error.message);
+    } catch (e) { console.error('ajuste automático de saldo falhou:', e); }
+  } else if (orfas.length) {
+    console.warn('sbAplicar: alteração de saldo que não achou movimento dono', orfas);
+  }
+
+  const falhas = resultados.filter(r => !r.ok);
+  return { ok: falhas.length === 0, results: resultados,
+    error: falhas.length ? falhas.map(r => r.error).filter(Boolean).join('; ') : undefined };
+}
+
+// A porta única do adaptador. Traduz as 5 ações do Apps Script.
+async function sbApi(action, data, escopo) {
+  if (action === 'getAll') return escopo === 'finance' ? sbCarregarFinanceiro() : sbCarregarEstoque();
+  if (action === 'create')     return sbAplicar([{ op: 'create', data: data.data }]).then(r => ({ ok: r.ok, id: r.results[0] && r.results[0].id, error: r.error }));
+  if (action === 'update')     return sbAplicar([{ op: 'update', data: data.data }]).then(r => ({ ok: r.ok, id: data.data.id, error: r.error }));
+  if (action === 'delete')     return sbAplicar([{ op: 'delete', data: { id: data.id } }]).then(r => ({ ok: r.ok, error: r.error }));
+  if (action === 'batchWrite') return sbAplicar(data.data);
+  throw new Error(`ação "${action}" não existe no adaptador Supabase`);
+}
+
 async function apiCall(action, data = {}) {
+  if (USE_SUPABASE) return sbApi(action, data, 'estoque');
   if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === 'COLE_SUA_URL_AQUI') {
     throw new Error('URL do Apps Script não configurada');
   }
@@ -1701,6 +2590,9 @@ async function apiCall(action, data = {}) {
   if (data.id) body.id = data.id;
   const json = await fetchWithRetry(APPS_SCRIPT_URL, { method: 'POST', body: JSON.stringify(body) });
   if (json.error) throw new Error(json.error);
+  // A planilha aceitou. Só agora a cópia é enfileirada — nunca antes, para o Supabase não receber uma
+  // gravação que a planilha recusou. Não é aguardada: a tela não espera pela cópia.
+  sbEspelharEscrita(action, data, json);
   return json;
 }
 
@@ -1848,7 +2740,9 @@ async function initApp() {
     }
   }, 5000);
 
-  if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === 'COLE_SUA_URL_AQUI') {
+  // O aviso de "cole a URL do Apps Script" só faz sentido enquanto o Sheets for o banco. Com o
+  // Supabase ligado, a URL pode até ser apagada do arquivo (fase 6) sem a tela acusar erro.
+  if (!USE_SUPABASE && (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === 'COLE_SUA_URL_AQUI')) {
     document.getElementById('config-banner').classList.remove('hidden');
     document.getElementById('loading-overlay').classList.add('hidden');
     lucide.createIcons();
@@ -6386,12 +7280,44 @@ function fmtCurrency(v) {
   return (v||0).toLocaleString('pt-BR', { style:'currency', currency:'BRL' });
 }
 async function financeApiCall(action, data = {}) {
+  if (USE_SUPABASE) {
+    // A senha digitada na tela de sempre passa a virar uma sessão de verdade. A diferença que importa:
+    // hoje o Apps Script confere a senha e decide se responde; ali é o BANCO que recusa, pelas políticas
+    // `to authenticated`. Quem não tem sessão não lê o financeiro nem contornando a interface.
+    if (action === 'getAll') {
+      const c = await sb();
+      const { error } = await c.auth.signInWithPassword({ email: SUPABASE_FINANCE_EMAIL, password: financePassword });
+      // Erro aqui sobe como exceção, e o catch de unlockFinanceiro já mostra "senha incorreta" —
+      // mesmíssimo comportamento de hoje, sem tocar naquela função.
+      if (error) throw new Error(error.message);
+    }
+    return sbApi(action, data, 'finance');
+  }
   if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === 'COLE_SUA_URL_AQUI') throw new Error('URL do Apps Script não configurada');
   // Mesma ideia do apiCall: leitura por GET, escrita por POST (sem limite de tamanho de URL).
   if (action === 'getAll') {
     const params = new URLSearchParams({ action, sheet: 'Financeiro', password: financePassword });
     const json = await fetchWithRetry(`${APPS_SCRIPT_URL}?${params.toString()}`);
     if (json.error) throw new Error(json.error);
+    // No modo espelho, abrir o financeiro também abre a sessão no Supabase — as tabelas financeiras lá
+    // exigem sessão, então sem isto toda cópia de gasto/custo/faturamento seria recusada. Roda em
+    // segundo plano e nunca atrapalha: se a planilha aceitou a senha, o financeiro abre de qualquer jeito.
+    // Efeito colateral útil: é aqui que eu descubro se o login do Supabase realmente funciona, antes de
+    // depender dele na virada.
+    if (SUPABASE_ESPELHO) {
+      const senha = financePassword;
+      _sbFila = _sbFila.then(async () => {
+        try {
+          const c = await sb();
+          const { error } = await c.auth.signInWithPassword({ email: SUPABASE_FINANCE_EMAIL, password: senha });
+          if (error) throw new Error(error.message);
+          sbEspelho.authOk = true;
+        } catch (e) {
+          sbEspelho.authOk = false;
+          sbAvisarFalhaEspelho(`login do Supabase falhou (${e.message}) — confira SUPABASE_FINANCE_EMAIL. As cópias do financeiro não vão passar.`);
+        }
+      });
+    }
     return json;
   }
   const body = { action, sheet: 'Financeiro', password: financePassword };
@@ -6399,6 +7325,7 @@ async function financeApiCall(action, data = {}) {
   if (data.id) body.id = data.id;
   const json = await fetchWithRetry(APPS_SCRIPT_URL, { method: 'POST', body: JSON.stringify(body) });
   if (json.error) throw new Error(json.error);
+  sbEspelharEscrita(action, data, json);
   return json;
 }
 // Mesma ideia do dbBatchWrite, só que pra aba Financeiro — usada pra salvar o faturamento de
@@ -7418,6 +8345,9 @@ function lockFinanceiro() {
   financeUnlocked = false;
   financePassword = '';
   financeData = [];
+  // Sem isto o "sair" limparia a tela mas a sessão continuaria válida, e o financeiro seguiria legível
+  // pela API. Trancar de verdade é encerrar a sessão no servidor, não esconder a interface.
+  if (USE_SUPABASE) sb().then(c => c.auth.signOut()).catch(e => console.error('signOut falhou:', e));
   renderFinanceiro();
 }
 function getFinanceCostedEntryIds() {
