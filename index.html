@@ -2338,6 +2338,59 @@ async function sbGarantirEvento(movementId, nome, dataStr) {
 //      escrever o uuid nele corromperia o dado que está em produção.
 //   2. O delta vem de `o._antes`, capturado no momento da gravação. Quando a fila do espelho roda, o
 //      allData já foi atualizado — buscar ali daria delta zero e estoque não descontado.
+// Ajustes automáticos gravados porque uma alteração de saldo chegou SEM movimento no mesmo lote.
+// Isso não é exceção: o app grava o produto e o movimento em DUAS chamadas, de propósito — primeiro
+// `dbUpdate` do produto, e só se ele salvar é que vem o `dbCreate` do movimento (8 dos 10 lugares que
+// criam movimento fazem assim; ver index.html:3977). O adaptador nasceu supondo que os dois chegariam
+// juntos, o que só vale nos fluxos que usam `dbBatchWrite`.
+//
+// O sintoma real, encontrado por um ajuste de verdade do dono (Amendoas 225 → 300 g): o histórico
+// ficava com DUAS entradas — a que moveu o saldo, com a nota genérica "alteração direta do cadastro",
+// e a que tinha a nota certa, sem nenhuma linha. Saldo correto, histórico mentindo.
+const _sbAjustesPendentes = [];      // { movimentoId, productId, delta, em }
+const SB_ADOCAO_MS = 60000;          // além disso, foi mesmo edição direta do cadastro
+
+// Traz para `movimentoId` as linhas que um ajuste automático recente já gravou para os mesmos produtos.
+// A ORDEM é deliberada: insere o movimento certo, REPONTA as linhas e só então apaga o automático.
+// Assim o saldo nunca fica órfão nem contado duas vezes, em nenhum instante — e como o id do movimento
+// é o md5 do id da planilha, quem procura por id (desfazer, cancelar, "Alterar Data") continua achando.
+async function sbAdotarAjusteAutomatico(c, movimentoId, payload, nomesDoMov) {
+  const agora = Date.now();
+  for (let i = _sbAjustesPendentes.length - 1; i >= 0; i--) {
+    if (agora - _sbAjustesPendentes[i].em > SB_ADOCAO_MS) _sbAjustesPendentes.splice(i, 1);
+  }
+  // Só o pendente MAIS RECENTE de cada produto. Sem isso, um cadastro com saldo inicial seguido de um
+  // ajuste (dois pendentes do mesmo produto) faria o movimento do ajuste adotar os dois, e o saldo
+  // inicial apareceria no histórico como se fosse parte do ajuste. O saldo continuaria certo, o
+  // histórico não — e é justamente o histórico que este movimento existe para contar.
+  const idsDoMov = new Set();
+  nomesDoMov.forEach(n => { const pid = sbIdProdutoPorNome(n); if (pid) idsDoMov.add(pid); });
+  const maisRecente = new Map();
+  _sbAjustesPendentes.forEach(p => {
+    if (!idsDoMov.has(p.productId)) return;
+    const atual = maisRecente.get(p.productId);
+    if (!atual || p.em >= atual.em) maisRecente.set(p.productId, p);
+  });
+  const alvos = [...maisRecente.values()];
+  if (!alvos.length) return [];
+
+  const { error: e1 } = await c.rpc('register_movement', { p_movement: payload, p_lines: [] });
+  if (e1) throw new Error(e1.message);
+  for (const p of alvos) {
+    const { error: e2 } = await c.from('stock_movement_lines')
+      .update({ movement_id: movimentoId }).eq('movement_id', p.movimentoId).eq('product_id', p.productId);
+    if (e2) throw new Error(e2.message);
+  }
+  // Apaga só o que ficou realmente sem linha: um lote pode ter gerado órfãs de vários produtos, e as
+  // que não pertencem a este movimento continuam onde estão.
+  for (const mid of new Set(alvos.map(p => p.movimentoId))) {
+    const { data: sobrou } = await c.from('stock_movement_lines').select('id').eq('movement_id', mid).limit(1);
+    if (!sobrou || !sobrou.length) await c.from('stock_movements').delete().eq('id', mid);
+  }
+  alvos.forEach(p => { const i = _sbAjustesPendentes.indexOf(p); if (i >= 0) _sbAjustesPendentes.splice(i, 1); });
+  return alvos;
+}
+
 async function sbAplicar(ops, espelho = false) {
   const c = await sb();
   const resultados = ops.map(() => ({ ok: false }));
@@ -2526,6 +2579,18 @@ async function sbAplicar(ops, espelho = false) {
 
     // Movimento sem nenhuma linha é o estrago silencioso que este modelo existe para impedir: apareceria
     // no histórico sem ter mexido no estoque. Melhor falhar alto — assertSaved já para tudo e avisa.
+    // Chegou sem linha porque a alteração de saldo veio na chamada ANTERIOR e já virou ajuste
+    // automático. Adotar as linhas em vez de nascer vazio ao lado dele. Ver sbAdotarAjusteAutomatico.
+    if (!linhas.length) {
+      try {
+        const adotadas = await sbAdotarAjusteAutomatico(c, cab.id, payload, nomesDoMov);
+        if (adotadas.length) { feito(cab.i, cab.id, d); continue; }
+      } catch (e) {
+        resultados[cab.i] = { ok: false, error: `${d.movement_type}: ${e.message}` };
+        console.error('adoção do ajuste automático falhou:', e);
+        continue;
+      }
+    }
     if (!linhas.length && kind !== 'ajuste') {
       resultados[cab.i] = { ok: false, error: `${d.movement_type}: nenhuma alteração de saldo acompanhou o movimento — nada foi gravado` };
       continue;
@@ -2545,11 +2610,14 @@ async function sbAplicar(ops, espelho = false) {
   const orfas = linhasRazao.filter(l => !usadas.has(l));
   if (orfas.length && movimentoAvulso) {
     try {
-      const { error } = await c.rpc('register_movement', {
+      const { data: autoId, error } = await c.rpc('register_movement', {
         p_movement: movimentoAvulso,
         p_lines: orfas.map(l => ({ product_id: l.productId, delta: l.delta, source_qty: Math.abs(l.delta) })),
       });
       if (error) throw new Error(error.message);
+      // Fica disponível para o movimento dono adotar, se ele vier na chamada seguinte.
+      orfas.forEach(l => _sbAjustesPendentes.push(
+        { movimentoId: autoId, productId: l.productId, delta: l.delta, em: Date.now() }));
     } catch (e) { console.error('ajuste automático de saldo falhou:', e); }
   } else if (orfas.length) {
     console.warn('sbAplicar: alteração de saldo que não achou movimento dono', orfas);
