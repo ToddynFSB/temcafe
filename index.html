@@ -2395,7 +2395,14 @@ const SB_ADOCAO_MS = 60000;          // além disso, foi mesmo edição direta d
 // A ORDEM é deliberada: insere o movimento certo, REPONTA as linhas e só então apaga o automático.
 // Assim o saldo nunca fica órfão nem contado duas vezes, em nenhum instante — e como o id do movimento
 // é o md5 do id da planilha, quem procura por id (desfazer, cancelar, "Alterar Data") continua achando.
-async function sbAdotarAjusteAutomatico(c, movimentoId, payload, nomesDoMov) {
+async function sbAdotarAjusteAutomatico(c, movimentoId, payload, nomesDoMov, delta) {
+  // Só o fluxo de ajuste usa a gravação em duas chamadas. Restringir aqui evita que um movimento de
+  // outro tipo, que chegou sem linha e DEVE ser rejeitado, adote um ajuste alheio e entre no histórico
+  // parecendo legítimo.
+  if (payload.kind !== 'ajuste') return [];
+  // E o delta tem de bater. Sem isso, um movimento sem efeito de saldo (delta 0) casava só pelo produto
+  // e roubava a linha do ajuste anterior — o teste do razão pegou exatamente isso.
+  if (!Number.isFinite(delta) || Math.abs(delta) < 1e-9) return [];
   const agora = Date.now();
   for (let i = _sbAjustesPendentes.length - 1; i >= 0; i--) {
     if (agora - _sbAjustesPendentes[i].em > SB_ADOCAO_MS) _sbAjustesPendentes.splice(i, 1);
@@ -2409,6 +2416,7 @@ async function sbAdotarAjusteAutomatico(c, movimentoId, payload, nomesDoMov) {
   const maisRecente = new Map();
   _sbAjustesPendentes.forEach(p => {
     if (!idsDoMov.has(p.productId)) return;
+    if (Math.abs(p.delta - delta) > 1e-6) return;      // mesma operação, não só o mesmo produto
     const atual = maisRecente.get(p.productId);
     if (!atual || p.em >= atual.em) maisRecente.set(p.productId, p);
   });
@@ -2624,7 +2632,9 @@ async function sbAplicar(ops, espelho = false) {
     // automático. Adotar as linhas em vez de nascer vazio ao lado dele. Ver sbAdotarAjusteAutomatico.
     if (!linhas.length) {
       try {
-        const adotadas = await sbAdotarAjusteAutomatico(c, cab.id, payload, nomesDoMov);
+        // movement_quantity do ajuste manual é o delta COM SINAL (index.html:3977), na mesma escala do
+        // saldo — é ele que identifica a operação, não só o produto.
+        const adotadas = await sbAdotarAjusteAutomatico(c, cab.id, payload, nomesDoMov, sbN(d.movement_quantity));
         if (adotadas.length) { feito(cab.i, cab.id, d); continue; }
       } catch (e) {
         resultados[cab.i] = { ok: false, error: `${d.movement_type}: ${e.message}` };
