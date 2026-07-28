@@ -319,6 +319,17 @@
   <section id="panel-receitas" class="hidden fade-in">
     <h2 class="text-lg font-bold text-stone-800 mb-4 flex items-center gap-2"><i data-lucide="book-open" class="w-5 h-5 text-amber-700"></i>Receitas</h2>
     <div class="flex flex-col sm:flex-row gap-2 mb-4"><button onclick="showAddRecipe()" class="btn-primary px-4 py-2.5 rounded-lg text-sm font-medium flex items-center gap-1.5"><i data-lucide="plus" class="w-4 h-4"></i>Nova Receita</button></div>
+    <div class="relative mb-3">
+      <i data-lucide="search" class="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+      <input id="search-recipe" type="text" autocomplete="off"
+        placeholder="Buscar por nome da receita ou por ingrediente..."
+        class="w-full input-field text-sm pl-9 pr-9">
+      <button id="search-recipe-clear" onclick="clearRecipeSearch()" type="button" title="Limpar busca"
+        class="hidden absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded-md text-stone-400 hover:text-stone-700 hover:bg-stone-100">
+        <i data-lucide="x" class="w-4 h-4"></i>
+      </button>
+    </div>
+    <p id="recipe-search-summary" class="hidden text-xs text-stone-500 mb-3"></p>
     <div class="flex flex-wrap gap-2 mb-4" id="recipe-filters">
       <button class="filter-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-800 text-white" data-filter="all">Todas</button>
       <button class="filter-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-filter="favorites">⭐ Favoritas</button>
@@ -1960,7 +1971,7 @@ async function sbCarregarEstoque() {
   }));
 
   recs.forEach(r => records.push({ ...blankRecord(), id: r.id, type: 'recipe',
-    recipe_name: r.name, recipe_type: r.kind,
+    recipe_name: r.name, recipe_type: sbTipoReceitaParaApp(r.kind),
     recipe_yield: sbN(r.yield_qty), recipe_yield_unit: r.yield_unit,
     recipe_sector: sbTexto(r.sector),
     recipe_favorite: r.is_favorite ? 'true' : 'false',
@@ -1977,7 +1988,7 @@ async function sbCarregarEstoque() {
     records.push({ ...blankRecord(), id: o.id, type: 'production',
       production_status: o.status === 'pending' ? 'pending' : o.status,
       production_recipe_id: o.recipe_id || '', movement_date: o.planned_at,
-      recipe_name: r ? r.name : '', recipe_type: r ? r.kind : '',
+      recipe_name: r ? r.name : '', recipe_type: r ? sbTipoReceitaParaApp(r.kind) : '',
       recipe_yield: r ? sbN(r.yield_qty) : 0, recipe_yield_unit: r ? r.yield_unit : '',
       recipe_sector: r ? sbTexto(r.sector) : '',
       recipe_ingredients: JSON.stringify(ingDaReceita[o.recipe_id] || []),
@@ -2234,7 +2245,7 @@ const SB_LINHA = {
     comfortable_stock: sbN(d.comfortable_stock),
     linked_recipe_id: sbMapId(d.linked_recipe_id), updated_at: new Date().toISOString() }),
   recipe: d => ({ id: sbMapId(d.id), name: d.recipe_name,
-    kind: d.recipe_type === 'insumo' ? 'insumo' : 'venda_direta',
+    kind: sbTipoReceitaParaBanco(d.recipe_type),
     yield_qty: sbN(d.recipe_yield) || 1, yield_unit: d.recipe_yield_unit || 'unidade',
     sector: d.recipe_sector || null, is_favorite: sbBool(d.recipe_favorite),
     updated_at: new Date().toISOString() }),
@@ -2338,6 +2349,36 @@ async function sbGarantirEvento(movementId, nome, dataStr) {
 //      escrever o uuid nele corromperia o dado que está em produção.
 //   2. O delta vem de `o._antes`, capturado no momento da gravação. Quando a fila do espelho roda, o
 //      allData já foi atualizado — buscar ali daria delta zero e estoque não descontado.
+// ------------------------------------------------------------
+// TIPO DA RECEITA — o único campo em que o banco e o app falam línguas diferentes
+// ------------------------------------------------------------
+// A planilha guarda o tipo na forma que a tela mostra: "Venda Direta", "Insumo", "Produção". O app
+// COMPARA por essa string em 9 lugares, e não são cosméticos: quais receitas aparecem na fila de
+// produção, se o botão "Produzir" existe, se a produção credita estoque na hora ou vai para pendentes,
+// e se o rendimento é select ou texto livre. O banco guarda um enum em snake_case.
+//
+// Sem esta tradução, depois da virada as 15 receitas "Insumo" viravam `insumo` na leitura, nenhuma
+// comparação casava, e elas simplesmente **paravam de poder ser produzidas** — sem erro, sem aviso,
+// sem nada na tela. Encontrado porque um teste da busca imprimiu o tipo real e o valor estava em
+// snake_case; nenhum teste de "a tela renderiza?" pegaria isso, porque nada quebra.
+//
+// A gravação tinha o mesmo defeito ao contrário: comparava `d.recipe_type === 'insumo'` com minúscula,
+// mas a planilha manda "Insumo" — então NENHUMA receita casava e todas seriam gravadas como
+// `venda_direta`, perdendo a classificação de forma silenciosa.
+//
+// As duas direções ficam na MESMA tabela, de propósito: separadas, uma pode ganhar um valor que a outra
+// não conhece, e o erro volta.
+const SB_TIPO_RECEITA = { insumo: 'Insumo', venda_direta: 'Venda Direta', producao: 'Produção' };
+function sbTipoReceitaParaApp(kind) { return SB_TIPO_RECEITA[kind] || 'Venda Direta'; }
+function sbTipoReceitaParaBanco(v) {
+  const n = String(v == null ? '' : v).normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase();
+  for (const [banco, app] of Object.entries(SB_TIPO_RECEITA)) {
+    if (n === banco) return banco;
+    if (n === app.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()) return banco;
+  }
+  return 'venda_direta';
+}
+
 // Ajustes automáticos gravados porque uma alteração de saldo chegou SEM movimento no mesmo lote.
 // Isso não é exceção: o app grava o produto e o movimento em DUAS chamadas, de propósito — primeiro
 // `dbUpdate` do produto, e só se ele salvar é que vem o `dbCreate` do movimento (8 dos 10 lugares que
@@ -4432,6 +4473,11 @@ function renderManualExitsList() {
 // ============================================================
 // RECEITAS
 // ============================================================
+document.getElementById('search-recipe').addEventListener('input', (e) => {
+  recipeSearchTerm = e.target.value;
+  renderRecipes();
+  lucide.createIcons();   // o botão de limpar aparece e some conforme a busca
+});
 document.getElementById('recipe-filters').addEventListener('click', (e) => {
   const btn = e.target.closest('.filter-btn'); if (!btn) return;
   const filter = btn.dataset.filter;
@@ -4440,6 +4486,72 @@ document.getElementById('recipe-filters').addEventListener('click', (e) => {
   document.querySelectorAll('#recipe-filters .filter-btn').forEach(b => { const active = activeRecipeFilters.has(b.dataset.filter); b.className = `filter-btn px-3 py-1.5 rounded-lg text-xs font-medium ${active?'bg-stone-800 text-white':'bg-stone-100 text-stone-600 hover:bg-stone-200'}`; });
   renderRecipes();
 });
+// ---------- BUSCA DE RECEITAS: por nome ou por ingrediente ----------
+// Normalização SÓ para busca: tira acento além de caixa e espaço, para "amêndoas" achar "Amendoas" e
+// vice-versa. De propósito NÃO reaproveita normalizeName(), que é usada para casar identidade de
+// insumo em todo o app — igualar acentos lá poderia fundir dois cadastros diferentes.
+function recipeSearchNorm(s) {
+  return String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase();
+}
+let recipeSearchTerm = '';
+
+// Para cada receita, todo ingrediente que ela consome — inclusive os que entram DENTRO de um
+// pré-preparo, recursivamente. É a mesma travessia que computeRecipeCost faz para somar custo
+// (segue `linked_recipe_id`), e por isso a busca responde a pergunta que importa: "quais receitas são
+// afetadas se o leite subir?" — não só as que escrevem "leite" na lista.
+// Cada entrada guarda o CAMINHO, para a tela poder dizer "usa via Molho Branco" em vez de só marcar.
+function getRecipeIngredientIndex() {
+  if (_dataCache.recipeIngredientIndex) return _dataCache.recipeIngredientIndex;
+  const produtos = getProducts().concat(getFinishedProducts());
+  const produtoPorNome = new Map(produtos.map(p => [normalizeName(p.product_name), p]));
+  const receitaPorId = new Map(getRecipes().map(r => [r.id, r]));
+
+  function coletar(receita, visitados, viaDe, saida) {
+    if (!receita || visitados.has(receita.id)) return;   // pré-preparo circular não trava a tela
+    visitados.add(receita.id);
+    let ings = [];
+    try { ings = JSON.parse(receita.recipe_ingredients || '[]'); } catch (e) {}
+    ings.forEach(ing => {
+      if (!ing || !ing.name) return;
+      const chave = recipeSearchNorm(ing.name);
+      if (!saida.has(chave) || (saida.get(chave).via && !viaDe)) {
+        saida.set(chave, { nome: ing.name, via: viaDe });   // direto vence indireto
+      }
+      const p = produtoPorNome.get(normalizeName(ing.name));
+      if (p && p.linked_recipe_id) {
+        coletar(receitaPorId.get(p.linked_recipe_id), visitados, viaDe || ing.name, saida);
+      }
+    });
+  }
+
+  const idx = new Map();
+  getRecipes().forEach(r => { const saida = new Map(); coletar(r, new Set(), null, saida); idx.set(r.id, saida); });
+  return (_dataCache.recipeIngredientIndex = idx);
+}
+
+// Por que a receita entrou no resultado — devolve null quando não entrou.
+function recipeSearchMatch(receita, termo) {
+  if (!termo) return { tipo: 'nenhum' };
+  if (recipeSearchNorm(receita.recipe_name).includes(termo)) return { tipo: 'nome' };
+  const ings = getRecipeIngredientIndex().get(receita.id);
+  if (!ings) return null;
+  let indireto = null;
+  for (const [chave, info] of ings) {
+    if (!chave.includes(termo)) continue;
+    if (!info.via) return { tipo: 'ingrediente', nome: info.nome };
+    if (!indireto) indireto = { tipo: 'pre-preparo', nome: info.nome, via: info.via };
+  }
+  return indireto;
+}
+
+function clearRecipeSearch() {
+  const campo = document.getElementById('search-recipe');
+  if (campo) campo.value = '';
+  recipeSearchTerm = '';
+  renderRecipes();
+  if (campo) campo.focus();
+}
+
 function renderRecipes() {
   let recipes = getRecipes();
   if (!activeRecipeFilters.has('all')) {
@@ -4452,6 +4564,32 @@ function renderRecipes() {
       return true;
     });
   }
+  // Busca por nome OU ingrediente, combinando com os filtros acima (são independentes).
+  const termo = recipeSearchNorm(recipeSearchTerm);
+  const porQue = new Map();
+  if (termo) {
+    recipes = recipes.filter(r => {
+      const m = recipeSearchMatch(r, termo);
+      if (m && m.tipo !== 'nenhum') { porQue.set(r.id, m); return true; }
+      return false;
+    });
+  }
+  const resumo = document.getElementById('recipe-search-summary');
+  const limpar = document.getElementById('search-recipe-clear');
+  if (limpar) limpar.classList.toggle('hidden', !termo);
+  if (resumo) {
+    if (!termo) resumo.classList.add('hidden');
+    else {
+      const diretas = [...porQue.values()].filter(m => m.tipo !== 'pre-preparo').length;
+      const viaPre = porQue.size - diretas;
+      resumo.classList.remove('hidden');
+      resumo.textContent = porQue.size === 0
+        ? `Nenhuma receita usa "${recipeSearchTerm.trim()}" nem tem esse nome.`
+        : `${porQue.size} receita(s) para "${recipeSearchTerm.trim()}"` +
+          (viaPre ? ` — ${diretas} direta(s) e ${viaPre} através de pré-preparo.` : '.');
+    }
+  }
+
   // Favoritas primeiro
   recipes = [...recipes].sort((a,b) => {
     const af = a.recipe_favorite === 'true' || a.recipe_favorite === true ? 1 : 0;
@@ -4459,7 +4597,12 @@ function renderRecipes() {
     return bf - af;
   });
   const el = document.getElementById('recipe-list');
-  if (recipes.length===0) { el.innerHTML = '<p class="text-stone-400 text-center py-8 col-span-2 text-sm">Nenhuma receita encontrada</p>'; return; }
+  if (recipes.length===0) {
+    el.innerHTML = termo
+      ? `<p class="text-stone-400 text-center py-8 col-span-2 text-sm">Nenhuma receita com nome ou ingrediente "${recipeSearchTerm.trim()}".<br><span class="text-xs">Se estiver filtrando por setor ou tipo acima, tente em "Todas".</span></p>`
+      : '<p class="text-stone-400 text-center py-8 col-span-2 text-sm">Nenhuma receita encontrada</p>';
+    return;
+  }
   el.innerHTML = recipes.map(r => {
     let ingredients=[]; try{ingredients=JSON.parse(r.recipe_ingredients);}catch(e){}
     const sectorBg = r.recipe_sector === 'Cozinha' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800';
@@ -4467,7 +4610,14 @@ function renderRecipes() {
     const isFav = r.recipe_favorite === 'true' || r.recipe_favorite === true;
     const favBtn = `<button onclick="toggleFavorite('${r.id}')" title="${isFav?'Remover dos favoritos':'Adicionar aos favoritos'}" class="w-7 h-7 flex items-center justify-center rounded-lg text-base ${isFav?'text-amber-400 bg-amber-50 hover:bg-amber-100':'text-stone-300 hover:text-amber-400 bg-stone-50 hover:bg-amber-50'}">${isFav?'⭐':'☆'}</button>`;
     const notes = r.recipe_notes ? `<div class="mt-2 p-2 bg-amber-50 border border-amber-100 rounded-lg"><p class="text-xs text-amber-800 font-semibold mb-0.5">📝 Macetes:</p><p class="text-xs text-amber-700 whitespace-pre-wrap">${r.recipe_notes}</p></div>` : '';
-    return `<div class="bg-white rounded-xl p-4 shadow-sm border ${isFav?'border-amber-200':'border-stone-100'} card-hover"><div class="flex items-start justify-between mb-2"><div class="flex flex-wrap gap-1.5">${isFav?'<span class="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-amber-100 text-amber-700">⭐ Favorita</span>':''}<span class="text-[10px] px-2 py-0.5 rounded-full font-semibold ${sectorBg}">${r.recipe_sector}</span><span class="text-[10px] px-2 py-0.5 rounded-full font-semibold ${typeBg}">${r.recipe_type}</span></div>${favBtn}</div><div class="flex justify-between items-start mb-2"><h4 class="font-semibold text-stone-800 text-sm">${r.recipe_name}</h4><div class="flex gap-1 flex-shrink-0 ml-2">${(r.recipe_type==='Insumo'||r.recipe_type==='Produção')?`<button onclick="queueProductionDirect('${r.id}')" class="px-2 py-1 btn-primary rounded-lg text-xs font-medium flex items-center gap-1"><i data-lucide="play" class="w-3 h-3"></i>Produzir</button>`:''}<button onclick="editRecipe('${r.id}')" class="px-2 py-1 bg-blue-50 text-blue-700 rounded-lg text-xs font-medium hover:bg-blue-100">Editar</button><button onclick="requestDeleteRecipe('${r.id}')" class="px-2 py-1 btn-danger rounded-lg text-xs font-medium">Excluir</button></div></div><ul class="text-xs text-stone-500 space-y-0.5 mb-2">${ingredients.map(i=>`<li>• ${fmtQty(i.qty,i.unit)} ${i.unit} de ${i.name}</li>`).join('')}</ul><p class="text-xs text-amber-700 font-semibold">Rendimento: ${r.recipe_yield} ${r.recipe_yield_unit}</p>${notes}</div>`;
+    // Diz POR QUE a receita apareceu. Sem isso, um resultado que casou por pré-preparo parece erro da
+    // busca: o ingrediente procurado não está na lista visível da receita.
+    const m = porQue.get(r.id);
+    const selo = !m || m.tipo === 'nome' ? '' :
+      m.tipo === 'ingrediente'
+        ? `<p class="text-xs text-emerald-700 mt-1">🔍 usa <strong>${m.nome}</strong></p>`
+        : `<p class="text-xs text-emerald-700 mt-1">🔍 usa <strong>${m.nome}</strong> dentro de <strong>${m.via}</strong></p>`;
+    return `<div class="bg-white rounded-xl p-4 shadow-sm border ${isFav?'border-amber-200':'border-stone-100'} card-hover"><div class="flex items-start justify-between mb-2"><div class="flex flex-wrap gap-1.5">${isFav?'<span class="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-amber-100 text-amber-700">⭐ Favorita</span>':''}<span class="text-[10px] px-2 py-0.5 rounded-full font-semibold ${sectorBg}">${r.recipe_sector}</span><span class="text-[10px] px-2 py-0.5 rounded-full font-semibold ${typeBg}">${r.recipe_type}</span></div>${favBtn}</div><div class="flex justify-between items-start mb-2"><h4 class="font-semibold text-stone-800 text-sm">${r.recipe_name}</h4><div class="flex gap-1 flex-shrink-0 ml-2">${(r.recipe_type==='Insumo'||r.recipe_type==='Produção')?`<button onclick="queueProductionDirect('${r.id}')" class="px-2 py-1 btn-primary rounded-lg text-xs font-medium flex items-center gap-1"><i data-lucide="play" class="w-3 h-3"></i>Produzir</button>`:''}<button onclick="editRecipe('${r.id}')" class="px-2 py-1 bg-blue-50 text-blue-700 rounded-lg text-xs font-medium hover:bg-blue-100">Editar</button><button onclick="requestDeleteRecipe('${r.id}')" class="px-2 py-1 btn-danger rounded-lg text-xs font-medium">Excluir</button></div></div><ul class="text-xs text-stone-500 space-y-0.5 mb-2">${ingredients.map(i=>`<li>• ${fmtQty(i.qty,i.unit)} ${i.unit} de ${i.name}</li>`).join('')}</ul><p class="text-xs text-amber-700 font-semibold">Rendimento: ${r.recipe_yield} ${r.recipe_yield_unit}</p>${selo}${notes}</div>`;
   }).join('');
 }
 async function toggleFavorite(id) {
@@ -9511,10 +9661,30 @@ async function toggleFixedExpenseActive(id) {
     showToast('Erro ao alterar: ' + err.message, true);
   }
 }
+// A mensagem antiga dizia que os lançamentos "dos meses anteriores" não são apagados, o que fazia
+// entender que o do MÊS ATUAL sairia. Não sai: syncFixedExpenses só cria, nunca remove. O dono excluiu
+// Café e Carne e continuou vendo os R$ 2.400 nas Análises, sem nada na tela explicando por quê.
+// Preservar o passado está certo — apagar o histórico ao cancelar um contrato seria pior. O que estava
+// errado era a mensagem prometer menos do que acontece. Agora ela diz quantos ficam, quanto somam, e
+// destaca o do mês corrente, que é o único que a pessoa provavelmente quer tirar.
 function requestDeleteFixedExpense(id) {
   const fe = financeData.find(r => r.id === id); if (!fe) return;
   pendingDeleteId = id; pendingDeleteType = 'fixed_expense';
-  document.getElementById('delete-confirm-text').textContent = `Deseja excluir a despesa fixa "${fe.product_name}"? Os lançamentos automáticos já gerados nos meses anteriores não são apagados — só para de gerar novos.`;
+  const marca = `fixed_${fe.id}_`;
+  const gerados = getExpenses().filter(ex => String(ex.spreadsheet_name || '').startsWith(marca));
+  const total = gerados.reduce((s, ex) => s + (parseFloat(ex.total_cost) || 0), 0);
+  const agora = new Date();
+  const mesAtual = `${agora.getFullYear()}-${String(agora.getMonth()+1).padStart(2,'0')}`;
+  const doMes = gerados.filter(ex => String(ex.spreadsheet_name || '').endsWith(mesAtual));
+  const somaMes = doMes.reduce((s, ex) => s + (parseFloat(ex.total_cost) || 0), 0);
+  let msg = `Deseja excluir a despesa fixa "${fe.product_name}"? Isso só para de gerar lançamentos novos.`;
+  if (gerados.length) {
+    msg += ` Os ${gerados.length} lançamento(s) já gerado(s) continuam no relatório, somando ${fmtCurrency(total)}`;
+    msg += doMes.length
+      ? ` — inclusive o deste mês (${fmtCurrency(somaMes)}), que segue contando no DRE e nas Análises. Para tirá-lo, apague também em Despesas.`
+      : `. Meses fechados não são alterados.`;
+  }
+  document.getElementById('delete-confirm-text').textContent = msg;
   document.getElementById('delete-confirm-modal').classList.remove('hidden');
 }
 function renderFixedExpensesConfig() {
