@@ -7581,6 +7581,40 @@ document.addEventListener('change', (e) => {
 function fmtCurrency(v) {
   return (v||0).toLocaleString('pt-BR', { style:'currency', currency:'BRL' });
 }
+// ============================================================
+// CUSTO UNITÁRIO — por que 4 casas, e não 2
+// ============================================================
+// Preço de insumo NÃO é dinheiro pago, é uma TAXA (R$ por grama, por ml). Um insumo cadastrado em
+// grama custa R$ 0,007/g, e a duas casas isso não existe: vira R$ 0,01 (+43% no CMV daquele
+// ingrediente). Abaixo de meio centavo é pior — R$ 0,004/g vira R$ 0,00 e o ingrediente fica de graça
+// na receita. Na base de hoje são 16 insumos em g/ml, o mais barato a R$ 0,0070/g.
+//
+// O dado sempre esteve certo: a média ponderada gravava 0,007 com precisão total. Quem destruía era a
+// TELA — o campo da aba Preço Médio era preenchido com `.toFixed(2)`, e salvar regravava o que estava
+// escrito ali. Bastava abrir a aba e confirmar um preço para arredondar de vez.
+//
+// 4 casas, e não 6, porque é o que `product_costs.unit_cost numeric(14,4)` guarda no Supabase.
+// Aceitar mais na tela faria a planilha e o banco divergirem no dígito seguinte, em silêncio — e
+// 4 casas já dão resolução de R$ 0,0001/g, ou R$ 0,10 por quilo.
+const CASAS_CUSTO = 4;
+function roundCost(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return 0;
+  return Math.round(n * 10 ** CASAS_CUSTO) / 10 ** CASAS_CUSTO;
+}
+// Valor para dentro de um <input type="number">: sem notação científica e sem zeros à toa
+// (0,007 aparece "0.007", 20 aparece "20" — não "20.0000").
+function costInputValue(v) {
+  const n = roundCost(v);
+  return Number.isFinite(n) ? String(n) : '';
+}
+// Exibição de uma TAXA (R$/unidade). Abaixo de R$ 1 o real é pequeno demais para 2 casas contarem a
+// verdade, então mostra até 4. Não usar em totais pagos — para dinheiro de verdade é fmtCurrency.
+function fmtUnitPrice(v) {
+  const n = Number(v) || 0;
+  const casas = Math.abs(n) > 0 && Math.abs(n) < 1 ? CASAS_CUSTO : 2;
+  return n.toLocaleString('pt-BR', { style:'currency', currency:'BRL', minimumFractionDigits: 2, maximumFractionDigits: casas });
+}
 async function financeApiCall(action, data = {}) {
   if (USE_SUPABASE) {
     // A senha digitada na tela de sempre passa a virar uma sessão de verdade. A diferença que importa:
@@ -8710,7 +8744,7 @@ function renderFinancePending() {
               <span class="text-sm font-semibold text-stone-800">${it.name}</span>
               <span class="text-xs text-stone-400">${fmtQty(it.qty,it.unit)} ${it.unit}</span>
             </div>
-            ${existing ? `<p class="text-[11px] text-emerald-700 mb-1.5">💡 Última vez: ${fmtCurrency(existing.price)}/${existing.unit} — já pré-preenchido, só confirme ou ajuste</p>` : `<p class="text-[11px] text-stone-400 mb-1.5">Sem histórico de preço pra esse insumo ainda</p>`}
+            ${existing ? `<p class="text-[11px] text-emerald-700 mb-1.5">💡 Última vez: ${fmtUnitPrice(existing.price)}/${existing.unit} — já pré-preenchido, só confirme ou ajuste</p>` : `<p class="text-[11px] text-stone-400 mb-1.5">Sem histórico de preço pra esse insumo ainda</p>`}
             <div class="relative">
               <span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-stone-400">R$</span>
               <input type="number" min="0" step="any" placeholder="Custo total pago" class="finance-cost-input input-field text-sm w-full pl-9" data-movement="${m.id}" data-item-index="${i}" value="${suggested!==null ? suggested.toFixed(2) : ''}">
@@ -8789,7 +8823,10 @@ async function saveFinanceCosts(movementId) {
       const oldQty = product ? Math.max(0, product.quantity - qtyInStorageUnit) : 0;
       const oldCost = existingCostRec ? existingCostRec.cost_price : unitCost;
       const totalQty = oldQty + qtyInStorageUnit;
-      const newAvgCost = totalQty > 0 ? ((oldQty*oldCost) + (qtyInStorageUnit*unitCost)) / totalQty : unitCost;
+      // Arredondado na gravação para o mesmo número de casas que o Supabase guarda (numeric(14,4)).
+      // Sem isso a planilha ficava com 31,48917496 e o banco com 31,4892 — divergência que nenhuma
+      // tela mostra e que só aparece ao comparar os dois lados.
+      const newAvgCost = roundCost(totalQty > 0 ? ((oldQty*oldCost) + (qtyInStorageUnit*unitCost)) / totalQty : unitCost);
       if (existingCostRec) {
         await financeApiCall('update', { data: { ...existingCostRec, cost_price: newAvgCost, cost_unit: storageUnit, cost_updated_at: new Date().toISOString() } });
         existingCostRec.cost_price = newAvgCost; existingCostRec.cost_unit = storageUnit; existingCostRec.cost_updated_at = new Date().toISOString();
@@ -8930,7 +8967,7 @@ function renderFinancePrecos() {
           <p class="text-[11px] text-stone-400">${sub}</p>
         </div>
         <div class="flex items-center gap-1.5">
-          <span class="text-sm font-bold price-mono ${hasPrice?'text-stone-800':'text-stone-300'}">${hasPrice ? fmtCurrency(r.price) : '—'}</span>
+          <span class="text-sm font-bold price-mono ${hasPrice?'text-stone-800':'text-stone-300'}">${hasPrice ? fmtUnitPrice(r.price) : '—'}</span>
           <span class="text-[11px] text-stone-400 w-9">/${r.unit}</span>
         </div>
       </div>`;
@@ -8951,7 +8988,7 @@ function renderFinancePrecos() {
       <div class="flex items-center gap-1.5">
         <div class="relative">
           <span class="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-stone-400">R$</span>
-          <input type="number" min="0" step="any" class="price-input-field input-field text-sm price-mono w-28 pl-8" value="${hasPrice ? r.price.toFixed(2) : ''}" placeholder="0,00">
+          <input type="number" min="0" step="any" class="price-input-field input-field text-sm price-mono w-28 pl-8" value="${hasPrice ? costInputValue(r.price) : ''}" placeholder="0,00">
         </div>
         <span class="text-[11px] text-stone-400 w-9">/${r.unit}</span>
         <button class="price-save-btn btn-success px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-1"><i data-lucide="check" class="w-3.5 h-3.5"></i></button>
@@ -8975,8 +9012,8 @@ document.addEventListener('click', async (e) => {
   const idx = parseInt(row.dataset.idx, 10);
   const rowData = financePrecosRows[idx]; if (!rowData) return;
   const input = row.querySelector('.price-input-field');
-  const val = parseFloat(input.value);
-  if (isNaN(val) || val < 0) { showToast('Informe um preço válido', true); return; }
+  const val = roundCost(parseFloat(input.value));
+  if (isNaN(parseFloat(input.value)) || val < 0) { showToast('Informe um preço válido', true); return; }
   showLoadingProgress('Salvando preço...');
   try {
     const nowIso = new Date().toISOString();
@@ -9192,7 +9229,7 @@ function toggleCmvDetails(recipeId) {
     wrap.innerHTML = breakdown.length === 0 ? '<p class="text-xs text-stone-400 italic">Sem ingredientes cadastrados</p>' : breakdown.map(it => `
       <div class="flex justify-between items-center gap-2">
         <span class="text-xs text-stone-600 truncate">${it.name}${it.isSubRecipe?' <span class="text-stone-400">(pré-preparo)</span>':''} — ${fmtQty(it.qty,it.unit)} ${it.unit}</span>
-        <span class="text-xs font-semibold ${it.known?'text-stone-700':'text-red-500'} whitespace-nowrap">${it.known?fmtCurrency(it.totalCost):'sem custo'}</span>
+        <span class="text-xs font-semibold ${it.known?'text-stone-700':'text-red-500'} whitespace-nowrap">${it.known?fmtUnitPrice(it.totalCost):'sem custo'}</span>
       </div>`).join('');
   }
 }
