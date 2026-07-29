@@ -2211,8 +2211,15 @@ const SB_TABELA = {
 };
 const SB_CHAVE_CONFIG = { analysis_settings:'analysis', finance_settings:'finance',
   consumption_reset:'consumption_reset', stock_baseline:'stock_baseline' };
+// Os dois estornos faltavam aqui, e a falta não era cosmética: desfazer uma movimentação e cancelar
+// uma produção eram recusados com «movimento de tipo "estorno" não existe no Supabase». No cancelamento
+// isso derrubava o LOTE INTEIRO — a devolução do insumo ao estoque nem chegava ao banco, e só ali o
+// saldo passava a divergir da planilha de verdade.
+// Ambos viram 'ajuste', que é o que o check de stock_movements aceita e o que eles são: correção de
+// saldo. O que aconteceu continua legível na nota ("Desfeito: …", "Cancelamento de produção: …").
 const SB_KIND = { entrada:'entrada', producao:'producao', venda:'venda', saida_manual:'saida_manual',
-  perda:'perda', ajuste_manual:'ajuste', ajuste_manual_pronto:'ajuste' };
+  perda:'perda', ajuste_manual:'ajuste', ajuste_manual_pronto:'ajuste',
+  estorno:'ajuste', estorno_producao:'ajuste' };
 
 function sbIdProdutoPorNome(nome) {
   const p = getProducts().find(x => namesMatch(x.product_name, nome))
@@ -2395,14 +2402,31 @@ const SB_ADOCAO_MS = 60000;          // além disso, foi mesmo edição direta d
 // A ORDEM é deliberada: insere o movimento certo, REPONTA as linhas e só então apaga o automático.
 // Assim o saldo nunca fica órfão nem contado duas vezes, em nenhum instante — e como o id do movimento
 // é o md5 do id da planilha, quem procura por id (desfazer, cancelar, "Alterar Data") continua achando.
-async function sbAdotarAjusteAutomatico(c, movimentoId, payload, nomesDoMov, delta) {
-  // Só o fluxo de ajuste usa a gravação em duas chamadas. Restringir aqui evita que um movimento de
-  // outro tipo, que chegou sem linha e DEVE ser rejeitado, adote um ajuste alheio e entre no histórico
-  // parecendo legítimo.
-  if (payload.kind !== 'ajuste') return [];
-  // E o delta tem de bater. Sem isso, um movimento sem efeito de saldo (delta 0) casava só pelo produto
-  // e roubava a linha do ajuste anterior — o teste do razão pegou exatamente isso.
-  if (!Number.isFinite(delta) || Math.abs(delta) < 1e-9) return [];
+// `delta` é o efeito de saldo esperado com sinal (só os ajustes manuais sabem dizer), ou null.
+// `magnitudes` é Map(productId -> quantidade em módulo declarada no batch_items), o critério usado
+// quando o delta não é conhecido.
+async function sbAdotarAjusteAutomatico(c, movimentoId, payload, nomesDoMov, delta, magnitudes) {
+  // A restrição original era `payload.kind !== 'ajuste'`, na suposição de que só o ajuste gravava em
+  // duas chamadas. Não era verdade: cadastro com saldo inicial, baixa retroativa, desfazer e cancelar
+  // produção também mudam o saldo numa chamada e registram o movimento na seguinte. Para esses, o
+  // movimento era recusado e o histórico do Supabase ficava com "Ajuste automático de saldo" no lugar
+  // da entrada, da baixa ou do estorno — saldo certo, explicação errada.
+  //
+  // Trocar o kind por "qualquer um" sozinho seria frouxo demais, e o teste provou: no caso 4 do
+  // escrita-razao-de-estoque.js uma venda SEM efeito de saldo passou a adotar o ajuste de +0,5 L que
+  // o caso 3 tinha deixado pendente do mesmo Leite, e o movimento que devia ser REPROVADO entrava no
+  // histórico parecendo legítimo. O produto e a janela de 60 s não bastam para distinguir.
+  //
+  // O que distingue é a QUANTIDADE: um movimento legítimo declara no batch_items quanto mexeu em cada
+  // insumo, e isso tem de bater com o que o ajuste pendente gravou (±0,5 L não é ±1 L). Movimento sem
+  // batch_items não tem como provar de quem é a linha, e por isso não adota nada.
+  if (delta !== null) {
+    // Quando o movimento sabe o delta, ele também tem de bater. Sem isso, um movimento sem efeito de
+    // saldo (delta 0) casava só pelo produto e roubava a linha do ajuste anterior.
+    if (!Number.isFinite(delta) || Math.abs(delta) < 1e-9) return [];
+  } else if (!magnitudes || !magnitudes.size) {
+    return [];
+  }
   const agora = Date.now();
   for (let i = _sbAjustesPendentes.length - 1; i >= 0; i--) {
     if (agora - _sbAjustesPendentes[i].em > SB_ADOCAO_MS) _sbAjustesPendentes.splice(i, 1);
@@ -2416,7 +2440,12 @@ async function sbAdotarAjusteAutomatico(c, movimentoId, payload, nomesDoMov, del
   const maisRecente = new Map();
   _sbAjustesPendentes.forEach(p => {
     if (!idsDoMov.has(p.productId)) return;
-    if (Math.abs(p.delta - delta) > 1e-6) return;      // mesma operação, não só o mesmo produto
+    // Mesma operação, não só o mesmo produto.
+    if (delta !== null) { if (Math.abs(p.delta - delta) > 1e-6) return; }
+    else {
+      const esperada = magnitudes.get(p.productId);
+      if (esperada === undefined || Math.abs(Math.abs(p.delta) - esperada) > 1e-6) return;
+    }
     const atual = maisRecente.get(p.productId);
     if (!atual || p.em >= atual.em) maisRecente.set(p.productId, p);
   });
@@ -2632,9 +2661,24 @@ async function sbAplicar(ops, espelho = false) {
     // automático. Adotar as linhas em vez de nascer vazio ao lado dele. Ver sbAdotarAjusteAutomatico.
     if (!linhas.length) {
       try {
-        // movement_quantity do ajuste manual é o delta COM SINAL (index.html:3977), na mesma escala do
-        // saldo — é ele que identifica a operação, não só o produto.
-        const adotadas = await sbAdotarAjusteAutomatico(c, cab.id, payload, nomesDoMov, sbN(d.movement_quantity));
+        // movement_quantity SÓ é o delta com sinal, na escala do saldo, nos dois tipos de ajuste
+        // manual (index.html:3977) — e aí ele identifica a operação, não só o produto. Nos outros
+        // tipos a mesma coluna guarda outra coisa (a entrada guarda a QUANTIDADE DE ITENS do lote, a
+        // venda a soma das unidades vendidas), então exigir que ela bata com o delta rejeitaria toda
+        // adoção legítima. Nesses casos o delta é declarado desconhecido e o vínculo se apoia no
+        // produto nomeado + na janela de 60 s.
+        const deltaConhecido = (d.movement_type === 'ajuste_manual' || d.movement_type === 'ajuste_manual_pronto')
+          ? sbN(d.movement_quantity) : null;
+        // Quanto o movimento DIZ que mexeu em cada insumo, já na unidade de estoque. É a prova de que
+        // a linha pendente é dele. Itens repetidos somam, como o próprio fluxo de entrada soma.
+        const magnitudes = new Map();
+        itens.forEach(it => {
+          const pid = it && it.name ? sbIdProdutoPorNome(it.name) : null;
+          if (!pid) return;
+          const q = Math.abs(sbN(it.storageQty !== undefined ? it.storageQty : it.qty));
+          if (q > 0) magnitudes.set(pid, (magnitudes.get(pid) || 0) + q);
+        });
+        const adotadas = await sbAdotarAjusteAutomatico(c, cab.id, payload, nomesDoMov, deltaConhecido, magnitudes);
         if (adotadas.length) { feito(cab.i, cab.id, d); continue; }
       } catch (e) {
         resultados[cab.i] = { ok: false, error: `${d.movement_type}: ${e.message}` };
@@ -3300,8 +3344,8 @@ function blankRecord() {
 // compra recorrente mas sem controle de estoque granular (ex: rúcula, alface, chás — quantidade
 // varia demais pra valer a pena bater entrada/saída). Continuam com nome, categoria, unidade,
 // Preço Médio, Entradas (custo) e uso em receita normalmente — só ficam de fora de Lista de
-// Compras, Dinheiro em Estoque, Perdas, Saída Manual direta, e nunca travam produção/venda por
-// "estoque insuficiente" quando usados como ingrediente.
+// Compras, Dinheiro em Estoque, Perdas, Saída Manual direta, do card "Estoque Baixo"/Alertas do
+// Dashboard, e nunca travam produção/venda por "estoque insuficiente" quando usados como ingrediente.
 function productControlsStock(p) { return !p || p.recipe_type !== 'sem_controle_estoque'; }
 
 // ============================================================
@@ -3451,7 +3495,9 @@ function renderDashboard() {
   const movements = getMovements();
   const now = new Date();
   const thisMonth = movements.filter(m => { const d = new Date(m.movement_date); return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear(); });
-  const lowItems = products.filter(p => p.quantity <= p.min_stock);
+  // Só entra no alerta quem tem controle de estoque ligado: em produto sem controle a quantidade
+  // cadastrada não é acompanhada, então comparar com o mínimo inflava o número (ver productControlsStock).
+  const lowItems = products.filter(p => productControlsStock(p) && p.quantity <= p.min_stock);
   document.getElementById('stat-total-val').textContent = products.length;
   document.getElementById('stat-low-val').textContent = lowItems.length;
   document.getElementById('stat-entries-val').textContent = thisMonth.filter(m => m.movement_type === 'entrada').length;
@@ -4128,6 +4174,32 @@ function addQuickBatchItem() {
   div.innerHTML = `<select class="batch-product input-field text-sm col-span-2 sm:col-span-1" onchange="populateUnitSelect(this.closest('.batch-entry-item').querySelector('.batch-unit'), this.value)" required><option value="">Selecione o insumo</option>${products.map(p=>`<option value="${p.id}" data-name="${p.product_name}" data-unit="${p.unit}">${p.product_name} (${p.unit})</option>`).join('')}</select><input type="number" class="batch-qty input-field text-sm" placeholder="Quantidade" min="0.001" step="any" required><select class="batch-unit input-field text-sm"></select><button type="button" onclick="removeBatchItem(this)" class="btn-danger px-3 py-2.5 rounded-lg text-sm font-medium">Remover</button>`;
   container.appendChild(div);
 }
+// As duas telas de entrada gravavam em N+1 chamadas: um dbUpdate por insumo e, só depois, o dbCreate
+// do movimento. No Supabase o saldo não é coluna, é a soma do razão — então cada dbUpdate chegava
+// sozinho, virava "Ajuste automático de saldo (alteração direta do cadastro)", e o movimento de
+// entrada chegava em seguida SEM nenhuma alteração de saldo para chamar de sua. Resultado: a cópia
+// era recusada com "nenhuma alteração de saldo acompanhou o movimento", o estoque subia mesmo assim
+// e o histórico ficava com N ajustes genéricos no lugar de UMA entrada. Ver sbAplicar.
+//
+// Juntar tudo num dbBatchWrite resolve os dois lados: o movimento viaja com as linhas de saldo que
+// pertencem a ele, e a gravação passa a ser tudo-ou-nada — antes, se o registro da entrada falhasse,
+// o estoque já tinha subido e não havia como saber por quê.
+//
+// O acúmulo por insumo é o que o laço anterior fazia de graça: ele relia `prod.quantity` a cada
+// volta, já com o valor gravado na volta anterior. Num lote só, os dois itens partiriam do MESMO
+// saldo e o segundo sobrescreveria o primeiro — o mesmo insumo lançado em duas linhas perderia uma.
+function buildEntryStockOps(batchData) {
+  const somaPorInsumo = new Map();
+  for (const b of batchData) {
+    somaPorInsumo.set(b.id, (somaPorInsumo.get(b.id) || 0) + b.storageQty);
+  }
+  const ops = [];
+  for (const [id, total] of somaPorInsumo) {
+    const prod = allData.find(r => r.id === id);
+    if (prod) ops.push({ op:'update', data: { ...prod, quantity: prod.quantity + total } });
+  }
+  return ops;
+}
 async function confirmQuickEntry() {
   const items = document.querySelectorAll('#quick-batch-entry-container .batch-entry-item');
   const batchData = [];
@@ -4145,15 +4217,14 @@ async function confirmQuickEntry() {
   const user = document.getElementById('quick-batch-entry-user').value.trim();
   showLoadingProgress('Confirmando entrada...');
   try {
-    let done = 0;
-    for (const b of batchData) {
-      updateLoadingProgress(`Adicionando ${done+1}/${batchData.length}: ${b.name}`);
-      const prod = allData.find(r => r.id === b.id);
-      if (prod) await dbUpdate({...prod, quantity: prod.quantity + b.storageQty});
-      done++;
-    }
     const itemList = batchData.map(b=>`${fmtQty(b.qty,b.unit)} ${b.unit} ${b.name}`).join('; ');
-    await dbCreate({ ...blankRecord(), type:'movement', movement_type:'entrada', movement_product:itemList, movement_quantity:batchData.length, movement_date:new Date().toISOString(), movement_user:user, movement_note:`Entrada: ${itemList}`, batch_items:JSON.stringify(batchData) });
+    const operations = [
+      ...buildEntryStockOps(batchData),
+      { op:'create', data: { ...blankRecord(), type:'movement', movement_type:'entrada', movement_product:itemList, movement_quantity:batchData.length, movement_date:new Date().toISOString(), movement_user:user, movement_note:`Entrada: ${itemList}`, batch_items:JSON.stringify(batchData) } },
+    ];
+    const res = await dbBatchWrite(operations, {silent:true});
+    if (!res.isOk) throw new Error(res.error || 'falha ao gravar a entrada');
+    renderAll();
     hideLoadingProgress();
     showToast('Entrada confirmada!'); resetQuickEntry();
   } catch (err) {
@@ -4234,15 +4305,13 @@ async function confirmBatchEntry() {
   const user = document.getElementById('batch-entry-user').value.trim();
   showLoadingProgress('Confirmando entrada...');
   try {
-    let done = 0;
-    for (const b of batchData) {
-      updateLoadingProgress(`Adicionando ${done+1}/${batchData.length}: ${b.name}`);
-      const prod = allData.find(r => r.id === b.id);
-      if (prod) assertSaved(await dbUpdate({...prod, quantity: prod.quantity + b.storageQty}, {silent:true}), b.name);
-      done++;
-    }
     const itemList = batchData.map(b=>`${fmtQty(b.qty,b.unit)} ${b.unit} ${b.name}`).join('; ');
-    assertSaved(await dbCreate({ ...blankRecord(), type:'movement', movement_type:'entrada', movement_product:itemList, movement_quantity:batchData.length, movement_date:new Date().toISOString(), movement_user:user, movement_note:`Entrada: ${itemList}`, batch_items:JSON.stringify(batchData) }, {silent:true}), 'registro da entrada');
+    const operations = [
+      ...buildEntryStockOps(batchData),
+      { op:'create', data: { ...blankRecord(), type:'movement', movement_type:'entrada', movement_product:itemList, movement_quantity:batchData.length, movement_date:new Date().toISOString(), movement_user:user, movement_note:`Entrada: ${itemList}`, batch_items:JSON.stringify(batchData) } },
+    ];
+    const res = await dbBatchWrite(operations, {silent:true});
+    if (!res.isOk) throw new Error(res.error || 'falha ao gravar a entrada');
     renderAll();
     hideLoadingProgress();
     showToast('Entrada confirmada!'); resetBatchForm();
@@ -6750,7 +6819,12 @@ async function confirmUndoMovement() {
     // Cria um registro de estorno, pra ficar rastreável no histórico
     const itemsNote = preview.items.map(it=>`${fmtQty(it.qty,it.unit)} ${it.unit} ${it.name}`).join(', ') || 'sem detalhamento';
     const financeNote = fin.deleted > 0 ? ` Revertido no financeiro: ${fin.deleted} lançamento(s).` : '';
-    assertSaved(await dbCreate({ ...blankRecord(), type:'movement', movement_type:'estorno', movement_product:m.movement_product, movement_quantity:m.movement_quantity, movement_date:new Date().toISOString(), movement_note:`Desfeito: ${movementTypeLabel(m.movement_type)} de "${m.movement_product}". ${preview.note} ${itemsNote}${financeNote}${notFoundItems.length ? ` ⚠️ NÃO devolvido (insumo não encontrado): ${notFoundItems.join(', ')}` : ''}` }, {silent:true}), 'registro do estorno');
+    // batch_items detalha o que voltou (ou saiu) do estoque, item a item. Era o único movimento do
+    // sistema sem esse detalhamento, e a falta custava duas coisas: no Supabase o estorno nascia sem
+    // linha de saldo nenhuma, e as linhas do estorno ficavam penduradas num "Ajuste automático de
+    // saldo" ao lado — dois registros no histórico para um evento só. Ver sbAdotarAjusteAutomatico.
+    const itensEstornados = preview.items.map(it => ({ name:it.name, qty:it.qty, unit:it.unit, storageQty:it.qty }));
+    assertSaved(await dbCreate({ ...blankRecord(), type:'movement', movement_type:'estorno', movement_product:m.movement_product, movement_quantity:m.movement_quantity, movement_date:new Date().toISOString(), batch_items:JSON.stringify(itensEstornados), movement_note:`Desfeito: ${movementTypeLabel(m.movement_type)} de "${m.movement_product}". ${preview.note} ${itemsNote}${financeNote}${notFoundItems.length ? ` ⚠️ NÃO devolvido (insumo não encontrado): ${notFoundItems.join(', ')}` : ''}` }, {silent:true}), 'registro do estorno');
     hideLoadingProgress();
     renderAll();
     // Toda pendência do lado do dinheiro é dita em voz alta: valor que continua contando no DRE sem
