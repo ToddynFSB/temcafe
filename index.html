@@ -873,6 +873,25 @@
         </div>
       </div>
 
+      <!-- Desempenho por produto — o ranking COMPLETO, com todos os indicadores por item.
+           Os dois cards acima mostram só o topo; aqui entra todo produto vendido no período, com
+           ordenação e filtro, pra responder "vale a pena manter isso no cardápio?". -->
+      <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 mb-4">
+        <h3 class="font-semibold text-sm mb-1 text-stone-800 flex items-center gap-2"><i data-lucide="table-2" class="w-4 h-4 text-emerald-600"></i>Desempenho por produto</h3>
+        <p class="text-[11px] text-stone-400 mb-3">Todo produto vendido no período selecionado lá em cima, com quantidade, faturamento, CMV, lucro, margem e preço praticado. O selo compara a margem do item com a margem média da casa — é o que responde "vale a pena manter isso no cardápio?".</p>
+        <div class="flex flex-wrap gap-2 mb-3">
+          <div class="relative flex-1 min-w-[150px]">
+            <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-stone-400"></i>
+            <input id="desemp-search" type="text" placeholder="Buscar produto..." class="input-field text-sm w-full pl-9" oninput="onDesempenhoControl()">
+          </div>
+          <select id="desemp-sort" class="input-field text-sm" onchange="onDesempenhoControl()"></select>
+          <select id="desemp-category" class="input-field text-sm" onchange="onDesempenhoControl()"></select>
+        </div>
+        <div id="desemp-summary" class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3"></div>
+        <div id="desemp-list" class="divide-y divide-stone-100"></div>
+        <div id="desemp-sem-custo"></div>
+      </div>
+
       <!-- Categorias mais lucrativas -->
       <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 mb-4">
         <h3 class="font-semibold text-sm mb-3 text-stone-800 flex items-center gap-2"><i data-lucide="pie-chart" class="w-4 h-4 text-emerald-600"></i>Categorias mais lucrativas</h3>
@@ -3220,6 +3239,23 @@ function createStockLedger() {
     // Uma operação de update POR PRODUTO, com o saldo final acumulado — mesmo que ele apareça em
     // vários itens da mesma venda (leite no cappuccino E no chocolate quente).
     operations() { return Object.values(alterados).map(data => ({ op:'update', data })); },
+    // Zera TODO saldo negativo do cadastro, registrando cada correção como as demais.
+    // Usado pela Conferência de Saldo: "conferi o estoque físico e está tudo certo" é incompatível
+    // com um item em -90 g. Antes, marcar o conferido congelava o marco mas deixava o card vermelho
+    // de saldo negativo intacto — a tela continuava acusando e o botão não tinha como resolver.
+    normalizeNegatives() {
+      [...getProducts(), ...getFinishedProducts()].forEach(p => {
+        if (!productControlsStock(p)) return;
+        const antes = Number(p.quantity) || 0;
+        if (antes >= 0 || correcoes.some(c => c.productId === p.id)) return;
+        const su = p.storage_unit || p.unit;
+        saldo[p.id] = 0;
+        alterados[p.id] = { ...p, quantity: 0 };
+        correcoes.push({ productId: p.id, produto: p, name: p.product_name, unit: su,
+                         de: antes, para: 0, delta: -antes, contexto: 'conferir o estoque' });
+      });
+      return correcoes.length;
+    },
     // Grava os saldos negativos que foram zerados, ANTES da operação que os encontrou.
     //
     // Por que numa gravação separada, e não no mesmo lote: o adaptador do Supabase atribui cada linha
@@ -3285,19 +3321,48 @@ function getStockBaseline() {
   return { data: rec.movement_date, saldos: mapa, id: rec.id };
 }
 async function marcarConferenciaDeEstoque() {
-  const agora = new Date().toISOString();
-  const saldos = [...getProducts(), ...getFinishedProducts()]
-    .filter(productControlsStock)
-    .map(p => ({ productId: p.id, qty: Number(p.quantity) || 0 }));
   showLoadingProgress('Marcando conferência...');
   try {
-    const r = await dbCreate({ ...blankRecord(), type:'stock_baseline', movement_date:agora,
+    // ORDEM DELIBERADA: zera os negativos ANTES de congelar o marco. Congelar primeiro gravaria
+    // "neste dia o item tinha -90 g" como ponto de partida legítimo, e o saldo impossível viraria a
+    // nova referência — o oposto do que este botão promete. Zerando antes, o marco nasce coerente.
+    const ledger = createStockLedger();
+    const nNegativos = ledger.normalizeNegatives();
+    let corrigidos = [];
+    if (nNegativos) {
+      updateLoadingProgress(`Zerando ${nNegativos} saldo(s) negativo(s)...`);
+      const corr = await ledger.commitCorrections();
+      if (!corr.isOk) throw new Error(corr.error);
+      corrigidos = corr.corrigidos;
+      invalidateDataCache();
+    }
+    // Só agora lê os saldos — já corrigidos, senão o marco congelaria o número negativo.
+    const agora = new Date().toISOString();
+    const saldos = [...getProducts(), ...getFinishedProducts()]
+      .filter(productControlsStock)
+      .map(p => ({ productId: p.id, qty: Number(p.quantity) || 0 }));
+    const payload = { type:'stock_baseline', movement_date:agora,
       movement_note:`Conferência de estoque: ${saldos.length} item(ns) conferido(s)`,
-      batch_items: JSON.stringify(saldos) }, {silent:true});
-    assertSaved(r, 'marco de conferência');
+      batch_items: JSON.stringify(saldos) };
+    // Remarcar o conferido é operação rotineira. Criando um registro novo a cada clique, a aba
+    // Estoque juntava uma linha de 121 saldos por vez (havia 5 antes desta correção). Reaproveita o
+    // marco vigente — que é o único que getStockBaseline() lê.
+    const vigente = getStockBaseline();
+    const alvo = vigente && allData.find(r => r.id === vigente.id);
+    assertSaved(alvo ? await dbUpdate({ ...alvo, ...payload }, {silent:true})
+                     : await dbCreate({ ...blankRecord(), ...payload }, {silent:true}),
+                'marco de conferência');
     invalidateDataCache();
     hideLoadingProgress();
-    showToast('Estoque conferido! A partir de agora, qualquer divergência que aparecer é real.');
+    if (corrigidos.length) {
+      showResultModal('Estoque conferido', [
+        `${corrigidos.length} saldo(s) negativo(s) foram zerados e registrados no histórico como ajuste:`,
+        ...corrigidos,
+        'A partir de agora, qualquer divergência que aparecer é real.',
+      ]);
+    } else {
+      showToast('Estoque conferido! A partir de agora, qualquer divergência que aparecer é real.');
+    }
     renderStockAudit();
   } catch (err) {
     hideLoadingProgress();
@@ -7958,6 +8023,76 @@ function computeProductProfitRanking(entries) {
   withCost.sort((a,b) => b.profit - a.profit);
   return { withCost: withCost.map(r => ({ ...r, pctOfProfit: totalProfit>0 ? (r.profit/totalProfit)*100 : 0 })), withoutCost, totalProfit };
 }
+// ============================================================
+// DESEMPENHO POR PRODUTO — o ranking completo, com tudo de cada item numa linha só
+// ============================================================
+// Os dois cards do Faturamento respondem meia pergunta cada: "mais lucraram" mostra 8 e esconde o
+// resto; "margem" mostra os 5 melhores e os 5 piores em %. Nenhum dos dois responde "a cerveja
+// artesanal vale a pena?", porque para isso é preciso ver quantidade, faturamento, CMV, lucro,
+// margem e preço do MESMO item, lado a lado, e poder reordenar.
+//
+// Construído em cima de computeProductRevenueRanking + getProductCMV — as MESMAS funções que os cards
+// já usam. É de propósito: um segundo motor calculando "lucro por produto" acabaria divergindo dos
+// cards em algum arredondamento, e aí duas telas do mesmo sistema dariam números diferentes.
+//
+// COMO SE MEDE "fatura muito e lucra pouco" — a primeira tentativa não servia.
+// Comparar a fatia do LUCRO com a fatia do FATURAMENTO parece certo no papel, mas nos dados reais os
+// dois números andam quase juntos: a variação inteira ficou entre -0,8 e +0,9 ponto, o produto de
+// maior lucro da casa aparecia no topo da lista de "arrasta", e nenhum alerta jamais dispararia.
+// Num cardápio com 68 itens, cada um é uma fatia pequena, e diferença de fatias pequenas é ruído.
+//
+// O que separa os produtos de verdade é a MARGEM contra a média da casa (`margemVsMedia`, em pontos):
+// a cerveja artesanal fica 31 pontos abaixo, o pão de queijo 16 acima. Isso é legível sem explicação.
+// E para achar onde há mais dinheiro a ganhar, `lucroDeixadoNaMesa` pesa esse déficit pelo tamanho:
+// quanto o item renderia a mais se tivesse a margem média — o que junta "vende bastante" com "margem
+// baixa" numa conta só, em reais.
+function computeProductPerformance(entries) {
+  const rows = computeProductRevenueRanking(entries);
+  const comCusto = [], semCusto = [];
+  rows.forEach(r => {
+    const cmv = r.qty > 0 ? getProductCMV(r.name) : null;
+    if (!cmv) { semCusto.push({ ...r, category: getProductSector(r.name) }); return; }
+    const totalCost = cmv.costPerUnit * r.qty;
+    const profit = r.revenue - totalCost;
+    comCusto.push({
+      ...r,
+      category: getProductSector(r.name),
+      avgPrice: r.revenue / r.qty,          // preço de venda praticado no período
+      unitCost: cmv.costPerUnit,            // CMV de uma unidade
+      totalCost,                            // CMV total do período
+      profit,                               // lucro bruto
+      marginPct: r.revenue > 0 ? (profit / r.revenue) * 100 : 0,
+      unitProfit: r.qty > 0 ? profit / r.qty : 0,
+    });
+  });
+  const totalRevenue = comCusto.reduce((s, r) => s + r.revenue, 0);
+  const totalProfit = comCusto.reduce((s, r) => s + r.profit, 0);
+  const margemGeral = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0;
+  const comIndice = comCusto.map(r => ({
+    ...r,
+    pctOfRevenue: totalRevenue > 0 ? (r.revenue / totalRevenue) * 100 : 0,
+    pctOfProfit: totalProfit > 0 ? (r.profit / totalProfit) * 100 : 0,
+    margemVsMedia: r.marginPct - margemGeral,
+    // Só o déficit conta: quem está acima da média não "deixou nada na mesa".
+    lucroDeixadoNaMesa: Math.max(0, (margemGeral - r.marginPct) / 100) * r.revenue,
+  }));
+  return { comCusto: comIndice, semCusto, totalRevenue, totalProfit, margemGeral,
+           totalCost: comCusto.reduce((s, r) => s + r.totalCost, 0) };
+}
+const DESEMPENHO_ORDENS = {
+  'lucro-maior':      { label:'Maior lucro',            cmp:(a,b)=>b.profit-a.profit },
+  'lucro-menor':      { label:'Menor lucro',            cmp:(a,b)=>a.profit-b.profit },
+  'faturamento-maior':{ label:'Maior faturamento',      cmp:(a,b)=>b.revenue-a.revenue },
+  'faturamento-menor':{ label:'Menor faturamento',      cmp:(a,b)=>a.revenue-b.revenue },
+  'margem-maior':     { label:'Maior margem (%)',       cmp:(a,b)=>b.marginPct-a.marginPct },
+  'margem-menor':     { label:'Menor margem (%)',       cmp:(a,b)=>a.marginPct-b.marginPct },
+  'qtd-maior':        { label:'Mais vendidos',          cmp:(a,b)=>b.qty-a.qty },
+  'qtd-menor':        { label:'Menos vendidos',         cmp:(a,b)=>a.qty-b.qty },
+  // Rótulo honesto: isto ordena pelo TAMANHO da oportunidade em reais, então um item de margem quase
+  // média mas muito grande vem antes de um item de margem péssima mas pequeno. Quem quer "margem
+  // ruim" pura usa 'margem-menor'; quem quer "onde há mais dinheiro a ganhar" usa este.
+  'na-mesa':          { label:'Mais lucro deixado na mesa', cmp:(a,b)=>b.lucroDeixadoNaMesa-a.lucroDeixadoNaMesa },
+};
 // Setor da receita (Cozinha / Café e Drinks) é a única categorização real disponível pra um item
 // vendido — produto pronto (finished_product) não tem categoria própria, herda do setor da receita
 // vinculada, se tiver.
@@ -8118,6 +8253,7 @@ function renderFaturamento() {
 
   renderFaturamentoRanking(entries, periodTotal);
   renderFaturamentoProfitRanking(entries);
+  renderFaturamentoDesempenho(entries);
   renderFaturamentoCategoryProfit(entries);
   renderFaturamentoMargin(entries);
   renderFaturamentoWeekday(entries);
@@ -8167,6 +8303,115 @@ function renderFaturamentoProfitRanking(entries) {
   if (rest.length > 0) html += `<div class="pt-1 flex justify-between items-center text-xs text-stone-400"><span>Outros ${rest.length} produto(s)</span><span>${fmtCurrency(restProfit)}</span></div>`;
   if (withoutCost.length > 0) html += `<p class="text-[11px] text-stone-400 mt-2 pt-2 border-t border-stone-100">Sem custo de receita lançado ainda: ${withoutCost.map(r=>r.name).join(', ')}</p>`;
   el.innerHTML = html;
+}
+// ---------- Desempenho por produto ----------
+let desempenhoSort = 'lucro-maior';
+let desempenhoSearch = '';
+let desempenhoCategory = '';
+function onDesempenhoControl() {
+  const s = document.getElementById('desemp-sort');
+  const b = document.getElementById('desemp-search');
+  const c = document.getElementById('desemp-category');
+  if (s && s.value) desempenhoSort = s.value;
+  desempenhoSearch = b ? b.value.trim().toLowerCase() : '';
+  desempenhoCategory = c ? c.value : '';
+  renderFaturamentoDesempenho(getSaleRevenueEntriesInRange(...Object.values(getFaturamentoRange())));
+}
+function renderFaturamentoDesempenho(entries) {
+  const lista = document.getElementById('desemp-list'); if (!lista) return;
+  const resumoEl = document.getElementById('desemp-summary');
+  const semCustoEl = document.getElementById('desemp-sem-custo');
+
+  // Os selects são preenchidos aqui (e não no HTML) pra a lista de ordenações e de categorias sair
+  // sempre do dado — acrescentar uma ordenação em DESEMPENHO_ORDENS já a faz aparecer na tela.
+  const sortEl = document.getElementById('desemp-sort');
+  if (sortEl && !sortEl.options.length) {
+    sortEl.innerHTML = Object.entries(DESEMPENHO_ORDENS).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('');
+    sortEl.value = desempenhoSort;
+  }
+
+  if (entries.length === 0) {
+    lista.innerHTML = '<p class="text-stone-400 text-center py-6 text-sm">Sem vendas no período</p>';
+    resumoEl.innerHTML = ''; semCustoEl.innerHTML = '';
+    return;
+  }
+  const perf = computeProductPerformance(entries);
+
+  const catEl = document.getElementById('desemp-category');
+  if (catEl) {
+    const cats = Array.from(new Set(perf.comCusto.map(r => r.category))).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    const atual = desempenhoCategory;
+    catEl.innerHTML = '<option value="">Todas categorias</option>' + cats.map(c => `<option value="${c}">${c}</option>`).join('');
+    catEl.value = cats.includes(atual) ? atual : '';
+    desempenhoCategory = catEl.value;
+  }
+
+  let linhas = perf.comCusto;
+  if (desempenhoCategory) linhas = linhas.filter(r => r.category === desempenhoCategory);
+  if (desempenhoSearch) linhas = linhas.filter(r => r.name.toLowerCase().includes(desempenhoSearch));
+  const ordem = DESEMPENHO_ORDENS[desempenhoSort] || DESEMPENHO_ORDENS['lucro-maior'];
+  linhas = linhas.slice().sort(ordem.cmp);
+
+  // O resumo é do que está FILTRADO na tela, não do período inteiro — senão o número de cima não
+  // teria relação com as linhas de baixo assim que uma categoria fosse escolhida.
+  const somaFat = linhas.reduce((s, r) => s + r.revenue, 0);
+  const somaCmv = linhas.reduce((s, r) => s + r.totalCost, 0);
+  const somaLucro = linhas.reduce((s, r) => s + r.profit, 0);
+  const margemGeral = somaFat > 0 ? (somaLucro / somaFat) * 100 : 0;
+  const mini = (rot, val, cor) => `<div class="bg-stone-50 rounded-lg px-3 py-2">
+      <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide">${rot}</p>
+      <p class="text-sm font-bold ${cor}">${val}</p></div>`;
+  resumoEl.innerHTML =
+    mini('Produtos', String(linhas.length), 'text-stone-800') +
+    mini('Faturamento', fmtCurrency(somaFat), 'text-emerald-700') +
+    mini('CMV', fmtCurrency(somaCmv), 'text-red-600') +
+    mini('Lucro · margem', `${fmtCurrency(somaLucro)} · ${margemGeral.toFixed(0)}%`, somaLucro >= 0 ? 'text-blue-700' : 'text-red-600');
+
+  if (linhas.length === 0) {
+    lista.innerHTML = '<p class="text-stone-400 text-center py-6 text-sm">Nenhum produto com esses filtros</p>';
+  } else {
+    const corMargem = m => m >= 50 ? 'text-emerald-700' : m >= 25 ? 'text-amber-600' : 'text-red-600';
+    const celula = (rot, val, cor) => `<div><p class="text-[10px] text-stone-400 uppercase tracking-wide">${rot}</p><p class="text-xs font-semibold ${cor||'text-stone-700'}">${val}</p></div>`;
+    lista.innerHTML = linhas.map(r => {
+      // ±10 pontos de margem contra a média da casa. O limiar é alto de propósito: num cardápio de
+      // 68 itens, marcar tudo que desvia um pouco encheria a lista de selos e nenhum seria lido.
+      const d = r.margemVsMedia;
+      const selo = d <= -10
+        ? `<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-red-50 text-red-700 font-semibold whitespace-nowrap" title="Margem ${r.marginPct.toFixed(0)}% contra ${perf.margemGeral.toFixed(0)}% da casa. Com a margem média renderia ${fmtCurrency(r.lucroDeixadoNaMesa)} a mais no período.">${Math.abs(d).toFixed(0)} pts abaixo da média</span>`
+        : d >= 10
+        ? `<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-semibold whitespace-nowrap" title="Margem ${r.marginPct.toFixed(0)}% contra ${perf.margemGeral.toFixed(0)}% da casa">${d.toFixed(0)} pts acima da média</span>`
+        : '';
+      return `<div class="py-2.5">
+        <div class="flex justify-between items-start gap-2 mb-1.5 flex-wrap">
+          <div class="min-w-0 flex items-center gap-1.5 flex-wrap">
+            <span class="text-sm font-semibold text-stone-800">${r.name}</span>
+            <span class="text-[10px] text-stone-400">${r.category}</span>
+            ${selo}
+          </div>
+          <span class="text-sm font-bold ${r.profit >= 0 ? 'text-blue-700' : 'text-red-600'} whitespace-nowrap">${fmtCurrency(r.profit)}</span>
+        </div>
+        <div class="grid grid-cols-3 sm:grid-cols-6 gap-2">
+          ${celula('Vendidos', `${fmtQty(r.qty, r.unit)} ${r.unit}`)}
+          ${celula('Faturamento', fmtCurrency(r.revenue), 'text-emerald-700')}
+          ${celula('CMV', fmtCurrency(r.totalCost), 'text-red-600')}
+          ${celula('Margem', `${r.marginPct.toFixed(0)}%`, corMargem(r.marginPct))}
+          ${celula('Preço venda', fmtUnitPrice(r.avgPrice))}
+          ${celula('Lucro / un', fmtUnitPrice(r.unitProfit), r.unitProfit >= 0 ? 'text-blue-700' : 'text-red-600')}
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  // Produto sem custo de receita lançado não some da tela: ele é justamente o que precisa de ação.
+  semCustoEl.innerHTML = perf.semCusto.length === 0 ? '' :
+    `<div class="mt-3 pt-3 border-t border-stone-100">
+      <p class="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+        <strong>${perf.semCusto.length} produto(s) vendido(s) sem custo de receita lançado</strong> — não dá pra calcular lucro nem margem deles, e por isso ficam de fora do ranking e das somas acima:
+        ${perf.semCusto.map(r => `${r.name} (${fmtCurrency(r.revenue)})`).join(', ')}.
+        Lance o custo dos insumos em Estoque &amp; Custos → Preço Médio pra eles entrarem.
+      </p>
+    </div>`;
+  lucide.createIcons();
 }
 function renderFaturamentoCategoryProfit(entries) {
   const el = document.getElementById('fat-category-profit-content'); if (!el) return;
