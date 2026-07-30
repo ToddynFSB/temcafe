@@ -583,6 +583,7 @@
       <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="estoque-custos"><i data-lucide="banknote" class="w-5 h-5"></i>Estoque &amp; Custos</button>
       <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="vendas"><i data-lucide="credit-card" class="w-5 h-5"></i>Vendas</button>
       <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="faturamento"><i data-lucide="trending-up" class="w-5 h-5"></i>Faturamento</button>
+      <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="rentabilidade"><i data-lucide="target" class="w-5 h-5"></i>Rentabilidade</button>
       <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="despesas"><i data-lucide="receipt" class="w-5 h-5"></i>Gastos</button>
       <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="config-gastos"><i data-lucide="settings" class="w-5 h-5"></i>Configurações</button>
       <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="funcionarios"><i data-lucide="users" class="w-5 h-5"></i>Funcionários</button>
@@ -873,25 +874,6 @@
         </div>
       </div>
 
-      <!-- Desempenho por produto — o ranking COMPLETO, com todos os indicadores por item.
-           Os dois cards acima mostram só o topo; aqui entra todo produto vendido no período, com
-           ordenação e filtro, pra responder "vale a pena manter isso no cardápio?". -->
-      <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 mb-4">
-        <h3 class="font-semibold text-sm mb-1 text-stone-800 flex items-center gap-2"><i data-lucide="table-2" class="w-4 h-4 text-emerald-600"></i>Desempenho por produto</h3>
-        <p class="text-[11px] text-stone-400 mb-3">Todo produto vendido no período selecionado lá em cima, com quantidade, faturamento, CMV, lucro, margem e preço praticado. O selo compara a margem do item com a margem média da casa — é o que responde "vale a pena manter isso no cardápio?".</p>
-        <div class="flex flex-wrap gap-2 mb-3">
-          <div class="relative flex-1 min-w-[150px]">
-            <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-stone-400"></i>
-            <input id="desemp-search" type="text" placeholder="Buscar produto..." class="input-field text-sm w-full pl-9" oninput="onDesempenhoControl()">
-          </div>
-          <select id="desemp-sort" class="input-field text-sm" onchange="onDesempenhoControl()"></select>
-          <select id="desemp-category" class="input-field text-sm" onchange="onDesempenhoControl()"></select>
-        </div>
-        <div id="desemp-summary" class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3"></div>
-        <div id="desemp-list" class="divide-y divide-stone-100"></div>
-        <div id="desemp-sem-custo"></div>
-      </div>
-
       <!-- Categorias mais lucrativas -->
       <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 mb-4">
         <h3 class="font-semibold text-sm mb-3 text-stone-800 flex items-center gap-2"><i data-lucide="pie-chart" class="w-4 h-4 text-emerald-600"></i>Categorias mais lucrativas</h3>
@@ -922,6 +904,73 @@
       <div id="fat-day-detail">
         <p class="text-stone-400 text-center py-8 text-sm">Toque num dia no gráfico acima pra ver o detalhe.</p>
       </div>
+    </section>
+
+    <!-- ============================================================
+         RENTABILIDADE DOS PRODUTOS — tela de decisão, não relatório.
+         Período próprio (independente do Faturamento), colunas que o dono escolhe, ordenação por
+         qualquer indicador e um simulador de CMV alvo. Tudo o que ela mostra sai do mesmo motor que
+         o CMV e o Faturamento já usam, pra nunca divergir.
+         ============================================================ -->
+    <section id="fpanel-rentabilidade" class="hidden fade-in">
+      <div class="flex items-center justify-between mb-1">
+        <h2 class="text-lg font-bold text-stone-800 flex items-center gap-2"><i data-lucide="target" class="w-5 h-5 text-emerald-600"></i>Rentabilidade dos Produtos</h2>
+        <button onclick="lockFinanceiro()" class="text-xs text-stone-400 hover:text-stone-600 flex items-center gap-1"><i data-lucide="lock" class="w-3.5 h-3.5"></i>Bloquear</button>
+      </div>
+      <p class="text-xs text-stone-400 mb-3">Todo produto vendido no período, com os indicadores que você escolher. Toque no cabeçalho de uma coluna pra ordenar por ela.</p>
+
+      <!-- Período -->
+      <div class="flex gap-2 mb-3 flex-wrap">
+        <button class="rent-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-filter="7days">7 dias</button>
+        <button class="rent-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-filter="30days">30 dias</button>
+        <button class="rent-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-filter="month">Este mês</button>
+        <button class="rent-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-800 text-white" data-filter="all">Tudo</button>
+        <button class="rent-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-filter="custom">📅 Período</button>
+      </div>
+      <div id="rent-custom-form" class="hidden mb-3 p-3 bg-white rounded-xl border border-stone-200 flex flex-wrap items-end gap-2">
+        <div><label class="text-[10px] font-semibold text-stone-500 uppercase tracking-wide block mb-1">De</label><input id="rent-date-from" type="date" class="input-field text-sm"></div>
+        <div><label class="text-[10px] font-semibold text-stone-500 uppercase tracking-wide block mb-1">Até</label><input id="rent-date-to" type="date" class="input-field text-sm"></div>
+        <button onclick="aplicarRentabilidadeCustom()" class="btn-primary px-4 py-2 rounded-lg text-sm font-medium">Aplicar</button>
+      </div>
+
+      <!-- Resumo do que está filtrado -->
+      <div id="rent-kpis" class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3"></div>
+
+      <!-- Simulador de CMV -->
+      <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 mb-3">
+        <div class="flex items-center justify-between gap-2 mb-2 flex-wrap">
+          <h3 class="font-semibold text-sm text-stone-800 flex items-center gap-2"><i data-lucide="flask-conical" class="w-4 h-4 text-emerald-600"></i>Simulador de CMV</h3>
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <button class="rent-cmv-preset px-2.5 py-1 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-alvo="20">20%</button>
+            <button class="rent-cmv-preset px-2.5 py-1 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-alvo="25">25%</button>
+            <button class="rent-cmv-preset px-2.5 py-1 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-alvo="30">30%</button>
+            <div class="relative">
+              <input id="rent-cmv-alvo" type="number" min="0" max="99" step="any" class="input-field text-xs py-1 w-20 pr-6" oninput="onRentabilidadeControl()">
+              <span class="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-stone-400">%</span>
+            </div>
+          </div>
+        </div>
+        <div id="rent-sim-resumo"></div>
+      </div>
+
+      <!-- Busca, categoria e escolha de colunas -->
+      <div class="flex flex-wrap gap-2 mb-2">
+        <div class="relative flex-1 min-w-[150px]">
+          <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-stone-400"></i>
+          <input id="rent-search" type="text" placeholder="Buscar produto..." class="input-field text-sm w-full pl-9" oninput="onRentabilidadeControl()">
+        </div>
+        <select id="rent-category" class="input-field text-sm" onchange="onRentabilidadeControl()"></select>
+        <button onclick="toggleRentabilidadeColunas()" class="px-3 py-2 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200 flex items-center gap-1.5 whitespace-nowrap"><i data-lucide="columns-3" class="w-3.5 h-3.5"></i>Colunas</button>
+      </div>
+      <div id="rent-colunas-painel" class="hidden bg-white rounded-xl p-3 shadow-sm border border-stone-100 mb-3">
+        <p class="text-[11px] text-stone-400 mb-2">Escolha o que aparece na tabela. Sua escolha fica salva neste aparelho.</p>
+        <div id="rent-colunas-lista" class="flex flex-wrap gap-1.5"></div>
+      </div>
+
+      <div class="bg-white rounded-xl shadow-sm border border-stone-100 overflow-hidden mb-3">
+        <div class="overflow-x-auto"><table class="w-full text-sm" id="rent-tabela"></table></div>
+      </div>
+      <div id="rent-sem-custo"></div>
     </section>
 
     <!-- Sub-aba: DRE -->
@@ -5590,6 +5639,7 @@ async function confirmSales() {
     renderSalesSelect();
     renderSalesToday();
     if (activeFinanceTab === 'faturamento') renderFaturamento();
+  if (activeFinanceTab === 'rentabilidade') renderRentabilidade();
     if (activeFinanceTab === 'dre') renderDRE();
 
     if (financeSaveFailed) {
@@ -7683,6 +7733,7 @@ document.addEventListener('click', (e) => {
   document.getElementById('fpanel-analises').classList.toggle('hidden', activeFinanceTab!=='analises');
   document.getElementById('fpanel-vendas').classList.toggle('hidden', activeFinanceTab!=='vendas');
   document.getElementById('fpanel-faturamento').classList.toggle('hidden', activeFinanceTab!=='faturamento');
+  document.getElementById('fpanel-rentabilidade').classList.toggle('hidden', activeFinanceTab!=='rentabilidade');
   document.getElementById('fpanel-dre').classList.toggle('hidden', activeFinanceTab!=='dre');
   document.getElementById('fpanel-despesas').classList.toggle('hidden', activeFinanceTab!=='despesas');
   document.getElementById('fpanel-config-gastos').classList.toggle('hidden', activeFinanceTab!=='config-gastos');
@@ -7690,6 +7741,7 @@ document.addEventListener('click', (e) => {
   if (activeFinanceTab === 'analises') renderAnalises();
   if (activeFinanceTab === 'vendas') { renderSalesSelect(); renderSalesToday(); renderPendingEvents(); if (currentSalesMode==='bulk') { initBulkSalesDate(); } }
   if (activeFinanceTab === 'faturamento') renderFaturamento();
+  if (activeFinanceTab === 'rentabilidade') renderRentabilidade();
   if (activeFinanceTab === 'dre') renderDRE();
   if (activeFinanceTab === 'despesas') renderExpenses();
   if (activeFinanceTab === 'config-gastos') { renderConfigTab(); }
@@ -8046,7 +8098,15 @@ function computeProductProfitRanking(entries) {
 // E para achar onde há mais dinheiro a ganhar, `lucroDeixadoNaMesa` pesa esse déficit pelo tamanho:
 // quanto o item renderia a mais se tivesse a margem média — o que junta "vende bastante" com "margem
 // baixa" numa conta só, em reais.
-function computeProductPerformance(entries) {
+// `cmvAlvoPct` é o CMV que o dono QUER ter (o simulador). Passando null, o alvo vira o CMV médio da
+// casa no período — assim "deixado na mesa" continua significando "quanto renderia se este item fosse
+// tão bom quanto a média", que é o comportamento sem simulação.
+//
+// DEIXADO NA MESA: é sempre um valor em reais, e é sempre a MESMA conta —
+//     faturamento × (CMV atual% − CMV alvo%),  zerado quando o item já está melhor que o alvo.
+// Ou seja: quanto de lucro este produto deixou de dar por rodar com o CMV que rodou. Com o simulador
+// em 25%, ele responde direto "quanto eu recupero se negociar este item até 25% de CMV".
+function computeProductPerformance(entries, cmvAlvoPct) {
   const rows = computeProductRevenueRanking(entries);
   const comCusto = [], semCusto = [];
   rows.forEach(r => {
@@ -8057,42 +8117,71 @@ function computeProductPerformance(entries) {
     comCusto.push({
       ...r,
       category: getProductSector(r.name),
-      avgPrice: r.revenue / r.qty,          // preço de venda praticado no período
+      avgPrice: r.revenue / r.qty,          // preço de venda praticado no período (= ticket médio do item)
       unitCost: cmv.costPerUnit,            // CMV de uma unidade
       totalCost,                            // CMV total do período
+      cmvPct: r.revenue > 0 ? (totalCost / r.revenue) * 100 : 0,
       profit,                               // lucro bruto
       marginPct: r.revenue > 0 ? (profit / r.revenue) * 100 : 0,
       unitProfit: r.qty > 0 ? profit / r.qty : 0,
     });
   });
   const totalRevenue = comCusto.reduce((s, r) => s + r.revenue, 0);
+  const totalCostGeral = comCusto.reduce((s, r) => s + r.totalCost, 0);
   const totalProfit = comCusto.reduce((s, r) => s + r.profit, 0);
   const margemGeral = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0;
-  const comIndice = comCusto.map(r => ({
-    ...r,
-    pctOfRevenue: totalRevenue > 0 ? (r.revenue / totalRevenue) * 100 : 0,
-    pctOfProfit: totalProfit > 0 ? (r.profit / totalProfit) * 100 : 0,
-    margemVsMedia: r.marginPct - margemGeral,
-    // Só o déficit conta: quem está acima da média não "deixou nada na mesa".
-    lucroDeixadoNaMesa: Math.max(0, (margemGeral - r.marginPct) / 100) * r.revenue,
-  }));
-  return { comCusto: comIndice, semCusto, totalRevenue, totalProfit, margemGeral,
-           totalCost: comCusto.reduce((s, r) => s + r.totalCost, 0) };
+  const cmvGeral = totalRevenue > 0 ? (totalCostGeral / totalRevenue) * 100 : 0;
+  const alvo = Number.isFinite(cmvAlvoPct) && cmvAlvoPct >= 0 ? cmvAlvoPct : cmvGeral;
+
+  const comIndice = comCusto.map(r => {
+    const simCost = r.revenue * (alvo / 100);
+    const simProfit = r.revenue - simCost;
+    return {
+      ...r,
+      pctOfRevenue: totalRevenue > 0 ? (r.revenue / totalRevenue) * 100 : 0,
+      pctOfProfit: totalProfit > 0 ? (r.profit / totalProfit) * 100 : 0,
+      margemVsMedia: r.marginPct - margemGeral,
+      cmvVsAlvo: r.cmvPct - alvo,           // positivo = CMV acima do alvo
+      simCost, simProfit,
+      simGain: simProfit - r.profit,        // com sinal: negativo = o item já é melhor que o alvo
+      // Só o déficit conta: quem já está melhor que o alvo não deixou nada na mesa.
+      lucroDeixadoNaMesa: Math.max(0, simProfit - r.profit),
+    };
+  });
+  return { comCusto: comIndice, semCusto, totalRevenue, totalProfit, margemGeral, cmvGeral, alvo,
+           totalCost: totalCostGeral,
+           totalNaMesa: comIndice.reduce((s, r) => s + r.lucroDeixadoNaMesa, 0),
+           totalSimProfit: comIndice.reduce((s, r) => s + r.simProfit, 0) };
 }
-const DESEMPENHO_ORDENS = {
-  'lucro-maior':      { label:'Maior lucro',            cmp:(a,b)=>b.profit-a.profit },
-  'lucro-menor':      { label:'Menor lucro',            cmp:(a,b)=>a.profit-b.profit },
-  'faturamento-maior':{ label:'Maior faturamento',      cmp:(a,b)=>b.revenue-a.revenue },
-  'faturamento-menor':{ label:'Menor faturamento',      cmp:(a,b)=>a.revenue-b.revenue },
-  'margem-maior':     { label:'Maior margem (%)',       cmp:(a,b)=>b.marginPct-a.marginPct },
-  'margem-menor':     { label:'Menor margem (%)',       cmp:(a,b)=>a.marginPct-b.marginPct },
-  'qtd-maior':        { label:'Mais vendidos',          cmp:(a,b)=>b.qty-a.qty },
-  'qtd-menor':        { label:'Menos vendidos',         cmp:(a,b)=>a.qty-b.qty },
-  // Rótulo honesto: isto ordena pelo TAMANHO da oportunidade em reais, então um item de margem quase
-  // média mas muito grande vem antes de um item de margem péssima mas pequeno. Quem quer "margem
-  // ruim" pura usa 'margem-menor'; quem quer "onde há mais dinheiro a ganhar" usa este.
-  'na-mesa':          { label:'Mais lucro deixado na mesa', cmp:(a,b)=>b.lucroDeixadoNaMesa-a.lucroDeixadoNaMesa },
+// UMA definição por indicador, usada para três coisas ao mesmo tempo: o texto da célula, o nome no
+// seletor de colunas e o critério de ordenação. Separar isso em três listas é como uma coluna nova
+// acaba aparecendo na tabela mas não no seletor, ou ordenando pelo campo errado.
+// `val` devolve número puro (ordenação) e `fmt` devolve o texto (exibição).
+const RENT_COLUNAS = {
+  qty:          { label:'Quantidade vendida', curto:'Qtd',        val:r=>r.qty,          fmt:r=>`${fmtQty(r.qty,r.unit)} ${r.unit||''}`.trim() },
+  avgPrice:     { label:'Preço de venda',     curto:'Preço',      val:r=>r.avgPrice,     fmt:r=>fmtUnitPrice(r.avgPrice),
+                  ajuda:'Faturamento ÷ quantidade — é também o ticket médio deste produto.' },
+  revenue:      { label:'Faturamento',        curto:'Faturam.',   val:r=>r.revenue,      fmt:r=>fmtCurrency(r.revenue), cor:()=>'text-emerald-700' },
+  totalCost:    { label:'CMV (R$)',           curto:'CMV R$',     val:r=>r.totalCost,    fmt:r=>fmtCurrency(r.totalCost), cor:()=>'text-red-600' },
+  cmvPct:       { label:'CMV (%)',            curto:'CMV %',      val:r=>r.cmvPct,       fmt:r=>`${r.cmvPct.toFixed(1)}%`,
+                  cor:r=>r.cmvVsAlvo > 0 ? 'text-red-600' : 'text-emerald-700' },
+  unitCost:     { label:'CMV por unidade',    curto:'CMV/un',     val:r=>r.unitCost,     fmt:r=>fmtUnitPrice(r.unitCost) },
+  profit:       { label:'Lucro bruto',        curto:'Lucro',      val:r=>r.profit,       fmt:r=>fmtCurrency(r.profit),
+                  cor:r=>r.profit>=0?'text-blue-700':'text-red-600' },
+  unitProfit:   { label:'Lucro por unidade',  curto:'Lucro/un',   val:r=>r.unitProfit,   fmt:r=>fmtUnitPrice(r.unitProfit),
+                  cor:r=>r.unitProfit>=0?'text-blue-700':'text-red-600' },
+  marginPct:    { label:'Margem (%)',         curto:'Margem',     val:r=>r.marginPct,    fmt:r=>`${r.marginPct.toFixed(1)}%`,
+                  cor:r=>r.marginPct>=50?'text-emerald-700':r.marginPct>=25?'text-amber-600':'text-red-600' },
+  naMesa:       { label:'Dinheiro deixado na mesa', curto:'Na mesa', val:r=>r.lucroDeixadoNaMesa, fmt:r=>fmtCurrency(r.lucroDeixadoNaMesa),
+                  cor:r=>r.lucroDeixadoNaMesa>0?'text-amber-700':'text-stone-300',
+                  ajuda:'Quanto de lucro este produto deixou de dar por rodar acima do CMV alvo. Muda com o simulador.' },
+  simProfit:    { label:'Lucro no CMV alvo',  curto:'Lucro alvo', val:r=>r.simProfit,    fmt:r=>fmtCurrency(r.simProfit), cor:()=>'text-blue-700',
+                  ajuda:'O lucro que este produto daria se o CMV dele fosse o alvo do simulador.' },
+  pctOfRevenue: { label:'% do faturamento',   curto:'% fat.',     val:r=>r.pctOfRevenue, fmt:r=>`${r.pctOfRevenue.toFixed(1)}%` },
+  pctOfProfit:  { label:'% do lucro',         curto:'% lucro',    val:r=>r.pctOfProfit,  fmt:r=>`${r.pctOfProfit.toFixed(1)}%` },
 };
+// O que aparece antes de o dono mexer: as perguntas mais frequentes, sem estourar a largura.
+const RENT_COLUNAS_PADRAO = ['qty','avgPrice','revenue','totalCost','cmvPct','profit','marginPct','naMesa'];
 // Setor da receita (Cozinha / Café e Drinks) é a única categorização real disponível pra um item
 // vendido — produto pronto (finished_product) não tem categoria própria, herda do setor da receita
 // vinculada, se tiver.
@@ -8253,7 +8342,6 @@ function renderFaturamento() {
 
   renderFaturamentoRanking(entries, periodTotal);
   renderFaturamentoProfitRanking(entries);
-  renderFaturamentoDesempenho(entries);
   renderFaturamentoCategoryProfit(entries);
   renderFaturamentoMargin(entries);
   renderFaturamentoWeekday(entries);
@@ -8304,115 +8392,214 @@ function renderFaturamentoProfitRanking(entries) {
   if (withoutCost.length > 0) html += `<p class="text-[11px] text-stone-400 mt-2 pt-2 border-t border-stone-100">Sem custo de receita lançado ainda: ${withoutCost.map(r=>r.name).join(', ')}</p>`;
   el.innerHTML = html;
 }
-// ---------- Desempenho por produto ----------
-let desempenhoSort = 'lucro-maior';
-let desempenhoSearch = '';
-let desempenhoCategory = '';
-function onDesempenhoControl() {
-  const s = document.getElementById('desemp-sort');
-  const b = document.getElementById('desemp-search');
-  const c = document.getElementById('desemp-category');
-  if (s && s.value) desempenhoSort = s.value;
-  desempenhoSearch = b ? b.value.trim().toLowerCase() : '';
-  desempenhoCategory = c ? c.value : '';
-  renderFaturamentoDesempenho(getSaleRevenueEntriesInRange(...Object.values(getFaturamentoRange())));
+// ============================================================
+// RENTABILIDADE DOS PRODUTOS — aba própria
+// ============================================================
+// Período próprio, de propósito: quem está decidindo cardápio compara "os últimos 30 dias" enquanto
+// deixa o Faturamento no mês fechado. Amarrar as duas telas ao mesmo filtro obrigaria a desfazer um
+// para olhar o outro.
+let rentFilter = 'all';
+let rentCustomFrom = null, rentCustomTo = null;
+let rentSort = 'profit';          // chave de RENT_COLUNAS, ou 'name'
+let rentSortDir = -1;             // -1 = maior→menor, +1 = menor→maior
+let rentSearch = '';
+let rentCategory = '';
+let rentCmvAlvo = null;           // null = usa o CMV médio da casa no período
+let rentColunas = null;
+
+const RENT_COLUNAS_CHAVE = 'temcafe.rentabilidade.colunas';
+// A escolha de colunas é preferência de quem olha, não dado do negócio — fica no aparelho e nunca
+// no banco. Todo acesso é protegido: em navegador com storage bloqueado a tela continua funcionando
+// com as colunas padrão, em vez de quebrar.
+function getRentColunas() {
+  if (rentColunas) return rentColunas;
+  try {
+    const lista = JSON.parse(localStorage.getItem(RENT_COLUNAS_CHAVE) || '[]').filter(k => k in RENT_COLUNAS);
+    rentColunas = lista.length ? lista : RENT_COLUNAS_PADRAO.slice();
+  } catch (e) { rentColunas = RENT_COLUNAS_PADRAO.slice(); }
+  return rentColunas;
 }
-function renderFaturamentoDesempenho(entries) {
-  const lista = document.getElementById('desemp-list'); if (!lista) return;
-  const resumoEl = document.getElementById('desemp-summary');
-  const semCustoEl = document.getElementById('desemp-sem-custo');
-
-  // Os selects são preenchidos aqui (e não no HTML) pra a lista de ordenações e de categorias sair
-  // sempre do dado — acrescentar uma ordenação em DESEMPENHO_ORDENS já a faz aparecer na tela.
-  const sortEl = document.getElementById('desemp-sort');
-  if (sortEl && !sortEl.options.length) {
-    sortEl.innerHTML = Object.entries(DESEMPENHO_ORDENS).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('');
-    sortEl.value = desempenhoSort;
+function salvarRentColunas() { try { localStorage.setItem(RENT_COLUNAS_CHAVE, JSON.stringify(rentColunas)); } catch (e) {} }
+function getRentabilidadeRange() {
+  if (rentFilter === 'custom' && rentCustomFrom && rentCustomTo) {
+    const s = parseLocalDate(rentCustomFrom); s.setHours(0,0,0,0);
+    const e = parseLocalDate(rentCustomTo); e.setHours(23,59,59,999);
+    return { start: s, end: e };
   }
-
-  if (entries.length === 0) {
-    lista.innerHTML = '<p class="text-stone-400 text-center py-6 text-sm">Sem vendas no período</p>';
-    resumoEl.innerHTML = ''; semCustoEl.innerHTML = '';
-    return;
+  return faturamentoRangeForFilter(rentFilter === 'custom' ? 'all' : rentFilter);
+}
+function aplicarRentabilidadeCustom() {
+  const de = document.getElementById('rent-date-from').value;
+  const ate = document.getElementById('rent-date-to').value;
+  if (!de || !ate) { showToast('Preencha as duas datas', true); return; }
+  if (de > ate) { showToast('A data inicial é depois da final', true); return; }
+  rentCustomFrom = de; rentCustomTo = ate;
+  renderRentabilidade();
+}
+function toggleRentabilidadeColunas() {
+  document.getElementById('rent-colunas-painel').classList.toggle('hidden');
+  lucide.createIcons();
+}
+function onRentabilidadeControl() {
+  const b = document.getElementById('rent-search');
+  const c = document.getElementById('rent-category');
+  const a = document.getElementById('rent-cmv-alvo');
+  rentSearch = b ? b.value.trim().toLowerCase() : '';
+  rentCategory = c ? c.value : '';
+  const v = a ? parseFloat(a.value) : NaN;
+  // Campo vazio volta ao alvo automático (o CMV médio da casa), em vez de travar em 0%.
+  rentCmvAlvo = Number.isFinite(v) && v >= 0 && v < 100 ? v : null;
+  renderRentabilidade();
+}
+function ordenarRentabilidade(chave) {
+  // Clicar de novo na mesma coluna inverte; trocar de coluna começa sempre do maior, que é o que se
+  // quer em 9 de 10 perguntas ("quem lucra mais", "quem tem CMV maior").
+  if (rentSort === chave) rentSortDir = -rentSortDir;
+  else { rentSort = chave; rentSortDir = chave === 'name' ? 1 : -1; }
+  renderRentabilidade();
+}
+function alternarRentColuna(chave) {
+  const cols = getRentColunas();
+  const i = cols.indexOf(chave);
+  if (i >= 0) { if (cols.length === 1) { showToast('Deixe ao menos uma coluna visível', true); return; } cols.splice(i, 1); }
+  else {
+    // Reinsere na ordem canônica de RENT_COLUNAS, senão a coluna reativada iria parar no fim e a
+    // tabela mudaria de ordem a cada clique.
+    const ordem = Object.keys(RENT_COLUNAS);
+    cols.push(chave);
+    cols.sort((a, b) => ordem.indexOf(a) - ordem.indexOf(b));
   }
-  const perf = computeProductPerformance(entries);
+  salvarRentColunas();
+  renderRentabilidade();
+}
+function renderRentabilidade() {
+  const tabela = document.getElementById('rent-tabela'); if (!tabela) return;
+  document.querySelectorAll('.rent-filter').forEach(b => {
+    b.className = `rent-filter px-3 py-1.5 rounded-lg text-xs font-medium ${b.dataset.filter===rentFilter?'bg-stone-800 text-white':'bg-stone-100 text-stone-600 hover:bg-stone-200'}`;
+  });
+  const formEl = document.getElementById('rent-custom-form');
+  if (formEl) formEl.classList.toggle('hidden', rentFilter !== 'custom');
 
-  const catEl = document.getElementById('desemp-category');
+  const { start, end } = getRentabilidadeRange();
+  const entries = getSaleRevenueEntriesInRange(start, end);
+  const perf = computeProductPerformance(entries, rentCmvAlvo);
+
+  // O campo do alvo nasce mostrando o CMV real da casa: assim o número de partida já é o do negócio,
+  // e o dono ajusta a partir dele em vez de adivinhar.
+  const alvoEl = document.getElementById('rent-cmv-alvo');
+  if (alvoEl && !alvoEl.value) alvoEl.value = perf.cmvGeral > 0 ? perf.cmvGeral.toFixed(1) : '';
+  document.querySelectorAll('.rent-cmv-preset').forEach(b => {
+    const ativo = Math.abs(perf.alvo - Number(b.dataset.alvo)) < 0.05;
+    b.className = `rent-cmv-preset px-2.5 py-1 rounded-lg text-xs font-medium ${ativo?'bg-stone-800 text-white':'bg-stone-100 text-stone-600 hover:bg-stone-200'}`;
+  });
+
+  const catEl = document.getElementById('rent-category');
   if (catEl) {
-    const cats = Array.from(new Set(perf.comCusto.map(r => r.category))).sort((a, b) => a.localeCompare(b, 'pt-BR'));
-    const atual = desempenhoCategory;
-    catEl.innerHTML = '<option value="">Todas categorias</option>' + cats.map(c => `<option value="${c}">${c}</option>`).join('');
-    catEl.value = cats.includes(atual) ? atual : '';
-    desempenhoCategory = catEl.value;
+    const cats = Array.from(new Set(perf.comCusto.map(r => r.category))).sort((a,b)=>a.localeCompare(b,'pt-BR'));
+    catEl.innerHTML = '<option value="">Todas categorias</option>' + cats.map(c=>`<option value="${c}">${c}</option>`).join('');
+    catEl.value = cats.includes(rentCategory) ? rentCategory : '';
+    rentCategory = catEl.value;
   }
 
   let linhas = perf.comCusto;
-  if (desempenhoCategory) linhas = linhas.filter(r => r.category === desempenhoCategory);
-  if (desempenhoSearch) linhas = linhas.filter(r => r.name.toLowerCase().includes(desempenhoSearch));
-  const ordem = DESEMPENHO_ORDENS[desempenhoSort] || DESEMPENHO_ORDENS['lucro-maior'];
-  linhas = linhas.slice().sort(ordem.cmp);
+  if (rentCategory) linhas = linhas.filter(r => r.category === rentCategory);
+  if (rentSearch) linhas = linhas.filter(r => r.name.toLowerCase().includes(rentSearch));
+  const col = RENT_COLUNAS[rentSort];
+  linhas = linhas.slice().sort(rentSort === 'name' || !col
+    ? (a,b) => a.name.localeCompare(b.name,'pt-BR') * rentSortDir
+    : (a,b) => (col.val(a) - col.val(b)) * rentSortDir);
 
-  // O resumo é do que está FILTRADO na tela, não do período inteiro — senão o número de cima não
-  // teria relação com as linhas de baixo assim que uma categoria fosse escolhida.
-  const somaFat = linhas.reduce((s, r) => s + r.revenue, 0);
-  const somaCmv = linhas.reduce((s, r) => s + r.totalCost, 0);
-  const somaLucro = linhas.reduce((s, r) => s + r.profit, 0);
-  const margemGeral = somaFat > 0 ? (somaLucro / somaFat) * 100 : 0;
-  const mini = (rot, val, cor) => `<div class="bg-stone-50 rounded-lg px-3 py-2">
+  // ---- KPIs do que está filtrado ----
+  const fat = linhas.reduce((s,r)=>s+r.revenue, 0);
+  const cmv = linhas.reduce((s,r)=>s+r.totalCost, 0);
+  const luc = linhas.reduce((s,r)=>s+r.profit, 0);
+  const mesa = linhas.reduce((s,r)=>s+r.lucroDeixadoNaMesa, 0);
+  const kpi = (rot, val, sub, cor) => `<div class="bg-white rounded-xl px-3 py-2.5 shadow-sm border border-stone-100">
       <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide">${rot}</p>
-      <p class="text-sm font-bold ${cor}">${val}</p></div>`;
-  resumoEl.innerHTML =
-    mini('Produtos', String(linhas.length), 'text-stone-800') +
-    mini('Faturamento', fmtCurrency(somaFat), 'text-emerald-700') +
-    mini('CMV', fmtCurrency(somaCmv), 'text-red-600') +
-    mini('Lucro · margem', `${fmtCurrency(somaLucro)} · ${margemGeral.toFixed(0)}%`, somaLucro >= 0 ? 'text-blue-700' : 'text-red-600');
+      <p class="text-lg font-extrabold ${cor} leading-tight">${val}</p>
+      <p class="text-[10px] text-stone-400">${sub}</p></div>`;
+  document.getElementById('rent-kpis').innerHTML =
+    kpi('Faturamento', fmtCurrency(fat), `${linhas.length} produto(s)`, 'text-emerald-700') +
+    kpi('CMV', fmtCurrency(cmv), fat>0?`${((cmv/fat)*100).toFixed(1)}% do faturamento`:'—', 'text-red-600') +
+    kpi('Lucro bruto', fmtCurrency(luc), fat>0?`margem ${((luc/fat)*100).toFixed(1)}%`:'—', luc>=0?'text-blue-700':'text-red-600') +
+    kpi('Deixado na mesa', fmtCurrency(mesa), `se todos rodassem a ${perf.alvo.toFixed(1)}% de CMV`, mesa>0?'text-amber-700':'text-stone-400');
 
-  if (linhas.length === 0) {
-    lista.innerHTML = '<p class="text-stone-400 text-center py-6 text-sm">Nenhum produto com esses filtros</p>';
-  } else {
-    const corMargem = m => m >= 50 ? 'text-emerald-700' : m >= 25 ? 'text-amber-600' : 'text-red-600';
-    const celula = (rot, val, cor) => `<div><p class="text-[10px] text-stone-400 uppercase tracking-wide">${rot}</p><p class="text-xs font-semibold ${cor||'text-stone-700'}">${val}</p></div>`;
-    lista.innerHTML = linhas.map(r => {
-      // ±10 pontos de margem contra a média da casa. O limiar é alto de propósito: num cardápio de
-      // 68 itens, marcar tudo que desvia um pouco encheria a lista de selos e nenhum seria lido.
-      const d = r.margemVsMedia;
-      const selo = d <= -10
-        ? `<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-red-50 text-red-700 font-semibold whitespace-nowrap" title="Margem ${r.marginPct.toFixed(0)}% contra ${perf.margemGeral.toFixed(0)}% da casa. Com a margem média renderia ${fmtCurrency(r.lucroDeixadoNaMesa)} a mais no período.">${Math.abs(d).toFixed(0)} pts abaixo da média</span>`
-        : d >= 10
-        ? `<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-semibold whitespace-nowrap" title="Margem ${r.marginPct.toFixed(0)}% contra ${perf.margemGeral.toFixed(0)}% da casa">${d.toFixed(0)} pts acima da média</span>`
-        : '';
-      return `<div class="py-2.5">
-        <div class="flex justify-between items-start gap-2 mb-1.5 flex-wrap">
-          <div class="min-w-0 flex items-center gap-1.5 flex-wrap">
-            <span class="text-sm font-semibold text-stone-800">${r.name}</span>
-            <span class="text-[10px] text-stone-400">${r.category}</span>
-            ${selo}
-          </div>
-          <span class="text-sm font-bold ${r.profit >= 0 ? 'text-blue-700' : 'text-red-600'} whitespace-nowrap">${fmtCurrency(r.profit)}</span>
-        </div>
-        <div class="grid grid-cols-3 sm:grid-cols-6 gap-2">
-          ${celula('Vendidos', `${fmtQty(r.qty, r.unit)} ${r.unit}`)}
-          ${celula('Faturamento', fmtCurrency(r.revenue), 'text-emerald-700')}
-          ${celula('CMV', fmtCurrency(r.totalCost), 'text-red-600')}
-          ${celula('Margem', `${r.marginPct.toFixed(0)}%`, corMargem(r.marginPct))}
-          ${celula('Preço venda', fmtUnitPrice(r.avgPrice))}
-          ${celula('Lucro / un', fmtUnitPrice(r.unitProfit), r.unitProfit >= 0 ? 'text-blue-700' : 'text-red-600')}
-        </div>
-      </div>`;
+  // ---- Simulador ----
+  const acima = linhas.filter(r => r.cmvVsAlvo > 0.05);
+  const simEl = document.getElementById('rent-sim-resumo');
+  if (linhas.length === 0) simEl.innerHTML = '<p class="text-stone-400 text-sm">Sem produtos no período.</p>';
+  else {
+    const lucroAlvo = luc + mesa;
+    const ganhoPct = luc > 0 ? (mesa / luc) * 100 : 0;
+    simEl.innerHTML = `
+      <p class="text-xs text-stone-600 mb-2">Com <strong>CMV de ${perf.alvo.toFixed(1)}%</strong>, ${acima.length} de ${linhas.length} produto(s) melhorariam.</p>
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+        <div class="bg-stone-50 rounded-lg px-3 py-2"><p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide">Lucro hoje</p><p class="text-sm font-bold text-stone-700">${fmtCurrency(luc)}</p></div>
+        <div class="bg-blue-50 rounded-lg px-3 py-2"><p class="text-[10px] font-bold text-blue-700 uppercase tracking-wide">Lucro no alvo</p><p class="text-sm font-bold text-blue-800">${fmtCurrency(lucroAlvo)}</p></div>
+        <div class="bg-amber-50 rounded-lg px-3 py-2 col-span-2 sm:col-span-1"><p class="text-[10px] font-bold text-amber-700 uppercase tracking-wide">Você recuperaria</p><p class="text-sm font-bold text-amber-800">${fmtCurrency(mesa)}${luc>0?` <span class="font-normal text-[11px]">(+${ganhoPct.toFixed(0)}%)</span>`:''}</p></div>
+      </div>
+      <p class="text-[11px] text-stone-400 mt-2">Simulação de CUSTO: mantém o preço de venda e supõe que o CMV do produto caísse para o alvo (negociar fornecedor, ajustar receita). Chegar lá subindo o preço daria o mesmo lucro só se a quantidade vendida não mudasse.</p>`;
+  }
+
+  // ---- Seletor de colunas ----
+  const cols = getRentColunas();
+  const painel = document.getElementById('rent-colunas-lista');
+  if (painel) {
+    painel.innerHTML = Object.entries(RENT_COLUNAS).map(([k, c]) => {
+      const on = cols.includes(k);
+      return `<button onclick="alternarRentColuna('${k}')" title="${c.ajuda||c.label}" class="px-2.5 py-1 rounded-lg text-[11px] font-medium border ${on?'bg-emerald-600 text-white border-emerald-600':'bg-white text-stone-500 border-stone-200 hover:bg-stone-50'}">${on?'✓ ':''}${c.label}</button>`;
     }).join('');
   }
 
-  // Produto sem custo de receita lançado não some da tela: ele é justamente o que precisa de ação.
-  semCustoEl.innerHTML = perf.semCusto.length === 0 ? '' :
-    `<div class="mt-3 pt-3 border-t border-stone-100">
-      <p class="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-        <strong>${perf.semCusto.length} produto(s) vendido(s) sem custo de receita lançado</strong> — não dá pra calcular lucro nem margem deles, e por isso ficam de fora do ranking e das somas acima:
-        ${perf.semCusto.map(r => `${r.name} (${fmtCurrency(r.revenue)})`).join(', ')}.
-        Lance o custo dos insumos em Estoque &amp; Custos → Preço Médio pra eles entrarem.
-      </p>
-    </div>`;
+  // ---- Tabela ----
+  if (linhas.length === 0) {
+    tabela.innerHTML = '<tbody><tr><td class="text-stone-400 text-center py-8 text-sm">Nenhum produto vendido com esses filtros</td></tr></tbody>';
+  } else {
+    const seta = k => rentSort === k ? (rentSortDir < 0 ? ' ↓' : ' ↑') : '';
+    const th = (k, texto, extra) => `<th onclick="ordenarRentabilidade('${k}')" class="px-2 py-2 text-right font-semibold text-[10px] uppercase tracking-wide cursor-pointer select-none whitespace-nowrap ${rentSort===k?'text-stone-800':'text-stone-400'} hover:text-stone-700 ${extra||''}">${texto}${seta(k)}</th>`;
+    const cabecalho = `<thead class="bg-stone-50 border-b border-stone-100"><tr>
+      <th onclick="ordenarRentabilidade('name')" class="px-3 py-2 text-left font-semibold text-[10px] uppercase tracking-wide cursor-pointer select-none sticky left-0 bg-stone-50 ${rentSort==='name'?'text-stone-800':'text-stone-400'} hover:text-stone-700">Produto${seta('name')}</th>
+      ${cols.map(k => th(k, RENT_COLUNAS[k].curto)).join('')}
+    </tr></thead>`;
+    const corpo = `<tbody>${linhas.map(r => {
+      const alerta = r.cmvVsAlvo > 0.05;
+      return `<tr class="border-b border-stone-50 last:border-b-0 hover:bg-stone-50">
+        <td class="px-3 py-2 sticky left-0 bg-white">
+          <p class="text-sm text-stone-800 font-medium truncate max-w-[180px]">${r.name}</p>
+          <p class="text-[10px] text-stone-400">${r.category}${alerta?` · <span class="text-red-600 font-semibold">${r.cmvVsAlvo.toFixed(1)} pts acima do alvo</span>`:''}</p>
+        </td>
+        ${cols.map(k => { const c = RENT_COLUNAS[k];
+          return `<td class="px-2 py-2 text-right whitespace-nowrap text-xs font-semibold ${c.cor?c.cor(r):'text-stone-700'}">${c.fmt(r)}</td>`; }).join('')}
+      </tr>`;
+    }).join('')}</tbody>`;
+    tabela.innerHTML = cabecalho + corpo;
+  }
+
+  // Produto vendido sem custo lançado é o que mais pede ação — não pode sumir da tela.
+  const semEl = document.getElementById('rent-sem-custo');
+  semEl.innerHTML = perf.semCusto.length === 0 ? '' :
+    `<p class="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+      <strong>${perf.semCusto.length} produto(s) vendido(s) sem custo de receita lançado</strong> — sem custo não há lucro nem margem pra calcular, então eles ficam de fora da tabela e das somas:
+      ${perf.semCusto.map(r => `${r.name} (${fmtCurrency(r.revenue)})`).join(', ')}.
+      Lance o custo dos insumos em Estoque &amp; Custos → Preço Médio.</p>`;
   lucide.createIcons();
 }
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.rent-filter'); if (!btn) return;
+  rentFilter = btn.dataset.filter;
+  if (rentFilter === 'custom' && !rentCustomFrom) {
+    const r = faturamentoRangeForFilter('30days');
+    document.getElementById('rent-date-from').value = localDateStr(r.start);
+    document.getElementById('rent-date-to').value = localDateStr(r.end);
+  }
+  renderRentabilidade();
+});
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.rent-cmv-preset'); if (!btn) return;
+  rentCmvAlvo = Number(btn.dataset.alvo);
+  const el = document.getElementById('rent-cmv-alvo'); if (el) el.value = String(rentCmvAlvo);
+  renderRentabilidade();
+});
 function renderFaturamentoCategoryProfit(entries) {
   const el = document.getElementById('fat-category-profit-content'); if (!el) return;
   if (entries.length === 0) { el.innerHTML = '<p class="text-stone-400 text-center py-4 text-sm">Sem vendas no período</p>'; return; }
@@ -8678,6 +8865,7 @@ async function confirmChangeSaleDate() {
     hideLoadingProgress();
     renderSalesToday();
     if (activeFinanceTab === 'faturamento') renderFaturamento();
+  if (activeFinanceTab === 'rentabilidade') renderRentabilidade();
     if (activeFinanceTab === 'dre') renderDRE();
     showToast(matched.length > 0 ? `Data alterada — ${matched.length} lançamento(s) de faturamento movido(s) junto!` : 'Data da venda alterada!');
   } catch (err) {
@@ -8968,6 +9156,7 @@ function renderFinanceiro() {
     if (activeFinanceTab === 'analises') renderAnalises();
     if (activeFinanceTab === 'vendas') { renderSalesSelect(); renderSalesToday(); renderPendingEvents(); if (currentSalesMode==='bulk') { initBulkSalesDate(); } }
     if (activeFinanceTab === 'faturamento') renderFaturamento();
+  if (activeFinanceTab === 'rentabilidade') renderRentabilidade();
     if (activeFinanceTab === 'dre') renderDRE();
     if (activeFinanceTab === 'despesas') renderExpenses();
     if (activeFinanceTab === 'config-gastos') { renderConfigTab(); }
