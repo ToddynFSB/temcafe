@@ -2686,7 +2686,23 @@ async function sbAplicar(ops, espelho = false) {
         continue;
       }
     }
-    if (!linhas.length && kind !== 'ajuste') {
+    // Nem todo movimento sem linha é defeito. Insumo com "controla estoque" desligado NUNCA gera
+    // linha do razão — é a regra logo acima, e é deliberada: o saldo dele é declaradamente sem valor.
+    // Numa compra em que TODOS os itens são desses (material de limpeza, descartáveis), o movimento
+    // chega legitimamente vazio, e recusá-lo apagava do Supabase uma compra que existe de verdade e
+    // que vira DESPESA no DRE.
+    //
+    // A checagem é estrita de propósito: só passa se todo item for um produto CADASTRADO e com o
+    // controle desligado. Item que não casa com produto nenhum mantém a recusa — é o caso da venda
+    // que deveria ter baixado estoque e não baixou, que é justamente o que esta guarda existe para
+    // pegar (caso 4 do escrita-razao-de-estoque.js e caso 11 do movimentos-em-duas-chamadas.js).
+    const semControlePorNatureza = itens.length > 0 && itens.every(it => {
+      if (!it || !it.name) return false;
+      const p = getProducts().find(x => namesMatch(x.product_name, it.name))
+             || getFinishedProducts().find(x => namesMatch(x.product_name, it.name));
+      return !!p && p.recipe_type === 'sem_controle_estoque';
+    });
+    if (!linhas.length && kind !== 'ajuste' && !semControlePorNatureza) {
       resultados[cab.i] = { ok: false, error: `${d.movement_type}: nenhuma alteração de saldo acompanhou o movimento — nada foi gravado` };
       continue;
     }
@@ -3112,6 +3128,7 @@ function createStockLedger() {
   const linhas = [];      // rastro uniforme: { name, qty, unit, storageQty, productId, tracked }
   const faltas = [];      // avisos de saldo insuficiente (não travam nada)
   const erros = [];       // insumo não encontrado / unidade inconvertível
+  const correcoes = [];   // saldos negativos zerados: { productId, produto, name, unit, de, para, delta }
   function resolve(name) {
     return getProducts().find(p => namesMatch(p.product_name, name))
         || getFinishedProducts().find(p => namesMatch(p.product_name, name))
@@ -3149,9 +3166,33 @@ function createStockLedger() {
     const tracked = productControlsStock(p);
     if (tracked) {
       const antes = currentQty(p);
-      const depois = antes + sinal * storageQty;
-      if (sinal < 0 && depois < 0) {
-        faltas.push(`${p.product_name}: saldo ficou ${fmtQty(depois, su)} ${su} (tinha ${fmtQty(antes, su)}, saiu ${fmtQty(storageQty, su)})${contexto?` — ${contexto}`:''}`);
+      // SALDO NEGATIVO NÃO É DÍVIDA. Um saldo abaixo de zero é erro de contagem, não um débito a
+      // ser quitado pela próxima produção. Antes, produzir 6 de um item que estava em -1 resultava
+      // em 5: a produção real era comida por um engano de lançamento, em silêncio.
+      // Partindo de `base`, produzir 6 dá 6, e consumir de quem já está zerado continua zerado.
+      const base = Math.max(0, antes);
+      const bruto = antes + sinal * storageQty;      // o que a conta daria sem trava
+      const depois = Math.max(0, base + sinal * storageQty);
+      if (sinal < 0 && base + sinal * storageQty < 0) {
+        faltas.push(`${p.product_name}: saiu mais do que havia (tinha ${fmtQty(base, su)} ${su}, saiu ${fmtQty(storageQty, su)}) — saldo zerado${contexto?` — ${contexto}`:''}`);
+      }
+      // O aviso do crédito sobre saldo negativo entra na MESMA lista que todas as telas já exibem,
+      // então ele aparece sem precisar mexer em nenhum dos 8 modais que leem `faltas`.
+      if (sinal > 0 && antes < 0) {
+        faltas.push(`${p.product_name}: o saldo estava ${fmtQty(antes, su)} ${su} (erro de contagem) e foi zerado antes de creditar — a quantidade produzida entrou inteira, sem ser abatida`);
+      }
+      // A diferença entre o saldo travado e o que a conta crua daria é exatamente o quanto o saldo
+      // era impossível. Isso NÃO pode ficar só no número: neste sistema o saldo é a soma do
+      // histórico, e a Conferência de Saldo o reconstrói a partir de batch_items/movement_quantity.
+      // Travar sem registrar faria o saldo deixar de ser explicado pelo histórico — a invariante que
+      // este modelo inteiro existe para manter. Por isso a diferença vira um ajuste de verdade,
+      // gravado antes da operação por commitCorrections().
+      const correcao = depois - bruto;
+      if (Math.abs(correcao) > 1e-9) {
+        const jaTem = correcoes.find(c => c.productId === p.id);
+        if (jaTem) { jaTem.delta += correcao; jaTem.para = depois; }
+        else correcoes.push({ productId: p.id, produto: p, name: p.product_name, unit: su,
+                              de: antes, para: depois, delta: correcao, contexto });
       }
       saldo[p.id] = depois;
       alterados[p.id] = { ...p, quantity: depois };
@@ -3179,9 +3220,36 @@ function createStockLedger() {
     // Uma operação de update POR PRODUTO, com o saldo final acumulado — mesmo que ele apareça em
     // vários itens da mesma venda (leite no cappuccino E no chocolate quente).
     operations() { return Object.values(alterados).map(data => ({ op:'update', data })); },
+    // Grava os saldos negativos que foram zerados, ANTES da operação que os encontrou.
+    //
+    // Por que numa gravação separada, e não no mesmo lote: o adaptador do Supabase atribui cada linha
+    // do razão ao movimento do lote que NOMEIA aquele produto. Correção e produção nomeiam o mesmo
+    // produto, então dois cabeçalhos no mesmo lote brigariam pela mesma linha — o primeiro levaria, e
+    // o segundo seria recusado por "nenhuma alteração de saldo acompanhou o movimento".
+    //
+    // Por que ANTES: se a correção falhar, nada mais acontece e o saldo continua como estava. Se
+    // fosse depois, a produção já teria gravado um saldo que o histórico não explica.
+    //
+    // ajuste_manual porque é exatamente isso — e porque a Conferência de Saldo já sabe lê-lo: para
+    // esse tipo ela usa movement_quantity COM SINAL, que é o formato do delta da correção.
+    async commitCorrections() {
+      if (!correcoes.length) return { isOk: true, corrigidos: [] };
+      const ops = [];
+      correcoes.forEach(c => {
+        ops.push({ op:'update', data: { ...c.produto, quantity: 0 } });
+        ops.push({ op:'create', data: { ...blankRecord(), type:'movement', movement_type:'ajuste_manual',
+          movement_product: c.name, movement_quantity: c.delta, movement_date: new Date().toISOString(),
+          movement_note: `Correção de saldo negativo: ${c.name} estava ${fmtQty(c.de, c.unit)} ${c.unit} e foi zerado${c.contexto?` antes de ${c.contexto}`:''}. Saldo negativo é erro de contagem, não desconto de produção futura.`,
+          batch_items: JSON.stringify([{ name: c.name, qty: c.delta, unit: c.unit, storageQty: c.delta, productId: c.productId }]) } });
+      });
+      const r = await dbBatchWrite(ops, { silent: true });
+      if (!r.isOk) return { isOk: false, error: r.error || 'falha ao corrigir saldo negativo', corrigidos: [] };
+      return { isOk: true, corrigidos: correcoes.map(c => `${c.name}: ${fmtQty(c.de, c.unit)} → 0 ${c.unit}`) };
+    },
     get linhas() { return linhas; },
     get faltas() { return faltas; },
     get erros() { return erros; },
+    get correcoes() { return correcoes; },
   };
 }
 
@@ -3662,6 +3730,8 @@ async function confirmInsumoProduction(recipe, times, realYieldOverride) {
 
   const ingNote = consumidos.map(c=>`${fmtQty(c.qty,c.unit)} ${c.unit} ${c.name}`).join(', ');
   const lossNote = hasLoss && yieldQty < expectedYield ? ` ⚠️ Perda na produção: esperado ${fmtQty(expectedYield,target.unit)} ${target.unit}, rendeu ${fmtQty(yieldQty,target.unit)} ${target.unit}.` : '';
+  const corr = await ledger.commitCorrections();
+  if (!corr.isOk) return { ok:false, error: corr.error };
   const operations = [
     ...ledger.operations(),
     { op:'create', data: buildProductionMovement({ recipe, target, times, yieldQty, consumidos, note:`Produção: ${fmtQty(yieldQty,target.unit)} ${target.unit} de ${target.product_name} (${fmtQty(times,'')}× receita).${lossNote} Insumos: ${ingNote}` }) },
@@ -4506,6 +4576,8 @@ async function confirmManualExit() {
     if (ledger.erros.length) throw new Error(ledger.erros.join('; '));
     const allExitData = [...insumoEntries, ...vendaDiretaExitData];
     const itemList = allExitData.map(e => e.value ? `${fmtQty(e.qty,'')} ${e.name} (venda direta)` : `${fmtQty(e.qty,e.unit)} ${e.unit} ${e.name}`).join('; ');
+    const corr = await ledger.commitCorrections();
+    if (!corr.isOk) throw new Error(corr.error);
     const operations = [
       ...ledger.operations(),
       { op:'create', data: { ...blankRecord(), type:'movement', movement_type:'saida_manual', movement_product:itemList, movement_quantity:allExitData.length, movement_date:exitDate.toISOString(), movement_note:reason?`Saída Manual: ${itemList} (${reason})`:`Saída Manual: ${itemList}`, batch_items:JSON.stringify(allExitData) } },
@@ -5101,6 +5173,8 @@ async function processFinalization(prod, times, realYield) {
     const ledger = createStockLedger();
     const consumidos = ledger.consumeRecipe(fonte, times, `produção de ${fmtQty(times,'')}× ${fonte.recipe_name}`);
     if (ledger.erros.length) throw new Error(ledger.erros.join('; '));
+    const corr = await ledger.commitCorrections();
+    if (!corr.isOk) throw new Error(corr.error);
     const operations = [...ledger.operations()];
 
     // Produto pronto que ainda não existe precisa ser criado com o rendimento; os demais são creditados
@@ -5110,6 +5184,11 @@ async function processFinalization(prod, times, realYield) {
     } else {
       const credito = createStockLedger();
       credito.credit(target.product_name, realYield, null, `produção de ${target.product_name}`);
+      // Este é o ledger que CREDITA o produzido — é exatamente aqui que um saldo negativo comeria
+      // parte da produção. A correção dele tem de ser gravada como a do consumo.
+      const corrCredito = await credito.commitCorrections();
+      if (!corrCredito.isOk) throw new Error(corrCredito.error);
+      credito.faltas.forEach(f => ledger.faltas.push(f));
       operations.push(...credito.operations());
     }
 
@@ -5405,6 +5484,7 @@ async function confirmSales() {
     operations.push(...ledger.operations());
     stockShortfalls.push(...ledger.faltas);
     if (ledger.erros.length) throw new Error(ledger.erros.join('; '));
+    { const corr = await ledger.commitCorrections(); if (!corr.isOk) throw new Error(corr.error); }
 
     // O registro da venda entra NO MESMO PACOTE dos descontos — ou os dois são gravados juntos, ou
     // nenhum é (mesma garantia que a Venda em Lote já tem — antes, a Venda Manual gravava cada
@@ -5995,6 +6075,7 @@ async function processBulkSales(priceHints, prebuiltSalesData) {
     operations.push(...ledger.operations());
     stockShortfalls.push(...ledger.faltas);
     if (ledger.erros.length) throw new Error(ledger.erros.join('; '));
+    { const corr = await ledger.commitCorrections(); if (!corr.isOk) throw new Error(corr.error); }
 
     // O registro da venda entra NO MESMO PACOTE dos descontos — ou os dois são gravados juntos,
     // ou nenhum é. É isso que garante que o estoque nunca muda sem deixar rastro no Histórico.
@@ -6117,6 +6198,7 @@ async function handleRegisterLoss(e) {
     // buscar a unidade no batch_items pra interpretar o número. Agora todo movimento guarda a
     // quantidade na unidade de estoque, que é a regra única do razão.
     const linha = ledger.linhas[0];
+    { const corr = await ledger.commitCorrections(); if (!corr.isOk) throw new Error(corr.error); }
     const operations = [
       ...ledger.operations(),
       { op:'create', data: { ...blankRecord(), type:'movement', movement_type:'perda', movement_product:product.product_name, movement_quantity:linha ? linha.storageQty : storageQty, movement_date:new Date().toISOString(), movement_note:reason?`Perda: ${fmtQty(qty,unit)} ${unit} ${product.product_name} (${reason})`:`Perda: ${fmtQty(qty,unit)} ${unit} ${product.product_name}`, loss_reason:reason, loss_type:'product', batch_items:JSON.stringify([{ name:product.product_name, qty:linha?linha.storageQty:storageQty, unit:baseUnit, storageQty:linha?linha.storageQty:storageQty }]) } },
@@ -6370,6 +6452,7 @@ async function confirmCancelProduction() {
     if (target) ledger.consume(target.product_name, creditedQty, null, `remoção do crédito de ${target.product_name}`);
     if (ledger.erros.length) throw new Error(ledger.erros.join('; '));
     const itemsNote = items.map(it=>`${fmtQty(it.qty,it.unit)} ${it.unit} ${it.name}`).join(', ') || 'nenhum insumo detalhado';
+    { const corr = await ledger.commitCorrections(); if (!corr.isOk) throw new Error(corr.error); }
     const operations = [
       ...ledger.operations(),
       // Marca a movimentação original como cancelada (mantém no histórico, só sinaliza)
@@ -6803,6 +6886,7 @@ async function confirmUndoMovement() {
       // simplesmente não devolver a quantidade sem ninguém perceber.
       if (!linha) notFoundItems.push(`${fmtQty(it.qty,it.unit)} ${it.unit} ${it.name}`);
     });
+    { const corr = await ledger.commitCorrections(); if (!corr.isOk) throw new Error(corr.error); }
     const stockOps = ledger.operations();
     if (stockOps.length) {
       const r = await dbBatchWrite(stockOps, {silent:true});
@@ -8508,6 +8592,7 @@ async function confirmRetroactiveStockDeduction() {
     const stockShortfalls = ledger.faltas.slice();
     if (ledger.erros.length) throw new Error(ledger.erros.join('; '));
     updateLoadingProgress('Aplicando a baixa no estoque...');
+    { const corr = await ledger.commitCorrections(); if (!corr.isOk) throw new Error(corr.error); }
     const stockOps = ledger.operations();
     if (stockOps.length) {
       const r = await dbBatchWrite(stockOps, {silent:true});
