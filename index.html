@@ -124,6 +124,7 @@
     <button class="tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-tab="perdas"><i data-lucide="trash-2" class="w-5 h-5"></i>Perdas</button>
     <button class="tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-tab="consumo"><span class="text-lg leading-none">📊</span>Consumo</button>
     <button class="tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-tab="historico"><i data-lucide="history" class="w-5 h-5"></i>Histórico</button>
+    <button class="tab-btn relative px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-tab="eventos"><i data-lucide="party-popper" class="w-5 h-5"></i>Eventos<span id="eventos-badge" class="hidden absolute top-1 right-1 min-w-[16px] h-4 px-1 rounded-full bg-amber-500 text-white text-[9px] font-bold flex items-center justify-center"></span></button>
   </div>
 </nav>
 
@@ -581,6 +582,50 @@
     <div id="history-list" class="space-y-2"></div>
   </section>
 
+  <!-- EVENTOS -->
+  <!-- Saiu de Financeiro > Vendas > modo "Eventos", onde estava três níveis abaixo e atrás da senha.
+       Evento não é venda de balcão, e quem opera a baixa de estoque precisa alcançar a lista.
+       A IDENTIDADE do evento (nome, data) aparece sem senha; DINHEIRO continua só destravando —
+       é a mesma regra do resto do sistema, e vale inclusive quando o Supabase virar a fonte. -->
+  <section id="panel-eventos" class="hidden fade-in">
+    <h2 class="text-lg font-bold text-stone-800 mb-1 flex items-center gap-2"><i data-lucide="party-popper" class="w-5 h-5 text-amber-600"></i>Eventos</h2>
+    <p class="text-xs text-stone-400 mb-4">Open Wine, jantares, workshops, brunchs. O estoque sai pela Saída Manual com motivo "Uso em Evento"; aqui entram os custos extras, o valor cobrado e o resultado de cada um.</p>
+
+    <!-- Sem senha: só nome, data e quantos itens saíram. Nenhum valor. -->
+    <div id="eventos-bloqueado" class="hidden">
+      <div class="bg-white rounded-xl p-5 shadow-sm border border-stone-100 mb-4">
+        <div class="flex items-start justify-between gap-3 flex-wrap">
+          <div class="min-w-0">
+            <p class="text-sm font-semibold text-stone-800">Valores estão protegidos</p>
+            <p class="text-xs text-stone-500 mt-0.5">Faturamento, custo e margem só aparecem com a senha do financeiro. A lista abaixo mostra os eventos e as datas.</p>
+          </div>
+          <button onclick="goToFinanceiroFromEventos()" class="btn-primary px-4 py-2.5 rounded-lg text-xs font-medium flex-shrink-0 flex items-center gap-1.5"><i data-lucide="unlock" class="w-3.5 h-3.5"></i>Destravar para ver valores</button>
+        </div>
+      </div>
+      <div class="bg-white rounded-xl p-5 shadow-sm border border-stone-100">
+        <h3 class="font-semibold mb-3 text-stone-800 text-sm">Eventos com saída de estoque registrada</h3>
+        <div id="eventos-lista-simples" class="space-y-2"></div>
+        <p id="eventos-lista-simples-empty" class="hidden text-stone-400 text-center py-6 text-sm">Nenhum evento ainda. Registre uma Saída Manual com motivo "Uso em Evento" pra começar um.</p>
+      </div>
+    </div>
+
+    <!-- Com senha: exatamente a tela que já existia, sem mudança de modelo. -->
+    <div id="eventos-desbloqueado" class="hidden">
+      <div class="bg-white rounded-xl p-5 shadow-sm border border-stone-100 mb-5">
+        <h3 class="font-semibold mb-1 text-stone-800 text-sm flex items-center gap-2"><i data-lucide="party-popper" class="w-4 h-4 text-amber-600"></i>Eventos Pendentes de Faturamento</h3>
+        <p class="text-xs text-stone-400 mb-4">Estoque já baixado (Saída Manual, motivo Uso em Evento) — some o custo automático do estoque, adicione custos extras (decoração, etc.) e lance o valor cobrado pra fechar o lucro do evento. Entra no DRE separado do faturamento do dia a dia.</p>
+        <div id="pending-events-list" class="space-y-4"></div>
+        <p id="pending-events-empty" class="hidden text-stone-400 text-center py-6 text-sm">Nenhum evento pendente. Registre uma Saída Manual com motivo "Uso em Evento" pra começar um.</p>
+      </div>
+      <div class="bg-white rounded-xl p-5 shadow-sm border border-stone-100 mb-5">
+        <h3 class="font-semibold mb-1 text-stone-800 text-sm flex items-center gap-2"><i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-600"></i>Histórico de Eventos</h3>
+        <p class="text-xs text-stone-400 mb-4">Eventos já com faturamento lançado, com o lucro final de cada um.</p>
+        <div id="priced-events-list" class="space-y-2"></div>
+        <p id="priced-events-empty" class="hidden text-stone-400 text-center py-6 text-sm">Nenhum evento faturado ainda</p>
+      </div>
+    </div>
+  </section>
+
   <!-- fim dos painéis do estoque -->
 
 </div><!-- /estoque-panels -->
@@ -734,7 +779,6 @@
       <div class="flex gap-2 mb-4">
         <button id="sales-mode-manual-btn" class="sales-mode-btn px-4 py-2 rounded-lg text-sm font-medium bg-emerald-700 text-white" data-mode="manual">Venda Manual</button>
         <button id="sales-mode-bulk-btn" class="sales-mode-btn px-4 py-2 rounded-lg text-sm font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-mode="bulk">Vendas em Lote</button>
-        <button id="sales-mode-events-btn" class="sales-mode-btn px-4 py-2 rounded-lg text-sm font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-mode="events">🎉 Eventos</button>
       </div>
       <div class="bg-white rounded-xl p-5 shadow-sm border border-stone-100 mb-5" id="sales-manual-section">
         <h3 class="font-semibold mb-4 text-stone-800 text-sm">Registrar Vendas</h3>
@@ -797,20 +841,6 @@
         <div id="bulk-sales-feedback" class="hidden p-4 rounded-lg border"><p class="text-xs font-semibold mb-2" id="bulk-feedback-title"></p><div id="bulk-feedback-content" class="space-y-1 text-xs"></div></div>
       </div>
 
-      <div class="hidden" id="sales-events-section">
-        <div class="bg-white rounded-xl p-5 shadow-sm border border-stone-100 mb-5">
-          <h3 class="font-semibold mb-1 text-stone-800 text-sm flex items-center gap-2"><i data-lucide="party-popper" class="w-4 h-4 text-amber-600"></i>Eventos Pendentes de Faturamento</h3>
-          <p class="text-xs text-stone-400 mb-4">Estoque já baixado (Saída Manual, motivo Uso em Evento) — some o custo automático do estoque, adicione custos extras (decoração, etc.) e lance o valor cobrado pra fechar o lucro do evento. Entra no DRE separado do faturamento do dia a dia.</p>
-          <div id="pending-events-list" class="space-y-4"></div>
-          <p id="pending-events-empty" class="hidden text-stone-400 text-center py-6 text-sm">Nenhum evento pendente. Registre uma Saída Manual com motivo "Uso em Evento" pra começar um.</p>
-        </div>
-        <div class="bg-white rounded-xl p-5 shadow-sm border border-stone-100 mb-5">
-          <h3 class="font-semibold mb-1 text-stone-800 text-sm flex items-center gap-2"><i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-600"></i>Histórico de Eventos</h3>
-          <p class="text-xs text-stone-400 mb-4">Eventos já com faturamento lançado, com o lucro final de cada um.</p>
-          <div id="priced-events-list" class="space-y-2"></div>
-          <p id="priced-events-empty" class="hidden text-stone-400 text-center py-6 text-sm">Nenhum evento faturado ainda</p>
-        </div>
-      </div>
 
       <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
         <h3 class="font-semibold text-stone-800 text-sm">Histórico de Vendas</h3>
@@ -3556,6 +3586,7 @@ document.getElementById('tab-nav').addEventListener('click', (e) => {
   document.querySelectorAll('[id^="panel-"]').forEach(p => p.classList.add('hidden'));
   const panel = document.getElementById('panel-' + currentTab);
   if (panel) panel.classList.remove('hidden');
+  if (currentTab === 'eventos') renderEventos();
 });
 // Atalho usado pelas listas locais (Entradas/Saídas/Perdas) — em vez de manter uma lista completa
 // duplicada em cada tela, mostram só os últimos lançamentos e linkam pro Histórico central já
@@ -3599,6 +3630,8 @@ function renderAll() {
   renderConsumption();
   renderAvisos();
   renderStockAlertBadge();
+  renderEventos();
+  renderEventosBadge();
   lucide.createIcons();
 }
 
@@ -5372,9 +5405,7 @@ document.addEventListener('click', (e) => {
   document.querySelectorAll('.sales-mode-btn').forEach(b => { b.className = `sales-mode-btn px-4 py-2 rounded-lg text-sm font-medium ${b.dataset.mode===currentSalesMode?'bg-emerald-700 text-white':'bg-stone-100 text-stone-600 hover:bg-stone-200'}`; });
   document.getElementById('sales-manual-section').classList.toggle('hidden', currentSalesMode !== 'manual');
   document.getElementById('sales-bulk-section').classList.toggle('hidden', currentSalesMode !== 'bulk');
-  document.getElementById('sales-events-section').classList.toggle('hidden', currentSalesMode !== 'events');
   if (currentSalesMode === 'bulk') { initBulkSalesDate(); }
-  if (currentSalesMode === 'events') { renderPendingEvents(); }
 });
 document.addEventListener('click', (e) => {
   const btn = e.target.closest('.expense-mode-btn'); if (!btn) return;
@@ -5632,6 +5663,68 @@ function renderPendingEvents() {
   renderPricedEvents();
   lucide.createIcons();
 }
+// ============================================================
+// ABA EVENTOS
+// ============================================================
+// A tela vive fora do Financeiro porque quem opera a baixa de estoque precisa alcançar a lista sem
+// senha. Mas dinheiro continua protegido: sem sessão, esta aba mostra só nome, data e quantos itens
+// saíram. Nenhum valor é calculado no caminho bloqueado — não é campo escondido com CSS, é conta que
+// não acontece, então não há nada pra vazar no HTML.
+//
+// PARTE 1 do desenho em ARQUITETURA-EVENTOS.md: só mudança de lugar. O modelo continua o de hoje
+// (um evento = uma saída manual, identificado por movement_id). A identidade própria do evento, as
+// compras exclusivas e o detalhamento por categoria são as partes 2 e 3.
+function getEventosSemValores() {
+  const vistos = new Map();
+  getMovements().filter(m => m.movement_type === 'saida_manual').forEach(m => {
+    let items = []; try { items = JSON.parse(m.batch_items || '[]'); } catch(e) {}
+    const doEvento = items.filter(it => it && it.reason === 'uso_evento');
+    if (!doEvento.length) return;
+    const nome = doEvento.find(it => it.eventName)?.eventName || 'Evento sem nome';
+    vistos.set(m.id, { movementId: m.id, date: m.movement_date, eventName: nome, itemsCount: doEvento.length });
+  });
+  return [...vistos.values()].sort((a,b) => new Date(b.date) - new Date(a.date));
+}
+function renderEventos() {
+  const bloqueado = document.getElementById('eventos-bloqueado');
+  const desbloqueado = document.getElementById('eventos-desbloqueado');
+  if (!bloqueado || !desbloqueado) return;
+  bloqueado.classList.toggle('hidden', financeUnlocked);
+  desbloqueado.classList.toggle('hidden', !financeUnlocked);
+  if (financeUnlocked) { renderPendingEvents(); return; }
+
+  // ESVAZIA de verdade, não só esconde. Depois de destravar e trancar de novo, o HTML com faturamento
+  // e lucro continuava dentro da div oculta — bastava inspecionar o elemento pra ler tudo. Esconder
+  // com CSS não é proteger; a partir daqui não existe valor nenhum no documento.
+  document.getElementById('pending-events-list').innerHTML = '';
+  document.getElementById('priced-events-list').innerHTML = '';
+
+  const eventos = getEventosSemValores();
+  document.getElementById('eventos-lista-simples-empty')?.classList.toggle('hidden', eventos.length > 0);
+  document.getElementById('eventos-lista-simples').innerHTML = eventos.map(ev => {
+    const d = new Date(ev.date);
+    return `<div class="flex justify-between items-center gap-2 p-3 rounded-lg border border-stone-200 bg-white">
+      <div class="min-w-0">
+        <p class="text-sm font-medium text-stone-800 truncate">${ev.eventName}</p>
+        <p class="text-xs text-stone-400">${d.toLocaleDateString('pt-BR')} · ${ev.itemsCount} item(ns) de estoque</p>
+      </div>
+      <span class="text-xs text-stone-400 flex-shrink-0">valores protegidos</span>
+    </div>`;
+  }).join('');
+  lucide.createIcons();
+}
+// Contador de eventos que ainda não foram faturados. Sem senha não dá pra saber quais já fecharam
+// (isso mora no financeiro), então o badge só aparece com o financeiro aberto — melhor não mostrar
+// número nenhum do que mostrar um número errado.
+function renderEventosBadge() {
+  const b = document.getElementById('eventos-badge'); if (!b) return;
+  const n = financeUnlocked ? getPendingEvents().length : 0;
+  b.textContent = n > 99 ? '99+' : n;
+  b.classList.toggle('hidden', n === 0);
+}
+function goToFinanceiroFromEventos() {
+  gotoFinanceiro();   // cai na tela de senha; depois de destravar, volte em Eventos
+}
 function renderPricedEvents() {
   const el = document.getElementById('priced-events-list');
   if (!el) return;
@@ -5662,7 +5755,8 @@ async function handleAddEventExtraCost(movementId, idx) {
     financeData.push({ id:r.id, ...payload });
     hideLoadingProgress();
     showToast('Custo extra adicionado!');
-    renderPendingEvents();
+    renderEventos();
+    renderEventosBadge();
     if (activeFinanceTab === 'dre') renderDRE();
   } catch (err) {
     hideLoadingProgress();
@@ -5690,7 +5784,8 @@ async function handleAddEventRevenue(movementId, idx) {
     financeData.push({ id:r.id, ...payload });
     hideLoadingProgress();
     showToast('Faturamento do evento lançado!');
-    renderPendingEvents();
+    renderEventos();
+    renderEventosBadge();
     if (activeFinanceTab === 'dre') renderDRE();
   } catch (err) {
     hideLoadingProgress();
@@ -7397,7 +7492,7 @@ async function confirmDelete() {
     const x = financeData.find(r => r.id === deleteId);
     if (x) {
       const result = await financeApiCall('delete', { id: x.id });
-      if (result.ok) { financeData = financeData.filter(r => r.id !== x.id); renderPendingEvents(); if (activeFinanceTab==='dre') renderDRE(); showToast('Custo extra excluído!'); }
+      if (result.ok) { financeData = financeData.filter(r => r.id !== x.id); renderEventos(); renderEventosBadge(); if (activeFinanceTab==='dre') renderDRE(); showToast('Custo extra excluído!'); }
       else showToast('Erro ao excluir', true);
     }
   } else if (deleteType === 'dre_group') {
@@ -7569,7 +7664,7 @@ document.addEventListener('click', (e) => {
   document.getElementById('fpanel-config-gastos').classList.toggle('hidden', activeFinanceTab!=='config-gastos');
   document.getElementById('fpanel-funcionarios').classList.toggle('hidden', activeFinanceTab!=='funcionarios');
   if (activeFinanceTab === 'analises') renderAnalises();
-  if (activeFinanceTab === 'vendas') { renderSalesSelect(); renderSalesToday(); renderPendingEvents(); if (currentSalesMode==='bulk') { initBulkSalesDate(); } }
+  if (activeFinanceTab === 'vendas') { renderSalesSelect(); renderSalesToday(); if (currentSalesMode==='bulk') { initBulkSalesDate(); } }
   if (activeFinanceTab === 'faturamento') renderFaturamento();
   if (activeFinanceTab === 'rentabilidade') renderRentabilidade();
   if (activeFinanceTab === 'dre') renderDRE();
@@ -8984,7 +9079,7 @@ function renderFinanceiro() {
   if (financeUnlocked) {
     renderFinancePending(); renderStockCosts(); renderFinancePrecos(); renderFinanceCMV();
     if (activeFinanceTab === 'analises') renderAnalises();
-    if (activeFinanceTab === 'vendas') { renderSalesSelect(); renderSalesToday(); renderPendingEvents(); if (currentSalesMode==='bulk') { initBulkSalesDate(); } }
+    if (activeFinanceTab === 'vendas') { renderSalesSelect(); renderSalesToday(); if (currentSalesMode==='bulk') { initBulkSalesDate(); } }
     if (activeFinanceTab === 'faturamento') renderFaturamento();
   if (activeFinanceTab === 'rentabilidade') renderRentabilidade();
     if (activeFinanceTab === 'dre') renderDRE();
@@ -9019,6 +9114,9 @@ async function unlockFinanceiro() {
     hideLoadingProgress();
     document.getElementById('finance-password-input').value = '';
     activeFinanceTab = 'analises';
+    // A aba Eventos vive fora do Financeiro e muda de cara quando ele destrava.
+    renderEventos();
+    renderEventosBadge();
     renderFinanceiro();
   } catch (err) {
     hideLoadingProgress();
@@ -9033,6 +9131,10 @@ function lockFinanceiro() {
   // Sem isto o "sair" limparia a tela mas a sessão continuaria válida, e o financeiro seguiria legível
   // pela API. Trancar de verdade é encerrar a sessão no servidor, não esconder a interface.
   if (USE_SUPABASE) sb().then(c => c.auth.signOut()).catch(e => console.error('signOut falhou:', e));
+  // A aba Eventos fica fora do Financeiro, então trancar aqui tem de apagar os valores lá também —
+  // senão o lucro do último evento continuaria na tela depois de "sair".
+  renderEventos();
+  renderEventosBadge();
   renderFinanceiro();
 }
 function getFinanceCostedEntryIds() {
