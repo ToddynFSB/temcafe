@@ -287,7 +287,14 @@
       <p class="text-xs text-stone-500 -mt-3 mb-4">Use "Item de Venda Direta" pra retirar algo já pronto de uma receita (ex: um prato ou suco servido num evento) — desconta os insumos da receita, sem entrar no faturamento.</p>
       <div class="grid sm:grid-cols-2 gap-2 mb-4">
         <div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Motivo (vale pra todos os itens acima)</label><select id="manual-exit-motivo-global" class="input-field text-sm w-full" onchange="toggleManualExitEventName(this)"><option value="consumo_interno">Consumo Interno</option><option value="consumo_socios">Consumo dos Sócios</option><option value="uso_evento">Uso em Evento</option><option value="outros">Outros</option></select></div>
-        <div id="manual-exit-event-name-wrap" class="hidden"><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Nome do evento</label><input type="text" id="manual-exit-event-name" class="input-field text-sm w-full" placeholder="Ex: Aniversário Maria"></div>
+        <!-- Escolher da lista, e não digitar: nome livre fazia "Open Wine" e "Open wine" virarem dois
+             eventos, cada um com metade do custo. O "+ criar novo" existe pra não obrigar a sair da
+             tela no meio de uma baixa. -->
+        <div id="manual-exit-event-name-wrap" class="hidden">
+          <label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Evento</label>
+          <select id="manual-exit-event-select" class="input-field text-sm w-full" onchange="toggleNovoEventoNaSaida(this)"></select>
+          <input type="text" id="manual-exit-event-name" class="input-field text-sm w-full mt-1.5 hidden" placeholder="Nome do evento novo (ex: Open Wine Julho)">
+        </div>
       </div>
       <div class="grid sm:grid-cols-2 gap-2 mb-4">
         <div><label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Data da saída</label><input id="manual-exit-date" type="date" class="input-field text-sm w-full"></div>
@@ -591,7 +598,19 @@
     <h2 class="text-lg font-bold text-stone-800 mb-1 flex items-center gap-2"><i data-lucide="party-popper" class="w-5 h-5 text-amber-600"></i>Eventos</h2>
     <p class="text-xs text-stone-400 mb-4">Open Wine, jantares, workshops, brunchs. O estoque sai pela Saída Manual com motivo "Uso em Evento"; aqui entram os custos extras, o valor cobrado e o resultado de cada um.</p>
 
-    <!-- Sem senha: só nome, data e quantos itens saíram. Nenhum valor. -->
+    <!-- CADASTRO — vale nos dois estados. Criar evento não é operação de dinheiro: quem opera a
+         baixa de estoque precisa poder abrir "Open Wine Julho" sem pedir a senha a ninguém. -->
+    <div class="bg-white rounded-xl p-5 shadow-sm border border-stone-100 mb-4">
+      <h3 class="font-semibold mb-1 text-stone-800 text-sm">Novo evento</h3>
+      <p class="text-xs text-stone-400 mb-3">Crie o evento antes, e depois vá pendurando nele as baixas de estoque, os custos e o valor cobrado. Um evento aceita várias saídas de estoque.</p>
+      <div class="grid grid-cols-1 sm:grid-cols-[1fr_160px_auto] gap-2 items-end">
+        <div><label class="text-[10px] font-semibold text-stone-500 uppercase tracking-wide block mb-1">Nome</label><input id="novo-evento-nome" type="text" placeholder="Ex: Open Wine Julho" class="input-field text-sm w-full"></div>
+        <div><label class="text-[10px] font-semibold text-stone-500 uppercase tracking-wide block mb-1">Data</label><input id="novo-evento-data" type="date" class="input-field text-sm w-full"></div>
+        <button onclick="criarEvento()" class="btn-primary px-4 py-2.5 rounded-lg text-sm font-medium whitespace-nowrap">+ Criar evento</button>
+      </div>
+    </div>
+
+    <!-- Sem senha: nome, data, quantas baixas. Nenhum valor. -->
     <div id="eventos-bloqueado" class="hidden">
       <div class="bg-white rounded-xl p-5 shadow-sm border border-stone-100 mb-4">
         <div class="flex items-start justify-between gap-3 flex-wrap">
@@ -603,9 +622,9 @@
         </div>
       </div>
       <div class="bg-white rounded-xl p-5 shadow-sm border border-stone-100">
-        <h3 class="font-semibold mb-3 text-stone-800 text-sm">Eventos com saída de estoque registrada</h3>
+        <h3 class="font-semibold mb-3 text-stone-800 text-sm">Eventos</h3>
         <div id="eventos-lista-simples" class="space-y-2"></div>
-        <p id="eventos-lista-simples-empty" class="hidden text-stone-400 text-center py-6 text-sm">Nenhum evento ainda. Registre uma Saída Manual com motivo "Uso em Evento" pra começar um.</p>
+        <p id="eventos-lista-simples-empty" class="hidden text-stone-400 text-center py-6 text-sm">Nenhum evento ainda. Crie um acima, ou registre uma Saída Manual com motivo "Uso em Evento".</p>
       </div>
     </div>
 
@@ -2024,11 +2043,14 @@ function sbBool(v) { return v === true || v === 'true' || v === 'TRUE'; }
 // LEITURA — Supabase -> allData (formato da planilha)
 // ------------------------------------------------------------
 async function sbCarregarEstoque() {
-  const [prods, saldos, cats, convs, recs, ings, movs, linhas, ordens, cfgs] = await Promise.all([
+  // `events` entra aqui com a LISTA DE COLUNAS explícita, e isso não é estilo: a chave pública tem
+  // grant só em (id, movement_id, name, event_date, status). Um `select=*` pediria `revenue` junto e
+  // o Postgres recusaria a consulta inteira — a aba Estoque não abriria. Ver supabase-eventos-parte2.sql.
+  const [prods, saldos, cats, convs, recs, ings, movs, linhas, ordens, cfgs, eventos] = await Promise.all([
     sbAll('products'), sbAll('current_stock'), sbAll('product_categories'),
     sbAll('product_unit_conversions'), sbAll('recipes'), sbAll('recipe_ingredients'),
     sbAll('stock_movements'), sbAll('stock_movement_lines'), sbAll('production_orders'),
-    sbAll('app_settings'),
+    sbAll('app_settings'), sbAll('events', 'id,movement_id,name,event_date,status'),
   ]);
 
   const nomeDoProduto = new Map(prods.map(p => [p.id, p.name]));
@@ -2085,6 +2107,14 @@ async function sbCarregarEstoque() {
       recipe_ingredients: JSON.stringify(ingDaReceita[o.recipe_id] || []),
     });
   });
+
+  // IDENTIDADE do evento (nome, data, situação) — lado ABERTO, sem senha, porque quem faz a baixa de
+  // estoque escolhe o evento numa lista e opera sem login. O faturamento da MESMA linha vira um
+  // registro 'event_revenue' do lado do financeiro (sbCarregarFinanceiro), e é lá que ele fica
+  // protegido. Uma linha no banco, duas projeções com donos diferentes.
+  eventos.forEach(e => records.push({ ...blankRecord(), id: e.id, type: 'event',
+    product_name: e.name, movement_date: e.event_date || '',
+    recipe_type: e.status === 'fechado' ? 'fechado' : 'aberto' }));
 
   // Dois "registros" que na planilha moram na aba Estoque e aqui viraram chaves de app_settings.
   // `stock_baseline` era o marco da Conferência de Saldo; a tela saiu e a chave ficou órfã no banco —
@@ -2261,13 +2291,12 @@ async function sbCarregarFinanceiro() {
   // pendente na planilha era a AUSÊNCIA do registro — então aqui também não gera nada.
   eventos.forEach(e => {
     if (e.revenue === null || e.revenue === undefined) return;
-    records.push({ id: e.id, type: 'event_revenue', movement_id: e.movement_id || '',
+    records.push({ id: e.id, type: 'event_revenue', movement_id: e.id,
       product_name: e.name, total_cost: sbN(e.revenue), expense_date: sbData(e.event_date) || '',
       updated_at: e.created_at });
   });
   extras.forEach(x => {
-    const ev = eventoPorId.get(x.event_id) || {};
-    records.push({ id: x.id, type: 'event_extra_cost', movement_id: ev.movement_id || '',
+    records.push({ id: x.id, type: 'event_extra_cost', movement_id: x.event_id || '',
       product_name: x.description, total_cost: sbN(x.amount), expense_date: sbData(x.cost_date) || '' });
   });
 
@@ -2297,7 +2326,7 @@ const SB_TABELA = {
   fixed_expense:'fixed_expenses', cost:'product_costs', costed_entry:'costed_purchase_entries',
   sale_revenue:'sale_items', sale_alias:'sale_aliases', employee:'employees',
   weekly_timesheet:'weekly_timesheets', stock_snapshot:'stock_snapshots', stock_cost:'stock_costs',
-  event_revenue:'events', event_extra_cost:'event_extra_costs',
+  event:'events', event_revenue:'events', event_extra_cost:'event_extra_costs',
   analysis_settings:'app_settings', finance_settings:'app_settings',
   consumption_reset:'app_settings', stock_alerts:'app_settings',
 };
@@ -2352,6 +2381,8 @@ const SB_LINHA = {
   production: d => ({ id: sbMapId(d.id), recipe_id: sbMapId(d.production_recipe_id),
     status: ['pending','done','cancelled'].includes(d.production_status) ? d.production_status : 'pending',
     planned_at: sbTs(d.movement_date) || new Date().toISOString() }),
+  event: d => ({ id: sbMapId(d.id), name: d.product_name, event_date: sbData(d.movement_date) || sbData(new Date().toISOString()),
+    status: d.recipe_type === 'fechado' ? 'fechado' : 'aberto' }),
   dre_group: d => ({ id: sbMapId(d.id), name: d.product_name, is_protected: sbBool(d.skipped) || d.skipped === true }),
   expense_category: d => ({ id: sbMapId(d.id), name: d.product_name, dre_group_id: sbMapId(d.movement_id),
     proration: d.system_name === 'mensal' ? 'mensal' : 'pontual' }),
@@ -2420,14 +2451,18 @@ async function sbGarantirVenda(movementId, dataStr) {
 }
 // event_extra_costs aponta para `events` por FK, mas na planilha o custo extra podia ser lançado ANTES
 // do faturamento do evento existir. Então o evento é criado com revenue null (= pendente).
-async function sbGarantirEvento(movementId, nome, dataStr) {
+// Resolve o evento pelo id PRÓPRIO dele. Antes procurava por `movement_id`, que era a identidade
+// velha (um evento = uma baixa). Se o evento ainda não existe no banco — caso de um custo extra
+// lançado antes de a identidade ter sido copiada — cria como pendente, com revenue null.
+async function sbGarantirEvento(eventoLocalId, nome, dataStr) {
   const c = await sb();
-  if (movementId) {
-    const { data } = await c.from('events').select('id').eq('movement_id', movementId).limit(1);
+  const alvo = sbMapId(eventoLocalId);
+  if (alvo) {
+    const { data } = await c.from('events').select('id').eq('id', alvo).limit(1);
     if (data && data.length) return data[0].id;
   }
-  const id = crypto.randomUUID();
-  const { error } = await c.from('events').insert({ id, movement_id: movementId || null,
+  const id = alvo || crypto.randomUUID();
+  const { error } = await c.from('events').insert({ id, movement_id: null,
     name: nome || 'Evento', event_date: sbData(dataStr) || sbData(new Date().toISOString()), revenue: null });
   if (error) throw new Error(`events: ${error.message}`);
   return id;
@@ -3618,6 +3653,7 @@ function renderAll() {
   renderManualExitSelect();
   initManualExitSearchListeners();
   renderManualExitsList();
+  renderManualExitEventSelect();
   renderRecipes();
   renderProductionSuggestions();
   renderPendingProductions();
@@ -4503,7 +4539,23 @@ function initManualExitSearchListeners() { document.querySelectorAll('#manual-ex
 // dela, mas sem gerar faturamento, já que em evento o valor é cobrado à parte por pessoa).
 function toggleManualExitEventName(sel) {
   const wrap = document.getElementById('manual-exit-event-name-wrap');
-  if (wrap) wrap.classList.toggle('hidden', sel.value !== 'uso_evento');
+  if (!wrap) return;
+  wrap.classList.toggle('hidden', sel.value !== 'uso_evento');
+  if (sel.value === 'uso_evento') renderManualExitEventSelect();
+}
+// Só eventos ABERTOS entram na lista — fechado é justamente o que não deve receber baixa nova.
+function renderManualExitEventSelect() {
+  const sel = document.getElementById('manual-exit-event-select'); if (!sel) return;
+  const abertos = getEventos().filter(e => !eventoEstaFechado(e));
+  const anterior = sel.value;
+  sel.innerHTML = abertos.map(e => `<option value="${e.id}">${e.product_name} — ${fmtDataEvento(e.movement_date)}</option>`).join('')
+    + '<option value="__novo__">+ criar evento novo…</option>';
+  sel.value = abertos.some(e => e.id === anterior) ? anterior : (abertos.length ? abertos[0].id : '__novo__');
+  toggleNovoEventoNaSaida(sel);
+}
+function toggleNovoEventoNaSaida(sel) {
+  const inp = document.getElementById('manual-exit-event-name'); if (!inp) return;
+  inp.classList.toggle('hidden', sel.value !== '__novo__');
 }
 function setManualExitItemType(btn, type) {
   const container = btn.closest('.manual-exit-item');
@@ -4595,20 +4647,42 @@ async function confirmManualExit() {
   // Motivo é escolhido uma vez só, vale pra todos os itens do lote (você sempre lança em blocos do
   // mesmo motivo) — em vez de repetir a escolha item por item.
   const reasonMotivo = document.getElementById('manual-exit-motivo-global').value;
-  const eventName = reasonMotivo === 'uso_evento' ? document.getElementById('manual-exit-event-name').value.trim() : '';
+  // O evento é resolvido ANTES de montar os itens: se for "+ criar evento novo", o registro do evento
+  // precisa existir pra baixa já nascer apontando pra um id. Sai da função se não der.
+  let eventId = '', eventName = '';
+  if (reasonMotivo === 'uso_evento') {
+    const escolhido = document.getElementById('manual-exit-event-select').value;
+    if (escolhido === '__novo__') {
+      const nome = document.getElementById('manual-exit-event-name').value.trim();
+      if (!nome) { showToast('Dê um nome ao evento novo', true); return; }
+      const data = document.getElementById('manual-exit-date').value || localDateStr(new Date());
+      const existente = getEventos().find(e => namesMatch(e.product_name, nome) && !eventoEstaFechado(e));
+      if (existente) { eventId = existente.id; eventName = existente.product_name; }
+      else {
+        const novo = { ...blankRecord(), type:'event', product_name:nome, movement_date:data, recipe_type:'aberto' };
+        const r = await dbCreate(novo, { silent:true });
+        if (!r.isOk) { showToast('Não deu pra criar o evento: ' + (r.error||''), true); return; }
+        eventId = novo.id; eventName = nome;
+      }
+    } else {
+      const ev = getEventoById(escolhido);
+      if (!ev) { showToast('Escolha um evento', true); return; }
+      eventId = ev.id; eventName = ev.product_name;
+    }
+  }
   for (const item of itemEls) {
     const sel = item.querySelector('.manual-exit-product');
     const qty = parseFloat(item.querySelector('.manual-exit-qty').value);
     if (!sel.value||!qty||qty<=0) { showToast('Preencha todos os campos', true); return; }
     if (item.dataset.itemType === 'venda_direta') {
-      vendaDiretaEntries.push({ recipeId: sel.value, name: sel.selectedOptions[0]?.dataset.name||'', qty, reason:reasonMotivo, eventName });
+      vendaDiretaEntries.push({ recipeId: sel.value, name: sel.selectedOptions[0]?.dataset.name||'', qty, reason:reasonMotivo, eventName, eventId });
     } else {
       const unitSel = item.querySelector('.manual-exit-unit');
       const p = allData.find(r => r.id === sel.value);
       const chosenUnit = unitSel.value || sel.selectedOptions[0]?.dataset.unit || '';
       const baseUnit = p ? (p.storage_unit||p.unit) : chosenUnit;
       const storageQty = p ? convertQuantity(qty, chosenUnit, baseUnit, getCustomConversions(p)) : qty;
-      insumoEntries.push({ id:sel.value, name:sel.selectedOptions[0]?.dataset.name||'', unit:chosenUnit, qty, storageQty, reason:reasonMotivo, eventName });
+      insumoEntries.push({ id:sel.value, name:sel.selectedOptions[0]?.dataset.name||'', unit:chosenUnit, qty, storageQty, reason:reasonMotivo, eventName, eventId });
     }
   }
   // Só valida o que impede o cálculo (cadastro faltando). Saldo insuficiente NÃO trava: a retirada
@@ -4646,7 +4720,7 @@ async function confirmManualExit() {
       const deductedIngredients = ledger.consumeRecipe(recipe, vd.qty, `saída manual de ${vd.qty}× ${vd.name}`);
       // Guarda no mesmo formato usado nas vendas (value:'recipe_<id>' + deductedIngredients), pra
       // reaproveitar toda a lógica que já sabe ler isso: desfazer, saldo calculado, saídas recentes.
-      vendaDiretaExitData.push({ value:`recipe_${vd.recipeId}`, name: vd.name, unit: recipe.recipe_yield_unit, type:'venda_direta', qty: vd.qty, deductedIngredients, reason:vd.reason, eventName:vd.eventName });
+      vendaDiretaExitData.push({ value:`recipe_${vd.recipeId}`, name: vd.name, unit: recipe.recipe_yield_unit, type:'venda_direta', qty: vd.qty, deductedIngredients, reason:vd.reason, eventName:vd.eventName, eventId:vd.eventId });
     }
     if (ledger.erros.length) throw new Error(ledger.erros.join('; '));
     const allExitData = [...insumoEntries, ...vendaDiretaExitData];
@@ -4681,6 +4755,7 @@ function resetManualExitForm() {
   document.getElementById('manual-exit-motivo-global').value = 'consumo_interno';
   document.getElementById('manual-exit-event-name').value = '';
   document.getElementById('manual-exit-event-name-wrap').classList.add('hidden');
+  renderManualExitEventSelect();
   document.getElementById('manual-exit-date').value = localDateStr(new Date());
   initManualExitSearchListeners();
   lucide.createIcons();
@@ -5628,7 +5703,6 @@ function renderPendingEvents() {
   const events = getPendingEvents();
   document.getElementById('pending-events-empty')?.classList.toggle('hidden', events.length > 0);
   el.innerHTML = events.map((ev, i) => {
-    const d = new Date(ev.date);
     const extras = getEventExtraCosts(ev.movementId);
     const extrasHtml = extras.length === 0 ? '<p class="text-xs text-stone-400 italic">Nenhum custo extra ainda</p>' : extras.map(x => `
       <div class="flex justify-between items-center bg-white border border-stone-200 rounded-lg px-3 py-1.5">
@@ -5638,7 +5712,7 @@ function renderPendingEvents() {
     return `<div class="p-4 bg-amber-50 rounded-lg border border-amber-100">
       <div class="mb-3">
         <p class="text-sm font-semibold text-stone-800">${ev.eventName}</p>
-        <p class="text-xs text-stone-500">${d.toLocaleDateString('pt-BR')} · custo de estoque: ${fmtCurrency(ev.stockCost)}${ev.unknownCount>0?` (+${ev.unknownCount} item(ns) sem custo conhecido)`:''}</p>
+        <p class="text-xs text-stone-500">${fmtDataEvento(ev.date)} · ${ev.movements.length} baixa(s) · custo de estoque: ${fmtCurrency(ev.stockCost)}${ev.unknownCount>0?` (+${ev.unknownCount} item(ns) sem custo conhecido)`:''}</p>
       </div>
       <div class="mb-3">
         <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-1.5">Custos extras (decoração, etc.)</p>
@@ -5675,15 +5749,10 @@ function renderPendingEvents() {
 // (um evento = uma saída manual, identificado por movement_id). A identidade própria do evento, as
 // compras exclusivas e o detalhamento por categoria são as partes 2 e 3.
 function getEventosSemValores() {
-  const vistos = new Map();
-  getMovements().filter(m => m.movement_type === 'saida_manual').forEach(m => {
-    let items = []; try { items = JSON.parse(m.batch_items || '[]'); } catch(e) {}
-    const doEvento = items.filter(it => it && it.reason === 'uso_evento');
-    if (!doEvento.length) return;
-    const nome = doEvento.find(it => it.eventName)?.eventName || 'Evento sem nome';
-    vistos.set(m.id, { movementId: m.id, date: m.movement_date, eventName: nome, itemsCount: doEvento.length });
-  });
-  return [...vistos.values()].sort((a,b) => new Date(b.date) - new Date(a.date));
+  return getEventosAgrupados().map(g => ({
+    movementId: g.key, date: g.date, eventName: g.eventName,
+    itemsCount: g.itemsCount, baixas: g.movements.length, fechado: g.fechado, legado: g.legado,
+  }));
 }
 function renderEventos() {
   const bloqueado = document.getElementById('eventos-bloqueado');
@@ -5701,17 +5770,74 @@ function renderEventos() {
 
   const eventos = getEventosSemValores();
   document.getElementById('eventos-lista-simples-empty')?.classList.toggle('hidden', eventos.length > 0);
-  document.getElementById('eventos-lista-simples').innerHTML = eventos.map(ev => {
-    const d = new Date(ev.date);
-    return `<div class="flex justify-between items-center gap-2 p-3 rounded-lg border border-stone-200 bg-white">
+  document.getElementById('eventos-lista-simples').innerHTML = eventos.map(ev => `
+    <div class="flex justify-between items-center gap-2 p-3 rounded-lg border ${ev.fechado?'border-stone-200 bg-stone-50':'border-stone-200 bg-white'}">
       <div class="min-w-0">
-        <p class="text-sm font-medium text-stone-800 truncate">${ev.eventName}</p>
-        <p class="text-xs text-stone-400">${d.toLocaleDateString('pt-BR')} · ${ev.itemsCount} item(ns) de estoque</p>
+        <p class="text-sm font-medium text-stone-800 truncate">${ev.eventName}${ev.fechado?' <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-stone-200 text-stone-600 font-semibold">fechado</span>':''}</p>
+        <p class="text-xs text-stone-400">${fmtDataEvento(ev.date)} · ${ev.baixas} baixa(s) · ${ev.itemsCount} item(ns)</p>
       </div>
-      <span class="text-xs text-stone-400 flex-shrink-0">valores protegidos</span>
-    </div>`;
-  }).join('');
+      ${botaoSituacaoEvento(ev)}
+    </div>`).join('');
   lucide.createIcons();
+}
+// A data do evento vem em dois formatos: 'yyyy-MM-dd' (registro de evento) ou ISO completo (saída
+// manual do formato antigo). Sem o meio-dia, 'yyyy-MM-dd' vira o dia anterior em fuso negativo.
+function fmtDataEvento(v) {
+  if (!v) return 'sem data';
+  const s = String(v);
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(s + 'T12:00:00') : new Date(s);
+  return isNaN(d) ? 'sem data' : d.toLocaleDateString('pt-BR');
+}
+// Evento do formato antigo não tem registro próprio pra guardar situação — o botão só aparece nos
+// que têm identidade. Mostrar um botão que não faz nada seria pior que não mostrar.
+function botaoSituacaoEvento(ev) {
+  if (ev.legado) return '<span class="text-xs text-stone-400 flex-shrink-0">formato antigo</span>';
+  return `<button onclick="alternarSituacaoEvento('${ev.movementId}')" class="btn-ghost px-3 py-1.5 rounded-lg text-xs font-medium flex-shrink-0">${ev.fechado ? 'Reabrir' : 'Fechar'}</button>`;
+}
+async function criarEvento() {
+  const nomeEl = document.getElementById('novo-evento-nome');
+  const dataEl = document.getElementById('novo-evento-data');
+  const nome = nomeEl.value.trim();
+  const data = dataEl.value || localDateStr(new Date());
+  if (!nome) { showToast('Dê um nome ao evento', true); return; }
+  if (getEventos().some(e => namesMatch(e.product_name, nome) && e.movement_date === data)) {
+    showToast('Já existe um evento com esse nome nessa data', true); return;
+  }
+  showLoadingProgress('Criando evento...');
+  try {
+    // `recipe_type` guarda a situação: é um campo livre nos registros que não são receita, o mesmo
+    // truque já usado em 'product' pra marcar insumo sem controle de estoque.
+    const r = await dbCreate({ ...blankRecord(), type:'event', product_name:nome,
+      movement_date:data, recipe_type:'aberto' }, { silent:true });
+    if (!r.isOk) throw new Error(r.error || 'falha ao criar o evento');
+    nomeEl.value = ''; dataEl.value = '';
+    hideLoadingProgress();
+    showToast('Evento criado! Agora as baixas de estoque podem apontar pra ele.');
+    renderAll();
+  } catch (err) {
+    hideLoadingProgress();
+    console.error('Erro ao criar evento:', err);
+    showToast('Erro ao criar evento: ' + err.message, true);
+  }
+}
+// Fechar tira o evento da lista da Saída Manual, pra ninguém baixar estoque num evento que já
+// aconteceu. Não tem nada a ver com faturar: um evento fechado pode seguir sem valor lançado, e um
+// evento aberto pode já ter faturamento.
+async function alternarSituacaoEvento(id) {
+  const ev = getEventoById(id); if (!ev) return;
+  const novo = eventoEstaFechado(ev) ? 'aberto' : 'fechado';
+  showLoadingProgress(novo === 'fechado' ? 'Fechando evento...' : 'Reabrindo evento...');
+  try {
+    const r = await dbUpdate({ ...ev, recipe_type: novo }, { silent:true });
+    if (!r.isOk) throw new Error(r.error || 'falha ao mudar a situação');
+    hideLoadingProgress();
+    showToast(novo === 'fechado' ? 'Evento fechado' : 'Evento reaberto');
+    renderAll();
+  } catch (err) {
+    hideLoadingProgress();
+    console.error('Erro ao mudar situação do evento:', err);
+    showToast('Erro: ' + err.message, true);
+  }
 }
 // Contador de eventos que ainda não foram faturados. Sem senha não dá pra saber quais já fecharam
 // (isso mora no financeiro), então o badge só aparece com o financeiro aberto — melhor não mostrar
@@ -5731,12 +5857,11 @@ function renderPricedEvents() {
   const events = getPricedEvents();
   document.getElementById('priced-events-empty')?.classList.toggle('hidden', events.length > 0);
   el.innerHTML = events.map(ev => {
-    const d = ev.date ? new Date(ev.date + 'T12:00:00') : null;
     const profitColor = ev.profit >= 0 ? 'text-emerald-700' : 'text-red-600';
     return `<div class="p-3 bg-white rounded-xl border border-stone-100 flex justify-between items-center gap-2">
       <div class="min-w-0">
         <p class="text-sm font-medium text-stone-800 truncate">${ev.eventName}</p>
-        <p class="text-xs text-stone-400">${d?d.toLocaleDateString('pt-BR'):''} · faturado ${fmtCurrency(ev.revenue)} − custo ${fmtCurrency(ev.totalCost)}</p>
+        <p class="text-xs text-stone-400">${fmtDataEvento(ev.date)} · faturado ${fmtCurrency(ev.revenue)} − custo ${fmtCurrency(ev.totalCost)}${ev.margem != null ? ` · margem ${ev.margem.toFixed(1)}%` : ''}</p>
       </div>
       <span class="text-sm font-bold ${profitColor} flex-shrink-0">${fmtCurrency(ev.profit)}</span>
     </div>`;
@@ -11269,31 +11394,86 @@ function getEventExtraCostsInRange(start, end) {
     return true;
   });
 }
-function getPendingEvents() {
-  const movements = getMovements().filter(m => m.movement_type === 'saida_manual');
-  const pricedMovementIds = new Set(getEventRevenues().map(r => r.movement_id));
-  const events = [];
-  movements.forEach(m => {
-    if (pricedMovementIds.has(m.id)) return;
-    const info = computeEventStockCost(m);
-    if (info.itemsCount === 0) return;
-    const extraCost = getEventExtraCostsTotal(m.id);
-    events.push({ movementId: m.id, date: m.movement_date, eventName: info.eventName, stockCost: info.cost, extraCost, totalCost: info.cost + extraCost, unknownCount: info.unknownCount, itemsCount: info.itemsCount });
-  });
-  events.sort((a,b) => new Date(b.date) - new Date(a.date));
-  return events;
+// ============================================================
+// EVENTOS — identidade própria (Parte 2)
+// ============================================================
+// O evento deixou de ser um reflexo da saída manual. Antes a identidade ERA o `movement_id`: duas
+// baixas para a mesma festa viravam dois eventos com metade do custo cada, e não dava pra criar o
+// evento antes de baixar estoque. Agora o evento é um registro `type:'event'` no lado ABERTO do
+// sistema (aba Estoque, sem senha), e as baixas apontam PARA ele por `eventId` no `batch_items`.
+//
+// DOIS FORMATOS CONVIVEM, e isso não é temporário:
+//   • novo    — a saída tem `eventId`; várias saídas somam num evento só.
+//   • antigo  — a saída tem só `eventName` (texto digitado). Continua valendo como um evento por
+//               baixa, com a chave sendo o id da saída. É assim que os eventos já registrados, e o
+//               faturamento/custo extra já lançados neles, continuam aparecendo com os mesmos
+//               números. Nada precisa ser convertido à mão.
+//
+// A CHAVE de agrupamento é o que liga tudo: `event_revenue` e `event_extra_cost` guardam essa chave
+// no campo de vínculo (`movement_id`, que é o campo genérico do formato achatado da planilha). Para
+// evento novo a chave é o id do evento; para o antigo, o id da saída — que é exatamente o que já
+// estava gravado. Por isso a leitura de custo extra e faturamento não muda em nenhum dos dois casos.
+function getEventos() {
+  return allData.filter(r => r.type === 'event')
+    .sort((a,b) => String(b.movement_date||'').localeCompare(String(a.movement_date||'')));
 }
-// Eventos já com faturamento lançado — junta receita + custo de estoque + custos extras pra
-// mostrar o lucro final de cada evento no histórico.
+function getEventoById(id) { return getEventos().find(e => e.id === id) || null; }
+function eventoEstaFechado(ev) { return ev && ev.recipe_type === 'fechado'; }
+// Os itens de "uso em evento" de uma saída, com a chave do evento a que pertencem.
+function itensDeEventoDaSaida(m) {
+  let items = []; try { items = JSON.parse(m.batch_items || '[]'); } catch(e) {}
+  const doEvento = items.filter(it => it && it.reason === 'uso_evento');
+  if (!doEvento.length) return null;
+  const eventId = doEvento.find(it => it.eventId)?.eventId || '';
+  const eventName = doEvento.find(it => it.eventName)?.eventName || '';
+  return { eventId, eventName, itens: doEvento };
+}
+// A lista completa de eventos, nos dois formatos, já com as saídas de cada um agrupadas.
+// Não calcula dinheiro: quem quiser valor chama computeEventoResultado, que exige o financeiro.
+function getEventosAgrupados() {
+  const porChave = new Map();
+  getEventos().forEach(ev => porChave.set(ev.id, {
+    key: ev.id, eventId: ev.id, eventName: ev.product_name, date: ev.movement_date,
+    fechado: eventoEstaFechado(ev), legado: false, movements: [], itemsCount: 0,
+  }));
+  getMovements().filter(m => m.movement_type === 'saida_manual').forEach(m => {
+    const info = itensDeEventoDaSaida(m); if (!info) return;
+    // Formato novo: entra no evento apontado. Se o evento foi apagado, cai no legado pra não sumir.
+    const alvo = info.eventId && porChave.get(info.eventId);
+    if (alvo) { alvo.movements.push(m); alvo.itemsCount += info.itens.length; return; }
+    porChave.set(m.id, {
+      key: m.id, eventId: '', eventName: info.eventName || 'Evento sem nome', date: m.movement_date,
+      fechado: false, legado: true, movements: [m], itemsCount: info.itens.length,
+    });
+  });
+  return [...porChave.values()].sort((a,b) => String(b.date||'').localeCompare(String(a.date||'')));
+}
+// Soma o custo de estoque de TODAS as saídas do evento. Exige o financeiro destravado (custo de
+// insumo mora lá); sem ele o custo volta 0 e `unknownCount` conta os itens que ficaram sem preço.
+function computeEventoResultado(grupo) {
+  let stockCost = 0, unknownCount = 0;
+  grupo.movements.forEach(m => {
+    const info = computeEventStockCost(m);
+    stockCost += info.cost; unknownCount += info.unknownCount;
+  });
+  const extraCost = getEventExtraCostsTotal(grupo.key);
+  const rev = getEventRevenues().find(r => r.movement_id === grupo.key);
+  const revenue = rev ? (rev.total_cost || 0) : null;
+  const totalCost = stockCost + extraCost;
+  return { ...grupo, stockCost, extraCost, totalCost, unknownCount,
+    revenueId: rev ? rev.id : null, revenue,
+    profit: revenue == null ? null : revenue - totalCost,
+    margem: revenue ? ((revenue - totalCost) / revenue) * 100 : null,
+    movementId: grupo.key };   // nome antigo, mantido pra não quebrar quem já chamava assim
+}
+// Pendente = ainda sem faturamento lançado. Um evento recém-criado, sem nenhuma baixa, também entra:
+// é justamente o caso de planejar antes de operar, que o modelo velho não permitia.
+function getPendingEvents() {
+  return getEventosAgrupados().map(computeEventoResultado).filter(e => e.revenue == null);
+}
+// Eventos já com faturamento lançado, com o lucro final de cada um.
 function getPricedEvents() {
-  return getEventRevenues().map(rev => {
-    const m = getMovements().find(mv => mv.id === rev.movement_id);
-    const info = m ? computeEventStockCost(m) : { cost:0, unknownCount:0 };
-    const extraCost = getEventExtraCostsTotal(rev.movement_id);
-    const totalCost = info.cost + extraCost;
-    const revenue = rev.total_cost || 0;
-    return { revenueId: rev.id, movementId: rev.movement_id, eventName: rev.product_name, date: rev.expense_date, revenue, stockCost: info.cost, extraCost, totalCost, profit: revenue - totalCost, unknownCount: info.unknownCount };
-  }).sort((a,b) => (b.date||'').localeCompare(a.date||''));
+  return getEventosAgrupados().map(computeEventoResultado).filter(e => e.revenue != null);
 }
 let ssvFilter = '7days';
 let ssvRankingMotivoFilter = 'all';
