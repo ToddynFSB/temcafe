@@ -669,7 +669,7 @@
       <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="vendas"><i data-lucide="credit-card" class="w-5 h-5"></i>Vendas</button>
       <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="faturamento"><i data-lucide="trending-up" class="w-5 h-5"></i>Faturamento</button>
       <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="rentabilidade"><i data-lucide="target" class="w-5 h-5"></i>Rentabilidade</button>
-      <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="despesas"><i data-lucide="receipt" class="w-5 h-5"></i>Gastos</button>
+      <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="despesas"><i data-lucide="arrow-left-right" class="w-5 h-5"></i>Movimentações</button>
       <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="config-gastos"><i data-lucide="settings" class="w-5 h-5"></i>Configurações</button>
       <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="funcionarios"><i data-lucide="users" class="w-5 h-5"></i>Funcionários</button>
     </div>
@@ -1192,13 +1192,35 @@
     <!-- Sub-aba: Gastos -->
     <section id="fpanel-despesas" class="hidden fade-in">
       <div class="flex items-center justify-between mb-4">
-        <h2 class="text-lg font-bold text-stone-800 flex items-center gap-2"><i data-lucide="receipt" class="w-5 h-5 text-emerald-600"></i>Gastos</h2>
+        <h2 class="text-lg font-bold text-stone-800 flex items-center gap-2"><i data-lucide="arrow-left-right" class="w-5 h-5 text-emerald-600"></i>Movimentações Financeiras</h2>
         <button onclick="lockFinanceiro()" class="text-xs text-stone-400 hover:text-stone-600 flex items-center gap-1"><i data-lucide="lock" class="w-3.5 h-3.5"></i>Bloquear</button>
       </div>
-      <p class="text-xs text-stone-400 mb-3">Grupo, categoria e item são cadastrados em <strong>Configurações</strong> — monte sua estrutura lá primeiro.</p>
-      <div class="flex gap-2 mb-4">
-        <button id="expense-mode-simple-btn" class="expense-mode-btn px-4 py-2 rounded-lg text-sm font-medium bg-emerald-700 text-white" data-mode="simple">Gasto Simples</button>
-        <button id="expense-mode-batch-btn" class="expense-mode-btn px-4 py-2 rounded-lg text-sm font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-mode="batch">Gasto em Lote</button>
+      <p class="text-xs text-stone-400 mb-3">Todo dinheiro que entra e sai da empresa. Grupo, categoria e item são cadastrados em <strong>Configurações</strong>.</p>
+      <div class="flex gap-2 mb-4 flex-wrap">
+        <button id="expense-mode-simple-btn" class="expense-mode-btn px-4 py-2 rounded-lg text-sm font-medium bg-emerald-700 text-white" data-mode="simple">− Gasto Simples</button>
+        <button id="expense-mode-batch-btn" class="expense-mode-btn px-4 py-2 rounded-lg text-sm font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-mode="batch">− Gasto em Lote</button>
+        <button id="expense-mode-entrada-btn" class="expense-mode-btn px-4 py-2 rounded-lg text-sm font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-mode="entrada">+ Entrada</button>
+      </div>
+
+      <!-- Entrada avulsa. Venda de balcão e faturamento de evento NÃO se lançam aqui: eles nascem
+           das telas de Vendas e Eventos, e digitar de novo criaria a duplicata que esta tela existe
+           pra evitar. Aqui é só o dinheiro que não tem outra porta de entrada. -->
+      <div class="bg-white rounded-xl p-5 shadow-sm border border-stone-100 mb-5 hidden" id="expense-entrada-section">
+        <h3 class="font-semibold mb-1 text-stone-800 text-sm">Registrar Entrada</h3>
+        <p class="text-xs text-stone-400 mb-4">Dinheiro entrando que não é venda do balcão nem faturamento de evento — esses dois já entram sozinhos pelas telas de Vendas e Eventos.</p>
+        <form onsubmit="handleAddEntrada(event)">
+          <div class="grid sm:grid-cols-2 gap-3 mb-3">
+            <select id="nova-entrada-natureza" required class="input-field text-sm" onchange="onEntradaNaturezaChange(this)"><option value="">Natureza *</option></select>
+            <select id="nova-entrada-origem" class="input-field text-sm"></select>
+          </div>
+          <p id="nova-entrada-aviso" class="hidden"></p>
+          <input id="nova-entrada-desc" type="text" placeholder="Descrição * (ex: Reembolso do fornecedor)" required class="input-field text-sm w-full mb-3">
+          <div class="grid sm:grid-cols-2 gap-3 mb-4">
+            <div class="relative"><span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-stone-400">R$</span><input id="nova-entrada-valor" type="number" placeholder="Valor" min="0.01" step="any" required class="input-field text-sm w-full pl-9"></div>
+            <input id="nova-entrada-data" type="date" required class="input-field text-sm">
+          </div>
+          <div class="flex gap-2"><button type="submit" class="btn-primary px-5 py-2.5 rounded-lg text-sm font-medium">Salvar Entrada</button></div>
+        </form>
       </div>
 
       <!-- Gasto Simples -->
@@ -1247,6 +1269,11 @@
         </div>
         <select id="expense-category-filter" class="input-field text-sm w-full"><option value="">Todas categorias</option></select>
       </div>
+      <!-- Extrato de tudo: entradas e saídas, de qualquer origem, no mesmo lugar. Os painéis de
+           grupo/categoria abaixo continuam sendo só dos GASTOS — eles somam por grupo do DRE, que é
+           uma taxonomia de despesa e não faria sentido para uma entrada. -->
+      <div id="movimentacoes-extrato" class="mb-4"></div>
+
       <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 mb-4">
         <h3 class="font-semibold text-sm mb-3 text-stone-800 flex items-center gap-2"><i data-lucide="layers" class="w-4 h-4 text-emerald-600"></i>Total por grupo do DRE</h3>
         <div id="expense-group-totals" class="space-y-2.5"></div>
@@ -2375,6 +2402,7 @@ const SB_TABELA = {
   sale_revenue:'sale_items', sale_alias:'sale_aliases', employee:'employees',
   weekly_timesheet:'weekly_timesheets', stock_snapshot:'stock_snapshots', stock_cost:'stock_costs',
   event:'events', event_revenue:'events', event_extra_cost:'event_extra_costs',
+  other_revenue:'other_revenues',
   analysis_settings:'app_settings', finance_settings:'app_settings',
   consumption_reset:'app_settings', stock_alerts:'app_settings',
 };
@@ -2442,7 +2470,15 @@ const SB_LINHA = {
       expense_date: sbData(d.expense_date), dre_group_id: sbMapId(g.grupo), expense_category_id: sbMapId(g.categoria),
       proration: ['mensal','pontual'].includes(d.system_name) ? d.system_name : null,
       origin: origem, origin_ref: origem ? marca : null,
+      origin_unit: d.origin_unit || null,
       employee_id: sbMapId(d.linked_employee_id) }; },
+  // Entrada avulsa. `counts_as_revenue` é resolvido AQUI, na travessia, e não no banco: a regra de
+  // qual natureza vira faturamento mora em ENTRADAS_AVULSAS, e duplicá-la em SQL criaria duas
+  // versões da mesma decisão pra divergirem depois.
+  other_revenue: d => ({ id: sbMapId(d.id), description: d.product_name, kind: d.category || 'outra',
+    amount: sbN(d.total_cost), entry_date: sbData(d.expense_date),
+    origin_unit: d.origin_unit || 'cafeteria',
+    counts_as_revenue: entradaAvulsaEhFaturamento(d) }),
   fixed_expense: d => ({ id: sbMapId(d.id), name: d.product_name, dre_group_id: sbMapId(d.cost_unit),
     monthly_amount: sbN(d.cost_price), active: !(d.skipped === true || d.skipped === 'true') }),
   cost: d => ({ id: sbMapId(d.id), product_id: sbIdProdutoPorNome(d.product_name), unit_cost: sbN(d.cost_price),
@@ -5578,7 +5614,9 @@ document.addEventListener('click', (e) => {
   document.querySelectorAll('.expense-mode-btn').forEach(b => { b.className = `expense-mode-btn px-4 py-2 rounded-lg text-sm font-medium ${b.dataset.mode===currentExpenseMode?'bg-emerald-700 text-white':'bg-stone-100 text-stone-600 hover:bg-stone-200'}`; });
   document.getElementById('expense-simple-section').classList.toggle('hidden', currentExpenseMode !== 'simple');
   document.getElementById('expense-batch-section').classList.toggle('hidden', currentExpenseMode !== 'batch');
+  document.getElementById('expense-entrada-section').classList.toggle('hidden', currentExpenseMode !== 'entrada');
   if (currentExpenseMode === 'batch' && document.querySelectorAll('.expense-batch-row').length === 0) resetExpenseBatchForm();
+  if (currentExpenseMode === 'entrada') prepararFormEntrada();
 });
 function renderSalesSelect() {
   const finished = getFinishedProducts();
@@ -10595,6 +10633,205 @@ function renderFinanceSettingsConfig() {
 }
 
 // ============================================================
+// LIVRO-CAIXA — o leitor único de movimentação financeira
+// ============================================================
+// A aba Financeiro sempre foi um livro-caixa: toda linha de dinheiro da empresa mora nela, separada
+// por `type`. O que faltava não era estrutura, eram os EIXOS. Uma movimentação tem três, e até aqui
+// o sistema só tinha um e meio:
+//
+//   direção  — entra ou sai. Estava implícita no `type` (quem lê 'expense' sabe que é saída).
+//   origem   — de qual unidade de negócio. NÃO EXISTIA: faturamento era sinônimo de cafeteria.
+//   natureza — mexe no RESULTADO (DRE), mexe no CAIXA, ou nos dois. NÃO EXISTIA, era convenção.
+//
+// O terceiro eixo é o que impede duplicidade, e é o que costuma faltar em livro-caixa unificado.
+// Duas linhas deste arquivo mostram por quê:
+//
+//   costed_entry        caixa: sim   resultado: NÃO  — comprar café é dinheiro saindo, mas o CUSTO
+//                                                      do café só existe quando ele é consumido, e aí
+//                                                      quem conta é o CMV. Lançar como custo aqui
+//                                                      contaria o mesmo dinheiro duas vezes.
+//   expense marca buy_  caixa: NÃO   resultado: sim  — a despesa de consumo gerada pela compra é um
+//                                                      desdobramento contábil da MESMA saída de
+//                                                      dinheiro já registrada no costed_entry.
+//
+// Sem esses dois flags, unificar as telas soma o mesmo real duas vezes em um dos dois lados.
+// Ver também dreGroupIdForProductCategory: só categoria de produto explicitamente mapeada pra um
+// grupo do DRE gera despesa. Insumo de receita não mapeia — vira CMV. Essa regra continua valendo.
+
+// Unidades de negócio. `cafeteria` e `eventos` são as que existem hoje; a lista é o único lugar a
+// mexer pra abrir uma nova (food truck, delivery, loja). Nenhuma linha antiga precisa ser migrada:
+// quem não tem `origin_unit` gravado cai na origem derivada do tipo, logo abaixo.
+const UNIDADES_NEGOCIO = [
+  { id: 'cafeteria', nome: 'Cafeteria', icone: 'coffee' },
+  { id: 'eventos',   nome: 'Eventos',   icone: 'party-popper' },
+];
+const ORIGEM_PADRAO = 'cafeteria';
+function unidadeNegocioPorId(id) { return UNIDADES_NEGOCIO.find(u => u.id === id) || null; }
+function nomeDaUnidade(id) { const u = unidadeNegocioPorId(id); return u ? u.nome : (id || '—'); }
+
+// A ficha de cada tipo de linha que representa dinheiro. Tipo que não está aqui NÃO é movimentação
+// (dre_group, expense_category, stock_snapshot, employee, cost... são cadastro ou histórico).
+//
+// `data` e `valor` existem porque a coluna muda por tipo — venda grava a data em
+// `sale_price_updated_at`, gasto em `expense_date`, custeio em `costed_at`. Essa divergência é
+// exatamente o que travava a unificação: qualquer tela que quisesse ler "tudo do período" tinha que
+// saber de cor a coluna de cada tipo. Agora só este mapa sabe.
+const MOV_SPEC = {
+  sale_revenue:     { direcao:'entrada', data:'sale_price_updated_at', valor:'total_revenue', caixa:true,  resultado:true,  origem:'cafeteria', rotulo:'Venda' },
+  event_revenue:    { direcao:'entrada', data:'expense_date',          valor:'total_cost',    caixa:true,  resultado:true,  origem:'eventos',   rotulo:'Faturamento de evento' },
+  expense:          { direcao:'saida',   data:'expense_date',          valor:'total_cost',    caixa:true,  resultado:true,  origem:null,        rotulo:'Gasto' },
+  event_extra_cost: { direcao:'saida',   data:'expense_date',          valor:'total_cost',    caixa:true,  resultado:true,  origem:'eventos',   rotulo:'Custo de evento' },
+  stock_cost:       { direcao:'saida',   data:'expense_date',          valor:'total_cost',    caixa:true,  resultado:true,  origem:'cafeteria', rotulo:'Custo de estoque' },
+  // Compra de estoque: dinheiro sai agora, custo aparece depois pelo CMV. Ver bloco acima.
+  costed_entry:     { direcao:'saida',   data:'costed_at',             valor:'total_cost',    caixa:true,  resultado:false, origem:'cafeteria', rotulo:'Compra de estoque' },
+  // Entrada avulsa: dinheiro que entra sem ser venda de balcão nem evento. `resultado` aqui é
+  // decidido linha a linha pela natureza escolhida — ver ENTRADAS_AVULSAS logo abaixo.
+  other_revenue:    { direcao:'entrada', data:'expense_date',          valor:'total_cost',    caixa:true,  resultado:true,  origem:null,        rotulo:'Entrada' },
+};
+
+// NEM TODO DINHEIRO QUE ENTRA É FATURAMENTO, e essa é a diferença que faz o indicador mentir se for
+// ignorada. Reembolso é dinheiro voltando de um gasto que você já pagou. Venda de um ativo (um
+// freezer velho) é o caixa recebendo pelo patrimônio, não pela operação. Aporte é o dono pondo
+// dinheiro. Tratar os três como receita infla o faturamento, e junto com ele a margem — o negócio
+// pareceria mais lucrativo exatamente quando precisou de dinheiro de fora.
+//
+// Todos entram no CAIXA (o dinheiro está lá). Só `receita_diversa` entra no RESULTADO.
+const ENTRADAS_AVULSAS = [
+  { id:'receita_diversa', nome:'Receita diversa',   faturamento:true,  ajuda:'Serviço, comissão, aluguel de espaço — operação que não passou pelo balcão.' },
+  { id:'reembolso',       nome:'Reembolso',         faturamento:false, ajuda:'Devolução de um gasto já lançado. Entra no caixa, não vira faturamento.' },
+  { id:'venda_ativo',     nome:'Venda de ativo',    faturamento:false, ajuda:'Venda de equipamento/móvel. É patrimônio virando caixa, não receita da operação.' },
+  { id:'aporte',          nome:'Aporte de sócio',   faturamento:false, ajuda:'Dinheiro que o sócio coloca. Nunca é faturamento.' },
+  { id:'outra',           nome:'Outra entrada',     faturamento:false, ajuda:'Quando não se encaixa em nenhuma acima. Fica fora do faturamento por segurança.' },
+];
+function entradaAvulsaPorId(id) { return ENTRADAS_AVULSAS.find(e => e.id === id) || null; }
+function entradaAvulsaEhFaturamento(r) {
+  const cat = entradaAvulsaPorId(r && r.category);
+  return cat ? cat.faturamento : false; // sem natureza reconhecida, fica FORA do faturamento
+}
+function movSpec(r) { return (r && MOV_SPEC[r.type]) || null; }
+function ehMovimentoFinanceiro(r) { return !!movSpec(r); }
+
+// Data no formato "yyyy-MM-dd", vinda da coluna certa do tipo. Devolve '' quando a linha não é
+// movimentação ou está sem data — quem filtra por período trata como fora de qualquer período,
+// nunca como "hoje" (chutar a data de hoje jogaria lançamento sem data dentro do período atual).
+function dataDoMovimento(r) {
+  const spec = movSpec(r); if (!spec) return '';
+  return String(r[spec.data] || '').slice(0, 10);
+}
+function valorDoMovimento(r) {
+  const spec = movSpec(r); if (!spec) return 0;
+  return Number(r[spec.valor]) || 0;
+}
+function direcaoDoMovimento(r) { const s = movSpec(r); return s ? s.direcao : null; }
+// Valor com sinal: entrada positiva, saída negativa. É o que soma direto pra dar saldo.
+function valorComSinal(r) { return direcaoDoMovimento(r) === 'saida' ? -valorDoMovimento(r) : valorDoMovimento(r); }
+
+// Origem: o que está GRAVADO na linha ganha; senão cai na origem do tipo; senão cafeteria. Nessa
+// ordem porque é o que permite crescer sem migrar — um gasto de unidade nova grava `origin_unit`, e
+// as 565 linhas que já existem continuam respondendo cafeteria/eventos sem tocar em nenhuma delas.
+function origemDoMovimento(r) {
+  if (r && r.origin_unit) return r.origin_unit;
+  const spec = movSpec(r);
+  return (spec && spec.origem) || ORIGEM_PADRAO;
+}
+// Gasto é o único tipo sem origem fixa: aluguel e embalagem são da cafeteria, mas um gasto lançado
+// para outra unidade grava `origin_unit` e é por ele que ela cresce. Custo de evento NÃO passa por
+// aqui — tem tipo próprio (event_extra_cost), já marcado como eventos no MOV_SPEC.
+function origemDoGasto(ex) {
+  return (ex && ex.origin_unit) || ORIGEM_PADRAO;
+}
+
+// Marca de origem do lançamento automático -> se aquela linha representa dinheiro saindo AGORA.
+// A despesa de consumo gerada por uma compra ('buy_') não é uma segunda saída: é a mesma compra
+// aparecendo no resultado. No caixa ela não conta, senão a compra sai duas vezes.
+function movimentoMexeNoCaixa(r) {
+  const spec = movSpec(r); if (!spec) return false;
+  if (r.type === 'expense' && String(r.spreadsheet_name || '').startsWith('buy_')) return false;
+  return spec.caixa;
+}
+function movimentoMexeNoResultado(r) {
+  const spec = movSpec(r); if (!spec) return false;
+  // Entrada avulsa é o único tipo cujo resultado se decide linha a linha: reembolso e venda de ativo
+  // são caixa, não faturamento.
+  if (r.type === 'other_revenue') return entradaAvulsaEhFaturamento(r);
+  return spec.resultado;
+}
+function getOutrasReceitas() { return financeCached('outrasReceitas', () => financeData.filter(r => r.type === 'other_revenue')); }
+// Só as que contam como faturamento — é isto que a DRE recebe.
+function getOutrasReceitasInRange(start, end) {
+  const ini = start ? localDateStr(start) : null, fim = end ? localDateStr(end) : null;
+  return getOutrasReceitas().filter(r => {
+    const d = String(r.expense_date || '').slice(0, 10);
+    if (!d) return false;
+    if (ini && d < ini) return false;
+    if (fim && d > fim) return false;
+    return entradaAvulsaEhFaturamento(r);
+  });
+}
+
+// Todo o livro-caixa, em uma lista só, já com os eixos resolvidos. É a base das telas novas —
+// nenhuma delas precisa saber que a data da venda mora numa coluna diferente da data do gasto.
+function getMovimentos() {
+  return financeCached('movimentos', () => financeData.filter(ehMovimentoFinanceiro).map(r => ({
+    ref: r,
+    id: r.id,
+    tipo: r.type,
+    rotulo: MOV_SPEC[r.type].rotulo,
+    descricao: r.product_name || MOV_SPEC[r.type].rotulo,
+    data: dataDoMovimento(r),
+    direcao: direcaoDoMovimento(r),
+    valor: valorDoMovimento(r),
+    valorSinal: valorComSinal(r),
+    origem: r.type === 'expense' ? origemDoGasto(r) : origemDoMovimento(r),
+    caixa: movimentoMexeNoCaixa(r),
+    resultado: movimentoMexeNoResultado(r),
+    marca: r.spreadsheet_name || '',
+    automatico: !!expenseOriginBadge(r) || r.type !== 'expense',
+  })).sort((a, b) => String(b.data).localeCompare(String(a.data))));
+}
+
+// Leitor único. `filtros`: { origem, direcao, eixo:'caixa'|'resultado' }. Sem filtro devolve tudo do
+// período. Datas entram como Date (mesma convenção do resto do financeiro) e são comparadas como
+// texto "yyyy-MM-dd", que é o formato gravado — comparar Date com string é o que já causou lançamento
+// da tarde sumindo do filtro "hoje".
+function getMovimentosInRange(start, end, filtros = {}) {
+  const inicio = start ? localDateStr(start) : null;
+  const fim = end ? localDateStr(end) : null;
+  return getMovimentos().filter(m => {
+    if (!m.data) return false;
+    if (inicio && m.data < inicio) return false;
+    if (fim && m.data > fim) return false;
+    if (filtros.origem && m.origem !== filtros.origem) return false;
+    if (filtros.direcao && m.direcao !== filtros.direcao) return false;
+    if (filtros.eixo === 'caixa' && !m.caixa) return false;
+    if (filtros.eixo === 'resultado' && !m.resultado) return false;
+    return true;
+  });
+}
+// Totais do período por eixo. `entradas`/`saidas` sempre positivos; `saldo` é entradas − saídas.
+function totalizarMovimentos(movs) {
+  let entradas = 0, saidas = 0;
+  movs.forEach(m => { if (m.direcao === 'saida') saidas += m.valor; else entradas += m.valor; });
+  return { entradas, saidas, saldo: entradas - saidas, n: movs.length };
+}
+// Faturamento por unidade de negócio no período — a resposta para "quanto a empresa faturou, e de
+// onde". Origem sem faturamento no período não aparece.
+function faturamentoPorOrigem(start, end) {
+  const porOrigem = {};
+  getMovimentosInRange(start, end, { direcao: 'entrada', eixo: 'resultado' })
+    .forEach(m => { porOrigem[m.origem] = (porOrigem[m.origem] || 0) + m.valor; });
+  const linhas = UNIDADES_NEGOCIO
+    .map(u => ({ id: u.id, nome: u.nome, icone: u.icone, valor: porOrigem[u.id] || 0 }))
+    .filter(l => l.valor > 0);
+  // Origem gravada à mão que ainda não virou unidade cadastrada não pode sumir da soma.
+  Object.keys(porOrigem).forEach(id => {
+    if (!unidadeNegocioPorId(id)) linhas.push({ id, nome: nomeDaUnidade(id), icone: 'circle', valor: porOrigem[id] });
+  });
+  linhas.sort((a, b) => b.valor - a.valor);
+  return { linhas, total: linhas.reduce((s, l) => s + l.valor, 0) };
+}
+
+// ============================================================
 // GASTOS — Gasto Simples e Gasto em Lote (mesma ideia de Venda Manual/Venda em Lote).
 // type='expense' -> {id, type, product_name(=descrição), cost_unit(=id da CATEGORIA ou id do GRUPO
 // direto — ver resolveExpenseDreGroupId), category(=nome da categoria de despesa, cache de exibição),
@@ -10654,6 +10891,63 @@ function requestDeleteExpense(id) {
   pendingDeleteId = id; pendingDeleteType = 'expense';
   document.getElementById('delete-confirm-text').textContent = `Deseja excluir o gasto "${ex.product_name}" (${fmtCurrency(ex.total_cost)})?`;
   document.getElementById('delete-confirm-modal').classList.remove('hidden');
+}
+
+// --- Entrada avulsa: dinheiro entrando que não é venda de balcão nem evento ---
+function prepararFormEntrada() {
+  const nat = document.getElementById('nova-entrada-natureza');
+  if (nat && nat.options.length <= 1) {
+    nat.innerHTML = '<option value="">Natureza *</option>' +
+      ENTRADAS_AVULSAS.map(c => `<option value="${c.id}">${c.nome}</option>`).join('');
+  }
+  const org = document.getElementById('nova-entrada-origem');
+  if (org && !org.options.length) {
+    org.innerHTML = UNIDADES_NEGOCIO.map(u => `<option value="${u.id}">${u.nome}</option>`).join('');
+  }
+  const data = document.getElementById('nova-entrada-data');
+  if (data && !data.value) data.value = localDateStr(new Date());
+}
+// type='other_revenue' -> {id, type, product_name(=descrição), category(=natureza, um id de
+// ENTRADAS_AVULSAS), total_cost(=valor), expense_date(=data), origin_unit(=unidade), updated_at}
+function onEntradaNaturezaChange(sel) {
+  const cat = entradaAvulsaPorId(sel.value);
+  const aviso = document.getElementById('nova-entrada-aviso');
+  if (!aviso) return;
+  if (!cat) { aviso.classList.add('hidden'); return; }
+  aviso.classList.remove('hidden');
+  aviso.className = `text-[11px] rounded-lg px-3 py-2 mb-3 ${cat.faturamento ? 'bg-emerald-50 border border-emerald-200 text-emerald-800' : 'bg-stone-50 border border-stone-200 text-stone-600'}`;
+  aviso.textContent = `${cat.ajuda} ${cat.faturamento ? 'Entra no faturamento e na DRE.' : 'Entra no caixa, mas NÃO conta como faturamento.'}`;
+}
+async function handleAddEntrada(e) {
+  e.preventDefault();
+  const desc = document.getElementById('nova-entrada-desc').value.trim();
+  const natureza = document.getElementById('nova-entrada-natureza').value;
+  const origem = document.getElementById('nova-entrada-origem').value;
+  const amount = parseFloat(document.getElementById('nova-entrada-valor').value);
+  const date = document.getElementById('nova-entrada-data').value;
+  if (!desc || !natureza || !amount || amount <= 0 || !date) { showToast('Preencha natureza, descrição, valor e data', true); return; }
+  showLoadingProgress('Salvando entrada...');
+  try {
+    const payload = {
+      type:'other_revenue', product_name:desc, category:natureza,
+      total_cost:amount, expense_date:date,
+      origin_unit: origem || ORIGEM_PADRAO, updated_at:new Date().toISOString(),
+    };
+    const r = await financeApiCall('create', { data: payload });
+    financeData.push({ id:r.id, ...payload });
+    invalidateFinanceCache();
+    hideLoadingProgress();
+    showToast('Entrada registrada!');
+    e.target.reset();
+    document.getElementById('nova-entrada-data').value = localDateStr(new Date());
+    onEntradaNaturezaChange(document.getElementById('nova-entrada-natureza'));
+    renderExpenses();
+    if (activeFinanceTab === 'dre') renderDRE();
+  } catch (err) {
+    hideLoadingProgress();
+    console.error('Erro ao salvar entrada:', err);
+    showToast('Erro ao salvar entrada: ' + err.message, true);
+  }
 }
 
 // --- Gasto Simples: cascata Grupo -> Categoria (opcional) ---
@@ -10794,6 +11088,80 @@ function populateExpenseCategoryFilterSelect() {
   sel.innerHTML = '<option value="">Todas categorias</option>' + getExpenseCategories().slice().sort((a,b)=>(a.product_name||'').localeCompare(b.product_name||'')).map(c=>`<option value="${c.id}">${c.product_name}</option>`).join('');
   if (val) sel.value = val;
 }
+// ============================================================
+// EXTRATO — toda movimentação, entrada e saída, num lugar só
+// ============================================================
+let extratoDirecao = 'tudo';    // tudo | entrada | saida
+let extratoOrigem = 'tudo';     // tudo | <id de unidade>
+let extratoEixo = 'caixa';      // caixa | resultado
+function setExtratoDirecao(v) { extratoDirecao = v; renderExtratoMovimentacoes(); }
+function setExtratoOrigem(v) { extratoOrigem = v; renderExtratoMovimentacoes(); }
+function setExtratoEixo(v) { extratoEixo = v; renderExtratoMovimentacoes(); }
+function renderExtratoMovimentacoes() {
+  const el = document.getElementById('movimentacoes-extrato'); if (!el) return;
+  const { start, end } = expenseRangeForFilter(expenseFilter);
+  const movs = getMovimentosInRange(start, end, {
+    direcao: extratoDirecao === 'tudo' ? null : extratoDirecao,
+    origem: extratoOrigem === 'tudo' ? null : extratoOrigem,
+    eixo: extratoEixo,
+  });
+  const t = totalizarMovimentos(movs);
+  const chip = (ativo, onclick, rotulo) => `<button onclick="${onclick}" class="px-3 py-1.5 rounded-lg text-xs font-medium ${ativo?'bg-stone-800 text-white':'bg-stone-100 text-stone-600 hover:bg-stone-200'}">${rotulo}</button>`;
+  const linha = m => {
+    const cor = m.direcao === 'entrada' ? 'text-emerald-700' : 'text-red-600';
+    const sinal = m.direcao === 'entrada' ? '+' : '−';
+    // Lançamento que nasce de outra tela é SOMENTE LEITURA aqui. Deixar editar/recriar por aqui é
+    // exatamente como o mesmo dinheiro vira dois lançamentos — foi o que aconteceu com o
+    // faturamento de evento. Quem quiser mexer volta na tela que o criou.
+    const selo = m.automatico
+      ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-stone-100 text-stone-500 ml-1.5" title="Gerado por outra tela — edite lá, não aqui">auto</span>` : '';
+    return `
+      <div class="flex justify-between items-center py-2 border-b border-stone-100 last:border-0">
+        <div class="min-w-0">
+          <p class="text-sm text-stone-700 truncate">${m.descricao}${selo}</p>
+          <p class="text-[11px] text-stone-400">${parseLocalDate(m.data).toLocaleDateString('pt-BR')} · ${m.rotulo} · ${nomeDaUnidade(m.origem)}</p>
+        </div>
+        <span class="font-semibold text-sm ${cor} whitespace-nowrap ml-3">${sinal} ${fmtCurrency(m.valor)}</span>
+      </div>`;
+  };
+  el.innerHTML = `
+    <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100">
+      <h3 class="font-semibold text-sm mb-1 text-stone-800 flex items-center gap-2"><i data-lucide="arrow-left-right" class="w-4 h-4 text-emerald-600"></i>Extrato</h3>
+      <p class="text-[11px] text-stone-400 mb-3">Usa o mesmo período dos filtros acima.</p>
+      <div class="flex flex-wrap gap-1.5 mb-2">
+        ${chip(extratoDirecao==='tudo', "setExtratoDirecao('tudo')", 'Tudo')}
+        ${chip(extratoDirecao==='entrada', "setExtratoDirecao('entrada')", '+ Entradas')}
+        ${chip(extratoDirecao==='saida', "setExtratoDirecao('saida')", '− Saídas')}
+      </div>
+      <div class="flex flex-wrap gap-1.5 mb-2">
+        ${chip(extratoOrigem==='tudo', "setExtratoOrigem('tudo')", 'Todas origens')}
+        ${UNIDADES_NEGOCIO.map(u => chip(extratoOrigem===u.id, `setExtratoOrigem('${u.id}')`, u.nome)).join('')}
+      </div>
+      <div class="flex flex-wrap gap-1.5 mb-3">
+        ${chip(extratoEixo==='caixa', "setExtratoEixo('caixa')", '💵 Caixa')}
+        ${chip(extratoEixo==='resultado', "setExtratoEixo('resultado')", '📊 Resultado')}
+      </div>
+      <p class="text-[11px] text-stone-400 mb-3">${extratoEixo === 'caixa'
+        ? 'Caixa: o dinheiro que de fato entrou e saiu. A compra de estoque aparece inteira aqui; a despesa de consumo gerada por ela, não — senão a mesma compra sairia duas vezes.'
+        : 'Resultado: o que pesa no lucro. A despesa de consumo aparece aqui; a compra crua, não — o custo do insumo só existe quando ele é consumido, e aí quem cobra é o CMV.'}</p>
+      <div class="grid grid-cols-3 gap-2 mb-3">
+        <div class="bg-emerald-50 rounded-lg p-2.5 text-center">
+          <p class="text-[10px] font-bold text-emerald-700 uppercase tracking-wide">Entrou</p>
+          <p class="text-sm font-bold text-emerald-800">${fmtCurrency(t.entradas)}</p>
+        </div>
+        <div class="bg-red-50 rounded-lg p-2.5 text-center">
+          <p class="text-[10px] font-bold text-red-700 uppercase tracking-wide">Saiu</p>
+          <p class="text-sm font-bold text-red-800">${fmtCurrency(t.saidas)}</p>
+        </div>
+        <div class="bg-stone-50 rounded-lg p-2.5 text-center">
+          <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide">Saldo</p>
+          <p class="text-sm font-bold ${t.saldo>=0?'text-emerald-800':'text-red-800'}">${fmtCurrency(t.saldo)}</p>
+        </div>
+      </div>
+      ${movs.length ? `<div>${movs.slice(0, 80).map(linha).join('')}</div>` : '<p class="text-xs text-stone-400 py-3 text-center">Nenhuma movimentação neste filtro.</p>'}
+      ${movs.length > 80 ? `<p class="text-[11px] text-stone-400 mt-2 text-center">Mostrando as 80 mais recentes de ${movs.length}. Os totais acima somam todas.</p>` : ''}
+    </div>`;
+}
 function renderExpenses() {
   invalidateFinanceCache(); // números da tela toda saem da mesma foto dos dados
   // Formulário de Gasto Simples: só popula do zero se ainda estiver vazio, pra não atrapalhar
@@ -10803,6 +11171,8 @@ function renderExpenses() {
   if (!document.getElementById('new-expense-date').value) document.getElementById('new-expense-date').value = localDateStr(new Date());
   if (document.querySelectorAll('.expense-batch-row').length === 0) resetExpenseBatchForm();
 
+  prepararFormEntrada();
+  renderExtratoMovimentacoes();
   populateExpenseDescSuggestions();
   populateExpenseCategoryFilterSelect();
   document.querySelectorAll('.expense-filter').forEach(b => { b.className = `expense-filter px-3 py-1.5 rounded-lg text-xs font-medium ${b.dataset.filter===expenseFilter?'bg-stone-800 text-white':'bg-stone-100 text-stone-600 hover:bg-stone-200'}`; });
@@ -11895,8 +12265,12 @@ let dreFilter = '7days';
 // estimado. Os grupos de despesa (CMO, e todo grupo que você cadastrar em Config. Gastos) são
 // dinâmicos — o DRE não conhece mais uma lista fixa, só soma cada gasto no grupo que
 // resolveExpenseDreGroupId() encontrar pra ele.
-function computeDRE(entries, expenses, stockCosts, losses, internalConsumption, eventCost, eventRevenueRecords, eventExtraCostRecords, partnerConsumption, otherExits) {
-  const { totalRevenue, knownCost, knownRevenue, unknownRevenue } = computeCmvCoverage(entries);
+// A DRE da EMPRESA, não da cafeteria. Quem escolhe a unidade é quem chama: as listas que chegam aqui
+// já vêm filtradas por origem (ver renderDRE). Este motor só soma o que recebe.
+function computeDRE(entries, expenses, stockCosts, losses, internalConsumption, eventCost, eventRevenueRecords, eventExtraCostRecords, partnerConsumption, otherExits, otherRevenueRecords) {
+  // `revendaCafeteria` é o faturamento das VENDAS. Continua existindo separado do faturamento total
+  // por dois motivos concretos, os dois abaixo: a cobertura do CMV e a base do imposto.
+  const { totalRevenue: revendaCafeteria, knownCost, knownRevenue, unknownRevenue } = computeCmvCoverage(entries);
   const knownCostRatio = knownRevenue > 0 ? (knownCost / knownRevenue) : null;
   const hasEstimate = knownCostRatio !== null && unknownRevenue > 0;
   const estimatedExtraCost = hasEstimate ? unknownRevenue * knownCostRatio : 0;
@@ -11943,30 +12317,54 @@ function computeDRE(entries, expenses, stockCosts, losses, internalConsumption, 
   const totalOtherExits = (otherExits && otherExits.total) || 0;
   const otherExitsUnknownCount = (otherExits && otherExits.unknownCount) || 0;
 
-  // Uso em Evento é diferente: o custo sai do estoque na hora da saída, mas a RECEITA do evento só
-  // existe quando o valor cobrado é lançado em Vendas > Eventos Pendentes (pode ser um período
-  // diferente do da saída). Por isso entram como duas linhas próprias — não somam em totalRevenue
-  // nem em totalCMV, pra não distorcer as métricas de "% do faturamento" que são sobre a cafeteria.
+  // EVENTO É FATURAMENTO DA EMPRESA. Até aqui não era: entrava como `+ eventNet` no fim da conta,
+  // um apêndice fora do faturamento, porque quando isso foi escrito a cafeteria era o negócio
+  // inteiro. Agora a receita do evento soma no faturamento e o custo do evento desconta como
+  // qualquer outro custo — que é a mesma conta, só que dita direito:
+  //
+  //     antes:  knownRevenue − custos + (recEvento − custoEvento)
+  //     agora: (knownRevenue + recEvento) − custos − custoEvento
+  //
+  // O LUCRO NÃO MUDA (é a mesma álgebra). O que muda é o faturamento e, com ele, todo "% do
+  // faturamento": agora é percentual sobre o que a EMPRESA faturou, não sobre o balcão.
+  //
+  // O descasamento de período continua real e continua sem conserto aqui: o custo sai do estoque no
+  // dia da baixa, e a receita só existe quando o valor cobrado é lançado. Evento a cavalo de dois
+  // períodos aparece torto nos dois — é limitação do regime de caixa, não deste cálculo.
   const totalEventExtraCost = (eventExtraCostRecords||[]).reduce((s,r)=>s+(r.total_cost||0), 0);
   const totalEventCost = ((eventCost && eventCost.total) || 0) + totalEventExtraCost;
   const eventCostUnknownCount = (eventCost && eventCost.unknownCount) || 0;
   const totalEventRevenue = (eventRevenueRecords||[]).reduce((s,r)=>s+(r.total_cost||0), 0);
 
-  // Imposto e taxa de cartão são percentuais configuráveis (Configurações > Parâmetros
-  // Financeiros), aplicados automaticamente sobre o faturamento da cafeteria — não precisa mais
-  // lançar isso à mão como gasto todo período. É uma aproximação sobre o faturamento total (o
-  // sistema não distingue forma de pagamento), documentada como tal na tela.
+  // Entradas avulsas que CONTAM como faturamento (a lista já chega filtrada — reembolso, aporte e
+  // venda de ativo ficam de fora, ver ENTRADAS_AVULSAS).
+  const totalOutrasReceitas = (otherRevenueRecords||[]).reduce((s,r)=>s+(r.total_cost||0), 0);
+
+  // Faturamento consolidado: balcão + eventos + entradas avulsas (+ o que vier depois). Quem quer só
+  // uma unidade manda as listas da outra vazias — ver renderDRE.
+  const totalRevenue = revendaCafeteria + totalEventRevenue + totalOutrasReceitas;
+
+  // Imposto e taxa de cartão são percentuais configuráveis (Configurações > Parâmetros Financeiros).
+  //
+  // A BASE CONTINUA SENDO SÓ A VENDA DE BALCÃO, DE PROPÓSITO. Passar a cobrar os dois sobre o
+  // faturamento de evento mudaria o teu lucro sem você ter pedido: evento costuma ser cobrado por
+  // transferência ou PIX, onde não existe taxa de cartão, e o enquadramento do imposto não é
+  // necessariamente o mesmo. Enquanto não houver percentual por unidade de negócio, cobrar sobre o
+  // consolidado seria chutar pra cima. Fica explícito aqui em vez de virar um número que ninguém
+  // sabe de onde veio.
   const financeSettings = getFinanceSettings();
-  const totalTax = totalRevenue * (financeSettings.taxPct/100);
-  const totalCardFee = totalRevenue * (financeSettings.cardFeePct/100);
+  const totalTax = revendaCafeteria * (financeSettings.taxPct/100);
+  const totalCardFee = revendaCafeteria * (financeSettings.cardFeePct/100);
 
   // Custo de estoque avulso é confirmado e do período inteiro (não amarrado a uma venda
   // específica), então desconta nos dois cenários — diferente do CMV por receita, cuja incerteza
   // só existe pra fatia de faturamento sem custo confirmado (unknownRevenue).
-  const eventNet = totalEventRevenue - totalEventCost;
-  const confirmedProfit = knownRevenue - totalCMVConfirmed - totalAllExpenses - totalLosses - totalInternalConsumption - totalPartnerConsumption - totalOtherExits - totalTax - totalCardFee + eventNet;
-  const estimatedProfit = totalRevenue - totalCMV - totalAllExpenses - totalLosses - totalInternalConsumption - totalPartnerConsumption - totalOtherExits - totalTax - totalCardFee + eventNet;
-  const coveragePct = totalRevenue > 0 ? (knownRevenue/totalRevenue)*100 : 0;
+  const confirmedProfit = knownRevenue + totalEventRevenue + totalOutrasReceitas - totalCMVConfirmed - totalEventCost - totalAllExpenses - totalLosses - totalInternalConsumption - totalPartnerConsumption - totalOtherExits - totalTax - totalCardFee;
+  const estimatedProfit = totalRevenue - totalCMV - totalEventCost - totalAllExpenses - totalLosses - totalInternalConsumption - totalPartnerConsumption - totalOtherExits - totalTax - totalCardFee;
+  // Cobertura do CMV é medida sobre a VENDA, não sobre o consolidado: receita de evento não tem CMV
+  // por item (o custo dela vem da baixa de estoque, inteiro). Dividir pelo consolidado faria a
+  // cobertura despencar sozinha toda vez que um evento fosse lançado, sem nenhuma venda ter piorado.
+  const coveragePct = revendaCafeteria > 0 ? (knownRevenue/revendaCafeteria)*100 : 0;
   // % sempre sobre o faturamento total do período — é a "representatividade" de cada linha.
   const pctOf = (v) => totalRevenue > 0 ? (v/totalRevenue)*100 : 0;
 
@@ -11979,12 +12377,12 @@ function computeDRE(entries, expenses, stockCosts, losses, internalConsumption, 
   if (groupTotals['__sem_grupo__'] > 0) groupLines.push({ id:'__sem_grupo__', name:'Sem grupo', value: groupTotals['__sem_grupo__'] });
 
   return {
-    totalRevenue, knownRevenue, unknownRevenue, knownCost, estimatedExtraCost, totalStockCosts, totalCMVConfirmed, totalCMV,
+    totalRevenue, revendaCafeteria, knownRevenue, unknownRevenue, knownCost, estimatedExtraCost, totalStockCosts, totalCMVConfirmed, totalCMV,
     totalAllExpenses, groupLines, groupTotals, groupTotalsPontual, totalLosses, lossesUnknownCount,
     totalInternalConsumption, internalConsumptionUnknownCount,
     totalPartnerConsumption, partnerConsumptionUnknownCount,
     totalOtherExits, otherExitsUnknownCount,
-    totalEventCost, eventCostUnknownCount, totalEventRevenue,
+    totalEventCost, eventCostUnknownCount, totalEventRevenue, totalOutrasReceitas,
     totalTax, totalCardFee, taxPct: financeSettings.taxPct, cardFeePct: financeSettings.cardFeePct,
     confirmedProfit, estimatedProfit, coveragePct, hasEstimate, pctOf,
     pct: {
@@ -11997,22 +12395,67 @@ function computeDRE(entries, expenses, stockCosts, losses, internalConsumption, 
     },
   };
 }
+// Unidade de negócio em foco na DRE. 'consolidado' é a empresa inteira, e é o padrão — a pergunta
+// que interessa primeiro é "quanto a EMPRESA deu", não "quanto o balcão deu".
+let dreOrigem = 'consolidado';
+function setDreOrigem(origem) { dreOrigem = origem; renderDRE(); }
+// Monta as entradas da DRE já recortadas pela unidade escolhida. Recortar aqui, e não dentro do
+// computeDRE, mantém um motor de cálculo só: a lista da unidade que ficou de fora chega vazia e o
+// somatório dela dá zero naturalmente, sem nenhum `if` espalhado pela conta.
+function entradasDaDRE(start, end, origem) {
+  const cafeteria = origem === 'consolidado' || origem === 'cafeteria';
+  const eventos   = origem === 'consolidado' || origem === 'eventos';
+  const vazio = { total: 0, unknownCount: 0 };
+  return {
+    entries:      cafeteria ? getSaleRevenueEntriesInRange(start, end) : [],
+    stockCosts:   cafeteria ? getStockCostsInRange(start, end) : [],
+    losses:       cafeteria ? computeLossesCost(start, end) : vazio,
+    internal:     cafeteria ? computeSaidaManualCost('consumo_interno', start, end) : vazio,
+    partner:      cafeteria ? computeSaidaManualCost('consumo_socios', start, end) : vazio,
+    otherExits:   cafeteria ? computeSaidaManualCost('outros', start, end) : vazio,
+    eventCost:    eventos ? computeSaidaManualCost('uso_evento', start, end) : vazio,
+    eventRevenue: eventos ? getEventRevenueInRange(start, end) : [],
+    eventExtra:   eventos ? getEventExtraCostsInRange(start, end) : [],
+    // Gasto e entrada avulsa se decidem linha a linha: aluguel é da cafeteria, mas um lançamento
+    // feito para outra unidade grava `origin_unit` e segue essa unidade.
+    expenses: getExpensesInRange(start, end)
+      .filter(ex => origem === 'consolidado' || origemDoGasto(ex) === origem),
+    outrasReceitas: getOutrasReceitasInRange(start, end)
+      .filter(r => origem === 'consolidado' || origemDoMovimento(r) === origem),
+  };
+}
 function renderDRE() {
   invalidateFinanceCache(); // números da tela toda saem da mesma foto dos dados
   document.querySelectorAll('.dre-filter').forEach(b => { b.className = `dre-filter px-3 py-1.5 rounded-lg text-xs font-medium ${b.dataset.filter===dreFilter?'bg-stone-800 text-white':'bg-stone-100 text-stone-600 hover:bg-stone-200'}`; });
   const { start, end } = faturamentoRangeForFilter(dreFilter);
-  const entries = getSaleRevenueEntriesInRange(start, end);
-  const expenses = getExpensesInRange(start, end);
-  const stockCosts = getStockCostsInRange(start, end);
-  const losses = computeLossesCost(start, end);
-  const internalConsumption = computeSaidaManualCost('consumo_interno', start, end);
-  const partnerConsumption = computeSaidaManualCost('consumo_socios', start, end);
-  const eventCost = computeSaidaManualCost('uso_evento', start, end);
-  const otherExits = computeSaidaManualCost('outros', start, end);
-  const eventRevenueRecords = getEventRevenueInRange(start, end);
-  const eventExtraCostRecords = getEventExtraCostsInRange(start, end);
-  const dre = computeDRE(entries, expenses, stockCosts, losses, internalConsumption, eventCost, eventRevenueRecords, eventExtraCostRecords, partnerConsumption, otherExits);
+  const e = entradasDaDRE(start, end, dreOrigem);
+  const dre = computeDRE(e.entries, e.expenses, e.stockCosts, e.losses, e.internal, e.eventCost, e.eventRevenue, e.eventExtra, e.partner, e.otherExits, e.outrasReceitas);
   const el = document.getElementById('dre-content'); if (!el) return;
+  const porOrigem = faturamentoPorOrigem(start, end);
+  const abaOrigem = (id, rotulo) => `<button onclick="setDreOrigem('${id}')" class="px-3 py-1.5 rounded-lg text-xs font-medium ${dreOrigem===id?'bg-stone-800 text-white':'bg-stone-100 text-stone-600 hover:bg-stone-200'}">${rotulo}</button>`;
+  const seletorOrigem = `
+    <div class="flex gap-2 flex-wrap mb-4">
+      ${abaOrigem('consolidado','🏢 Consolidado')}
+      ${UNIDADES_NEGOCIO.map(u => abaOrigem(u.id, u.nome)).join('')}
+    </div>`;
+  // Quebra do faturamento por unidade. Só aparece no consolidado e só quando há mais de uma fonte —
+  // com uma fonte só ela repetiria a linha "Faturamento" logo abaixo.
+  const quebraOrigem = (dreOrigem === 'consolidado' && porOrigem.linhas.length > 1) ? `
+    <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 mb-4">
+      <h3 class="font-semibold text-sm mb-1 text-stone-800">Faturamento por origem</h3>
+      <p class="text-[11px] text-stone-400 mb-3">De onde veio o dinheiro que entrou no período.</p>
+      <div class="space-y-2 text-sm">
+        ${porOrigem.linhas.map(l => `
+          <div class="flex justify-between items-center py-1.5 border-b border-stone-100">
+            <span class="text-stone-600 flex items-center gap-2"><i data-lucide="${l.icone}" class="w-4 h-4 text-stone-400"></i>${l.nome}</span>
+            <span class="font-semibold text-stone-800">${fmtCurrency(l.valor)} <span class="text-stone-400 font-normal">(${porOrigem.total>0?((l.valor/porOrigem.total)*100).toFixed(1):'0.0'}%)</span></span>
+          </div>`).join('')}
+        <div class="flex justify-between items-center py-2">
+          <span class="font-bold text-stone-800">Total da empresa</span>
+          <span class="font-bold text-emerald-700">${fmtCurrency(porOrigem.total)}</span>
+        </div>
+      </div>
+    </div>` : '';
   const profitColor = (v) => v >= 0 ? 'text-emerald-700' : 'text-red-600';
   const pctTag = (v) => `<span class="text-stone-400 font-normal">(${v.toFixed(1)}%)</span>`;
   const line = (label, value, pct, color) => `
@@ -12022,6 +12465,8 @@ function renderDRE() {
     </div>`;
   const groupLinesHtml = dre.groupLines.map(g => line(`(–) ${g.name}`, g.value, dre.pctOf(g.value), 'text-red-600')).join('');
   el.innerHTML = `
+    ${seletorOrigem}
+    ${quebraOrigem}
     <div class="grid grid-cols-2 gap-3 mb-4">
       <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100">
         <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-1">Lucro confirmado</p>
@@ -12038,21 +12483,29 @@ function renderDRE() {
       <h3 class="font-semibold text-sm mb-3 text-stone-800">Detalhamento</h3>
       <div class="space-y-2 text-sm">
         <div class="flex justify-between items-center py-1.5 border-b border-stone-100">
-          <span class="text-stone-600">Faturamento</span>
+          <span class="text-stone-600">${dreOrigem === 'consolidado' ? 'Faturamento da empresa' : `Faturamento · ${nomeDaUnidade(dreOrigem)}`}</span>
           <span class="font-semibold text-stone-800">${fmtCurrency(dre.totalRevenue)} ${pctTag(100)}</span>
         </div>
+        ${dre.totalEventRevenue > 0 && dre.revendaCafeteria > 0 ? `
+        <div class="flex justify-between items-center py-1 pl-3 border-b border-stone-100">
+          <span class="text-stone-400 text-xs">· vendas do balcão</span>
+          <span class="text-xs text-stone-500">${fmtCurrency(dre.revendaCafeteria)} ${pctTag(dre.pctOf(dre.revendaCafeteria))}</span>
+        </div>
+        <div class="flex justify-between items-center py-1 pl-3 border-b border-stone-100">
+          <span class="text-stone-400 text-xs">· eventos</span>
+          <span class="text-xs text-stone-500">${fmtCurrency(dre.totalEventRevenue)} ${pctTag(dre.pct.eventRevenue)}</span>
+        </div>` : ''}
         ${line('(–) CMV confirmado', dre.totalCMVConfirmed, dre.pct.cmvConfirmed, 'text-red-600')}
         <div class="flex justify-between items-center py-1.5 border-b border-stone-100">
           <span class="text-stone-600">(–) CMV estimado (adicional)</span>
           <span class="font-semibold text-amber-600">${dre.hasEstimate ? `${fmtCurrency(dre.estimatedExtraCost)} ${pctTag(dre.pct.cmvTotal - dre.pct.cmvConfirmed)}` : '—'}</span>
         </div>
-        ${dre.totalTax > 0 ? line(`(–) Imposto (${dre.taxPct}%)`, dre.totalTax, dre.pct.tax, 'text-red-600') : ''}
-        ${dre.totalCardFee > 0 ? line(`(–) Taxa de Cartão (${dre.cardFeePct}%)`, dre.totalCardFee, dre.pct.cardFee, 'text-red-600') : ''}
+        ${dre.totalTax > 0 ? line(`(–) Imposto (${dre.taxPct}% do balcão)`, dre.totalTax, dre.pct.tax, 'text-red-600') : ''}
+        ${dre.totalCardFee > 0 ? line(`(–) Taxa de Cartão (${dre.cardFeePct}% do balcão)`, dre.totalCardFee, dre.pct.cardFee, 'text-red-600') : ''}
         ${dre.totalLosses > 0 ? line('(–) Perdas', dre.totalLosses, dre.pct.losses, 'text-red-600') : ''}
         ${dre.totalInternalConsumption > 0 ? line('(–) Consumo Interno', dre.totalInternalConsumption, dre.pct.internalConsumption, 'text-red-600') : ''}
         ${dre.totalPartnerConsumption > 0 ? line('(–) Consumo dos Sócios', dre.totalPartnerConsumption, dre.pct.partnerConsumption, 'text-red-600') : ''}
         ${dre.totalOtherExits > 0 ? line('(–) Outras Saídas', dre.totalOtherExits, dre.pct.otherExits, 'text-red-600') : ''}
-        ${dre.totalEventRevenue > 0 ? line('(+) Faturamento de Evento', dre.totalEventRevenue, dre.pct.eventRevenue, 'text-emerald-700') : ''}
         ${dre.totalEventCost > 0 ? line('(–) Custo de Eventos', dre.totalEventCost, dre.pct.eventCost, 'text-red-600') : ''}
         ${groupLinesHtml || '<p class="text-xs text-stone-400 py-2">Nenhum gasto lançado neste período.</p>'}
         <div class="flex justify-between items-center py-2 pt-2">
@@ -12072,8 +12525,9 @@ function renderDRE() {
       ${dre.partnerConsumptionUnknownCount > 0 ? `<p class="text-[11px] text-stone-400 mt-3 pt-3 border-t border-stone-100">${dre.partnerConsumptionUnknownCount} item(ns) de Consumo dos Sócios no período sem custo conhecido — não entram no valor acima.</p>` : ''}
       ${dre.otherExitsUnknownCount > 0 ? `<p class="text-[11px] text-stone-400 mt-3 pt-3 border-t border-stone-100">${dre.otherExitsUnknownCount} item(ns) de Outras Saídas no período sem custo conhecido (insumo sem preço lançado, ou sem conversão de unidade possível) — não entram no valor acima.</p>` : ''}
       ${dre.eventCostUnknownCount > 0 ? `<p class="text-[11px] text-stone-400 mt-3 pt-3 border-t border-stone-100">${dre.eventCostUnknownCount} item(ns) de Uso em Evento no período sem custo conhecido — não entram no Custo de Eventos acima.</p>` : ''}
+      ${dre.totalEventRevenue > 0 && (dre.totalTax > 0 || dre.totalCardFee > 0) ? `<p class="text-[11px] text-stone-400 mt-3 pt-3 border-t border-stone-100">Imposto e taxa de cartão incidem só sobre as vendas de balcão (${fmtCurrency(dre.revendaCafeteria)}), não sobre o faturamento de evento — evento costuma ser cobrado por PIX/transferência. Se quiser cobrar sobre o consolidado, dá pra configurar percentual por unidade de negócio.</p>` : ''}
       ${dre.totalTax > 0 || dre.totalCardFee > 0 ? `<p class="text-[11px] text-stone-400 mt-3 pt-3 border-t border-stone-100">Imposto e Taxa de Cartão são calculados automaticamente sobre o faturamento total (aproximação — o sistema não distingue forma de pagamento). Ajuste os percentuais em Configurações > Parâmetros Financeiros.</p>` : ''}
-      ${entries.length === 0 && expenses.length === 0 ? '<p class="text-stone-400 text-center py-4 text-sm">Sem vendas nem gastos no período</p>' : ''}
+      ${e.entries.length === 0 && e.expenses.length === 0 && e.eventRevenue.length === 0 && e.outrasReceitas.length === 0 ? `<p class="text-stone-400 text-center py-4 text-sm">Sem movimentação ${dreOrigem === 'consolidado' ? 'no período' : `de ${nomeDaUnidade(dreOrigem)} no período`}</p>` : ''}
     </div>
   `;
 }
@@ -12330,7 +12784,7 @@ function computeAnalysis(mode, anchorDate) {
   const otherExits = computeSaidaManualCost('outros', start, end);
   const eventRevenueRecords = getEventRevenueInRange(start, end);
   const eventExtraCostRecords = getEventExtraCostsInRange(start, end);
-  const dre = computeDRE(entries, allExpenses, stockCosts, losses, internalConsumption, eventCost, eventRevenueRecords, eventExtraCostRecords, partnerConsumption, otherExits);
+  const dre = computeDRE(entries, allExpenses, stockCosts, losses, internalConsumption, eventCost, eventRevenueRecords, eventExtraCostRecords, partnerConsumption, otherExits, getOutrasReceitasInRange(start, end));
 
   // As despesas viram um valor POR GRUPO DO DRE. Cada grupo recebe duas contribuições:
   //   • as despesas PONTUAIS lançadas dentro do período (caem inteiras no dia);
@@ -12379,14 +12833,20 @@ function computeAnalysis(mode, anchorDate) {
   const eventNet = dre.totalEventRevenue - dre.totalEventCost;
   const totalSaidasSemVenda = dre.totalLosses + dre.totalInternalConsumption + dre.totalPartnerConsumption + dre.totalOtherExits;
   // Lucro bruto  = faturamento − CMV (o que sobra da mercadoria em si)
-  // Lucro oper.  = lucro bruto − CMO − despesas dos demais grupos (o que a operação da cafeteria
-  //                produz, antes de imposto e de perda de estoque). O rateio das mensais já está
-  //                dentro de totalCMO/totalOperational, por grupo — não subtrai de novo.
-  // Lucro líquido= lucro operacional − impostos − taxa de cartão − saídas sem venda + eventos
+  // Lucro oper.  = lucro bruto − CMO − despesas dos demais grupos (o que a operação produz, antes de
+  //                imposto e de perda de estoque). O rateio das mensais já está dentro de
+  //                totalCMO/totalOperational, por grupo — não subtrai de novo.
+  // Lucro líquido= lucro operacional − impostos − taxa de cartão − saídas sem venda − custo de evento
   //                (o que realmente sobrou de dinheiro no período)
+  //
+  // O CUSTO DO EVENTO DESCONTA, A RECEITA NÃO SOMA DE NOVO. Antes esta conta terminava em
+  // `+ eventNet`, o que estava certo enquanto `revenue` era só o balcão. Agora dre.totalRevenue já
+  // é o consolidado — somar eventNet aqui contaria o faturamento do evento DUAS VEZES e cancelaria
+  // metade do custo dele. `eventNet` continua sendo devolvido abaixo porque a tela mostra o
+  // resultado do evento como indicador próprio; ele só não entra mais na cascata.
   const lucroBruto = revenue - dre.totalCMV;
   const lucroOperacional = lucroBruto - totalCMO - totalOperational;
-  const lucroLiquido = lucroOperacional - dre.totalTax - dre.totalCardFee - totalSaidasSemVenda + eventNet;
+  const lucroLiquido = lucroOperacional - dre.totalTax - dre.totalCardFee - totalSaidasSemVenda - dre.totalEventCost;
   const pct = (v) => revenue > 0 ? (v/revenue)*100 : 0;
 
   return {
