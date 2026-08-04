@@ -76,10 +76,15 @@
 </head>
 <body class="min-h-screen" style="background: rgb(250,247,244);">
 
-<!-- Loading overlay -->
+<!-- Loading overlay.
+     O texto muda enquanto carrega e a tela SÓ sai quando os dados chegam ou quando a busca falha de
+     vez. Antes ela sumia num setTimeout cego de 5 segundos: como o Apps Script demora 27s quando
+     devolve 404 na URL de redirecionamento, o "Carregando" sumia com o pedido ainda no ar e sobrava
+     um app vazio, sem explicação, que parecia quebrado. -->
 <div id="loading-overlay">
-  <div class="spinner"></div>
-  <p class="text-sm text-stone-500 font-medium">Carregando dados...</p>
+  <div id="loading-overlay-spinner" class="spinner"></div>
+  <p id="loading-overlay-msg" class="text-sm text-stone-500 font-medium">Carregando dados...</p>
+  <button id="loading-overlay-retry" onclick="initApp()" class="hidden btn-primary px-5 py-2.5 rounded-lg text-sm font-medium">Tentar de novo</button>
 </div>
 
 <!-- Config banner (aparece só se APPS_SCRIPT_URL não estiver configurado) -->
@@ -1775,22 +1780,65 @@ let consumptionCustomEndDate = null;
 // passageira (wifi engasgou, o Apps Script demorou um pouco mais que o normal pra responder), não
 // um erro de verdade no sistema. Tentar mais 2 vezes, com uma pausa curta entre elas, resolve a
 // maioria desses casos sem a pessoa nem perceber que algo deu errado.
-async function fetchWithRetry(url, fetchOptions = null, maxRetries = 2) {
+// O DEFEITO QUE ESTA FUNÇÃO TINHA: ela nunca olhava o status HTTP. Fazia `res.json()` direto, então
+// uma resposta 404 (que vem em HTML) só estourava como erro de sintaxe do JSON, e a mensagem final
+// dizia "Sem conexão com o servidor, confira sua internet" — mentira: a internet estava boa, quem
+// respondeu 404 foi o Google.
+//
+// POR QUE ISSO IMPORTA AQUI: o /exec do Apps Script redireciona pra script.googleusercontent.com, e
+// esse redirecionamento devolve 404 em ~1 de cada 6 chamadas. Medido: 5 chamadas boas em ~2s e uma
+// 404 em 27s. Uma tentativa presa custa meio minuto.
+//
+// LEITURA E ESCRITA SÃO TRATADAS DIFERENTE, DE PROPÓSITO:
+//   - LEITURA (getAll) tem corte de tempo. Repetir uma leitura não faz mal nenhum, então derrubar a
+//     tentativa travada em 12s e pedir de novo é sempre melhor do que esperar os 27s.
+//   - ESCRITA (POST) NÃO tem corte. O 404 chega DEPOIS de o script já ter rodado na planilha —
+//     abandonar e repetir um POST pode gravar a mesma venda duas vezes. Aqui esperar é o certo.
+// Carimbo de uma gravação. Nasce UMA vez por operação e vai igual em todas as tentativas dela —
+// é isso que deixa o Apps Script reconhecer "isto é a mesma gravação de antes, já fiz" em vez de
+// gravar de novo. Funciona porque fetchWithRetry repete o MESMO corpo: o reqId entra no body antes
+// da primeira tentativa e ninguém mexe nele depois.
+//
+// Sem isso, o 404 que o Apps Script devolve DEPOIS de já ter gravado faz o retry lançar a mesma
+// venda duas vezes. Ver executarEscrita no Code.gs, que é a outra metade da trava.
+function novoReqId() {
+  return `req_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+}
+const LEITURA_CORTE_MS = 12000;
+async function fetchWithRetry(url, fetchOptions = null, maxRetries = 3) {
+  const escrita = !!fetchOptions;
   let lastError;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    let timer = null;
     try {
-      // Apps Script redireciona toda resposta (inclusive de POST) — 'follow' garante que o
-      // corpo do redirecionamento seja lido normalmente em vez de virar um erro de rede.
-      const res = fetchOptions
-        ? await fetch(url, { redirect: 'follow', ...fetchOptions })
-        : await fetch(url);
-      return await res.json();
+      let res;
+      if (escrita) {
+        // Apps Script redireciona toda resposta (inclusive de POST) — 'follow' garante que o
+        // corpo do redirecionamento seja lido normalmente em vez de virar um erro de rede.
+        res = await fetch(url, { redirect: 'follow', ...fetchOptions });
+      } else {
+        const ctrl = new AbortController();
+        timer = setTimeout(() => ctrl.abort(), LEITURA_CORTE_MS);
+        res = await fetch(url, { signal: ctrl.signal });
+      }
+      if (!res.ok) throw new Error(`o servidor respondeu HTTP ${res.status}`);
+      const texto = await res.text();
+      try {
+        return JSON.parse(texto);
+      } catch (e) {
+        throw new Error(`o servidor respondeu algo que não é JSON (${texto.slice(0, 80).replace(/\s+/g, ' ')}…)`);
+      }
     } catch (e) {
-      lastError = e;
+      lastError = e && e.name === 'AbortError'
+        ? new Error(`o servidor passou de ${LEITURA_CORTE_MS / 1000}s sem responder`)
+        : e;
+      console.warn(`tentativa ${attempt + 1}/${maxRetries + 1} falhou: ${lastError.message}`);
       if (attempt < maxRetries) await new Promise(r => setTimeout(r, 700 * (attempt + 1)));
+    } finally {
+      if (timer) clearTimeout(timer);
     }
   }
-  throw new Error(`Sem conexão com o servidor depois de ${maxRetries + 1} tentativa(s) (${lastError.message}). Confira sua internet.`);
+  throw new Error(`Falhou depois de ${maxRetries + 1} tentativa(s): ${lastError.message}.`);
 }
 // Arredonda o campo quantity antes de gravar (6 casas decimais — mesma precisão já usada em
 // convertQuantity). Sem isso, somas/subtrações repetidas de ponto flutuante (produção, venda,
@@ -2891,7 +2939,7 @@ async function apiCall(action, data = {}) {
     if (json.error) throw new Error(json.error);
     return json;
   }
-  const body = { action };
+  const body = { action, reqId: novoReqId() };
   if (data.data) body.data = data.data;
   if (data.id) body.id = data.id;
   const json = await fetchWithRetry(APPS_SCRIPT_URL, { method: 'POST', body: JSON.stringify(body) });
@@ -2902,9 +2950,28 @@ async function apiCall(action, data = {}) {
   return json;
 }
 
+// Devolve os campos vazios que o Code.gs parou de mandar pela rede.
+//
+// POR QUE: a resposta do getAll carregava 9.509 campos nulos — todo registro trazia as 30 e poucas
+// colunas da planilha mesmo sem usar quase nenhuma. Eram ~200 KB de nada, baixados toda vez que o
+// sistema abre. Agora o Code.gs manda só o que tem valor, mais a lista de colunas em `fields`, e a
+// reidratação aqui remonta os registros EXATAMENTE como eram antes: campo ausente vira null, igual
+// ao que a planilha devolvia. Nenhum dos 166 leitores de allData percebe diferença.
+//
+// Os dois lados são independentes de propósito, porque index.html e Code.gs são publicados
+// separadamente: sem `fields` (Code.gs antigo) os registros já vêm completos e nada acontece aqui.
+// A ordem segura de publicar é index.html PRIMEIRO, Code.gs depois.
+function reidratarCamposVazios(records, fields) {
+  if (!Array.isArray(fields) || !fields.length) return records;
+  return records.map(r => {
+    fields.forEach(f => { if (!(f in r)) r[f] = null; });
+    return r;
+  });
+}
+
 async function loadAllData() {
   const result = await apiCall('getAll');
-  allData = (result.records || []).map(r => {
+  allData = reidratarCamposVazios(result.records || [], result.fields).map(r => {
     // Converte strings numéricas
     ['quantity','critical_stock','min_stock','comfortable_stock','recipe_yield',
      'movement_quantity','production_real_yield'].forEach(k => {
@@ -3036,21 +3103,45 @@ async function syncData() {
 // ============================================================
 // INICIALIZAÇÃO
 // ============================================================
-async function initApp() {
+// Estado da tela de carregamento. Ela some quando os dados chegam; quando a busca falha, em vez de
+// sumir ela vira a mensagem do erro com um botão de tentar de novo. O que NÃO existe mais é o
+// setTimeout de 5 segundos que escondia a tela com o pedido ainda no ar: era isso que fazia o app
+// aparecer vazio e mudo enquanto o Apps Script ainda estava respondendo (ou falhando).
+function overlayCarregando(msg) {
+  const ov = document.getElementById('loading-overlay');
+  if (!ov) return;
+  ov.style.display = '';
+  ov.classList.remove('hidden');
+  document.getElementById('loading-overlay-spinner').classList.remove('hidden');
+  document.getElementById('loading-overlay-retry').classList.add('hidden');
+  const p = document.getElementById('loading-overlay-msg');
+  p.textContent = msg || 'Carregando dados...';
+  p.className = 'text-sm text-stone-500 font-medium';
+}
+function overlayErro(msg) {
+  const ov = document.getElementById('loading-overlay');
+  if (!ov) return;
+  ov.style.display = '';
+  ov.classList.remove('hidden');
+  document.getElementById('loading-overlay-spinner').classList.add('hidden');
+  document.getElementById('loading-overlay-retry').classList.remove('hidden');
+  const p = document.getElementById('loading-overlay-msg');
+  p.textContent = msg;
+  p.className = 'text-sm text-red-600 font-medium text-center px-6 max-w-md';
+}
+function overlaySair() {
+  const ov = document.getElementById('loading-overlay');
+  if (ov) ov.style.display = 'none';
+}
 
-  // Segurança: remove a tela de carregamento após 5 segundos
-  setTimeout(() => {
-    const overlay = document.getElementById('loading-overlay');
-    if (overlay) {
-      overlay.style.display = 'none';
-    }
-  }, 5000);
+async function initApp() {
+  overlayCarregando();
 
   // O aviso de "cole a URL do Apps Script" só faz sentido enquanto o Sheets for o banco. Com o
   // Supabase ligado, a URL pode até ser apagada do arquivo (fase 6) sem a tela acusar erro.
   if (!USE_SUPABASE && (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === 'COLE_SUA_URL_AQUI')) {
     document.getElementById('config-banner').classList.remove('hidden');
-    document.getElementById('loading-overlay').classList.add('hidden');
+    overlaySair();
     lucide.createIcons();
 
     // Ativa primeiro tab
@@ -3074,16 +3165,15 @@ async function initApp() {
     document.querySelector('[data-tab="dashboard"]').classList.add('tab-active');
     lucide.createIcons();
     renderAll();
+    overlaySair();
 
   } catch (e) {
+    // A tela FICA, mostrando o motivo. Antes daqui saía só um console.error e o app aparecia vazio,
+    // sem dizer nada — que é exatamente como um erro de carregamento se disfarçava de "sumiram os
+    // dados". O botão chama initApp() de novo, sem precisar recarregar a página.
     console.error('Erro ao inicializar:', e);
-
-  } finally {
-    const overlay = document.getElementById('loading-overlay');
-
-    if (overlay) {
-      overlay.style.display = 'none';
-    }
+    overlayErro(`Não deu pra carregar os dados. ${e.message}`);
+    lucide.createIcons();
   }
 }
 
@@ -5862,6 +5952,7 @@ function renderPricedEvents() {
       <div class="min-w-0">
         <p class="text-sm font-medium text-stone-800 truncate">${ev.eventName}</p>
         <p class="text-xs text-stone-400">${fmtDataEvento(ev.date)} · faturado ${fmtCurrency(ev.revenue)} − custo ${fmtCurrency(ev.totalCost)}${ev.margem != null ? ` · margem ${ev.margem.toFixed(1)}%` : ''}</p>
+        ${(ev.revenueRepetidos||[]).length ? `<p class="text-[11px] text-amber-600 mt-0.5">${ev.revenueRepetidos.length} lançamento(s) repetido(s) deste evento (${ev.revenueRepetidos.map(r=>fmtCurrency(r.total_cost||0)).join(', ')}) — não somam no relatório, vale o mais recente.</p>` : ''}
       </div>
       <span class="text-sm font-bold ${profitColor} flex-shrink-0">${fmtCurrency(ev.profit)}</span>
     </div>`;
@@ -5905,8 +5996,21 @@ async function handleAddEventRevenue(movementId, idx) {
   showLoadingProgress('Lançando faturamento do evento...');
   try {
     const payload = { type:'event_revenue', movement_id: movementId, product_name: ev ? ev.eventName : 'Evento', total_cost: amount, expense_date: date, updated_at:new Date().toISOString() };
-    const r = await financeApiCall('create', { data: payload });
-    financeData.push({ id:r.id, ...payload });
+    // ATUALIZA se o evento já tem faturamento, em vez de criar outro. Sem isto, um clique repetido
+    // (ou um vínculo que se perdeu e voltou) deixava dois registros para o mesmo evento e a DRE
+    // somava os dois. Criar é só pra evento que ainda não tem valor lançado.
+    const existente = ev ? ev.revenueId : (faturamentosDoEvento(
+      getEventosAgrupados().find(g => g.key === movementId) || { key: movementId, movements: [] }
+    ).valendo || {}).id;
+    if (existente) {
+      const alvo = financeData.find(r => r.id === existente);
+      await financeApiCall('update', { data: { ...alvo, ...payload } });
+      Object.assign(alvo, payload);
+    } else {
+      const r = await financeApiCall('create', { data: payload });
+      financeData.push({ id:r.id, ...payload });
+    }
+    invalidateFinanceCache();
     hideLoadingProgress();
     showToast('Faturamento do evento lançado!');
     renderEventos();
@@ -7907,7 +8011,8 @@ async function financeApiCall(action, data = {}) {
     }
     return json;
   }
-  const body = { action, sheet: 'Financeiro', password: financePassword };
+  // reqId igual ao do apiCall: gasto, custo e faturamento também não podem entrar duas vezes.
+  const body = { action, sheet: 'Financeiro', password: financePassword, reqId: novoReqId() };
   if (data.data) body.data = data.data;
   if (data.id) body.id = data.id;
   const json = await fetchWithRetry(APPS_SCRIPT_URL, { method: 'POST', body: JSON.stringify(body) });
@@ -9223,7 +9328,7 @@ async function unlockFinanceiro() {
   showLoadingProgress('Verificando senha...');
   try {
     const result = await financeApiCall('getAll');
-    financeData = (result.records || []).map(r => ({
+    financeData = reidratarCamposVazios(result.records || [], result.fields).map(r => ({
       ...r,
       cost_price: r.cost_price !== undefined && r.cost_price !== null ? parseFloat(r.cost_price) || 0 : undefined,
       total_cost: r.total_cost !== undefined && r.total_cost !== null ? parseFloat(r.total_cost) || 0 : undefined,
@@ -11153,6 +11258,127 @@ function computeInventoryValue() {
   rows.sort((a,b) => b.value - a.value);
   return { rows, total, unknownCount, stockedCount: rows.length };
 }
+// ============================================================
+// ESTOQUE EM UMA DATA PASSADA — reconstrução, não fotografia
+// ============================================================
+// computeInventoryValue() é o estoque de AGORA. Para comparar semanas era usado um `stock_snapshot`
+// gravado quando a Central Financeira era aberta. Isso tem dois furos que a tela não podia consertar:
+//   • o snapshot vale "o estoque na última vez que você abriu o Financeiro naquela semana", não o
+//     fechamento dela — semana sem ninguém abrindo o app simplesmente não tem número;
+//   • lançamento RETROATIVO nunca atualiza snapshot passado. Lançar hoje as vendas datadas da semana
+//     passada derruba o saldo hoje e deixa o snapshot daquela semana como estava. Foi exatamente isso
+//     que fez as Análises mostrarem ~13 mil para uma semana em que o estoque vivo já era ~11 mil.
+//
+// Aqui o saldo passado sai do próprio histórico, andando PARA TRÁS a partir do saldo de hoje:
+//
+//     quantidade em D = saldo de hoje − (movimentos com data > D)
+//
+// Andar para trás (em vez de somar do zero) é o que torna isso possível: o saldo de abertura da
+// migração não existe como movimento na planilha, e ele se cancela nessa conta — só os movimentos
+// DEPOIS de D importam, e esses estão todos lá. E como usa a DATA do movimento, a venda digitada
+// hoje e datada de 30/07 cai na semana de 30/07, que é o ponto principal.
+//
+// O custo unitário é sempre o ATUAL, para qualquer data. É decisão, não limitação: assim a variação
+// mede VOLUME consumido, e a alta do preço do café não aparece como se fosse consumo.
+
+// Quanto cada produto ganhou (+) ou perdeu (−) num movimento, num formato só. Os formatos de
+// batch_items variam por tipo (venda guarda deductedIngredients aninhado, produção guarda receita ou
+// snapshot, ajuste guarda o delta com sinal em movement_quantity) — as três leituras já existem
+// em getSaleItemConsumedIngredients/getProductionConsumedItems e são reaproveitadas, não recopiadas.
+function stockDeltasDoMovimento(m, idPorNome) {
+  const out = {};
+  const add = (nome, v) => { const id = idPorNome.get(normalizeName(nome)); if (id && v) out[id] = (out[id]||0) + v; };
+  // Movimento cancelado ou desfeito não conta: o estorno dele já é outra linha do histórico, e somar
+  // os dois tiraria o dobro. (Não confundir com movementStockApplied, que é sobre baixa retroativa.)
+  if (isMovementUndone(m)) return out;
+  const t = m.movement_type;
+  if (t === 'ajuste_manual') { add(m.movement_product, Number(m.movement_quantity)||0); return out; }
+  if (t === 'venda') {
+    let itens = []; try { itens = JSON.parse(m.batch_items || '[]'); } catch(e) {}
+    itens.forEach(item => getSaleItemConsumedIngredients(item).forEach(g => add(g.name, -g.qty)));
+    return out;
+  }
+  if (t === 'producao') {
+    getProductionConsumedItems(m).forEach(g => add(g.name, -g.qty));
+    if (m.movement_product) add(m.movement_product, Number(m.movement_quantity)||0);
+    return out;
+  }
+  let itens = []; try { itens = JSON.parse(m.batch_items || '[]'); } catch(e) {}
+  const sinal = (t === 'saida_manual' || t === 'perda') ? -1 : +1;
+  itens.forEach(it => add(it.name, sinal * (Number(it.storageQty != null ? it.storageQty : it.qty) || 0)));
+  return out;
+}
+function produtosEstocaveis() {
+  return [...getProducts().filter(productControlsStock), ...getFinishedProducts()];
+}
+function indiceProdutoPorNome() {
+  return new Map([...getProducts(), ...getFinishedProducts()].map(p => [normalizeName(p.product_name), p.id]));
+}
+// Saldos na data pedida. `null`/vazio devolve os saldos de agora.
+function reconstruirSaldosEm(dataISO) {
+  const prods = produtosEstocaveis();
+  const saldo = {};
+  prods.forEach(p => { saldo[p.id] = Number(p.quantity) || 0; });
+  if (!dataISO) return saldo;
+  const idPorNome = indiceProdutoPorNome();
+  getMovements().forEach(m => {
+    if (!(String(m.movement_date || '') > dataISO)) return;
+    Object.entries(stockDeltasDoMovimento(m, idPorNome)).forEach(([id, v]) => {
+      if (id in saldo) saldo[id] -= v;
+    });
+  });
+  return saldo;
+}
+// Valor do estoque na data. `incertos` conta os itens cujo saldo reconstruído deu negativo — sinal
+// de que o histórico daquele item registra mais saída do que ele chegou a ter (é o caso dos saldos
+// zerados automaticamente). Vale zero e a tela diz quantos são, em vez de fingir precisão.
+function computeInventoryValueAt(dataISO) {
+  const saldo = reconstruirSaldosEm(dataISO);
+  let total = 0, semCusto = 0, incertos = 0;
+  produtosEstocaveis().forEach(p => {
+    let q = saldo[p.id] || 0;
+    if (q < -0.0001) { incertos++; q = 0; }
+    if (q <= 0) return;
+    const uc = getProductUnitCostCached(p);
+    if (!uc) { semCusto++; return; }
+    total += q * uc.unitCost;
+  });
+  return { total, semCusto, incertos };
+}
+// Quanto ENTROU de estoque no período, avaliado pelo mesmo custo unitário atual usado nas pontas.
+// Tem que ser a mesma régua das duas medidas de estoque, senão a identidade
+// (início + entradas − fim = consumo) não fecha e o indicador vira ruído.
+function computeEntradasValueInRange(start, end) {
+  const idPorNome = indiceProdutoPorNome();
+  const porId = new Map(produtosEstocaveis().map(p => [p.id, p]));
+  const de = start ? start.toISOString() : '';
+  const ate = end ? end.toISOString() : '9999';
+  let total = 0;
+  getMovements().forEach(m => {
+    if (m.movement_type !== 'entrada') return;
+    const d = String(m.movement_date || '');
+    if (d < de || d > ate) return;
+    Object.entries(stockDeltasDoMovimento(m, idPorNome)).forEach(([id, v]) => {
+      const p = porId.get(id); if (!p || v <= 0) return;
+      const uc = getProductUnitCostCached(p); if (!uc) return;
+      total += v * uc.unitCost;
+    });
+  });
+  return total;
+}
+// O indicador que o dono pediu: quanto o estoque perdeu de volume na semana, e o quanto disso as
+// vendas explicam. A sobra é o furo — perda não lançada, porção maior que a receita, erro de
+// contagem. É a única medida de consumo que não depende de a receita estar certa.
+function computeConsumoPorVariacao(a) {
+  const inicio = computeInventoryValueAt(new Date(a.start.getTime() - 1).toISOString());
+  const fim = computeInventoryValueAt(a.end.toISOString());
+  const entradas = computeEntradasValueInRange(a.start, a.end);
+  const consumo = inicio.total + entradas - fim.total;
+  const explicado = a.totalCMV + a.totalSaidasSemVenda + a.eventCost;
+  return { inicio, fim, entradas, consumo, explicado, diferenca: consumo - explicado,
+    incertos: Math.max(inicio.incertos, fim.incertos) };
+}
+
 let inventoryCategoryFilter = '';
 function computeInventoryCategoryTotals(rows) {
   const byCategory = {};
@@ -11347,9 +11573,31 @@ function computeSaidaManualCost(reason, start, end) {
 function getEventRevenues() {
   return financeCached('eventRevenues', () => financeData.filter(r => r.type === 'event_revenue'));
 }
+// Os registros de faturamento que a DRE e as Análises PODEM somar: um por evento, mais os que não
+// pertencem a evento nenhum.
+//
+// A DRE somava `event_revenue` cru. A aba Eventos pegava um só (`.find`). Duas leituras do mesmo
+// dinheiro, e por isso um lançamento repetido dobrava a receita no relatório sem aparecer na tela do
+// evento. Agora as duas telas passam por aqui — uma soma só, um resultado só.
+//
+// Órfão (registro que nenhum evento reclama, porque o evento foi apagado) CONTINUA contando: é
+// dinheiro que entrou de verdade. Esconder seria trocar um erro por outro.
+function getEventRevenueEfetivas() {
+  return financeCached('eventRevenuesEfetivas', () => {
+    const valendo = [], descartados = new Set();
+    getEventosAgrupados().forEach(g => {
+      const { valendo: r, repetidos } = faturamentosDoEvento(g);
+      if (r) valendo.push(r);
+      repetidos.forEach(x => descartados.add(x.id));
+    });
+    const usados = new Set(valendo.map(r => r.id));
+    const orfaos = getEventRevenues().filter(r => !usados.has(r.id) && !descartados.has(r.id));
+    return [...valendo, ...orfaos];
+  });
+}
 // Mesmo filtro por string de data usado em getExpensesInRange — expense_date já é "yyyy-MM-dd".
 function getEventRevenueInRange(start, end) {
-  return getEventRevenues().filter(r => {
+  return getEventRevenueEfetivas().filter(r => {
     if (!r.expense_date) return false;
     if (start && r.expense_date < localDateStr(start)) return false;
     if (end && r.expense_date > localDateStr(end)) return false;
@@ -11448,6 +11696,31 @@ function getEventosAgrupados() {
   });
   return [...porChave.values()].sort((a,b) => String(b.date||'').localeCompare(String(a.date||'')));
 }
+// TODAS as chaves pelas quais dinheiro pode estar pendurado neste evento.
+//
+// POR QUE MAIS DE UMA: até 03/08/2026 a identidade do evento ERA o id da saída manual, e é esse id
+// que está gravado no `movement_id` de todo faturamento e custo extra lançado antes disso. A Parte 2
+// passou a identidade para o id do evento. Buscar só pela chave nova órfãva o dinheiro antigo — o
+// evento voltava para "Pendentes de Faturamento", era lançado de novo, e ficavam DOIS registros: a
+// aba mostrava um (usava `.find`) e a DRE somava os dois. Era o faturamento dobrado.
+//
+// Aceitar as duas chaves desórfana o que já existe, sem conversão à mão e sem apagar nada.
+function chavesDoEvento(grupo) {
+  const ks = new Set();
+  if (grupo.key) ks.add(grupo.key);
+  if (grupo.eventId) ks.add(grupo.eventId);
+  (grupo.movements || []).forEach(m => ks.add(m.id));
+  return ks;
+}
+// O faturamento VALENDO do evento, e os repetidos. Dois lançamentos para o mesmo evento contam UMA
+// vez — vale o mais recente, porque é o que o dono disse por último que o evento valeu. Os outros
+// não são apagados nem somados: ficam à vista na aba Eventos como repetição.
+function faturamentosDoEvento(grupo) {
+  const ks = chavesDoEvento(grupo);
+  const achados = getEventRevenues().filter(r => ks.has(r.movement_id))
+    .sort((a,b) => String(b.updated_at||'').localeCompare(String(a.updated_at||'')));
+  return { valendo: achados[0] || null, repetidos: achados.slice(1) };
+}
 // Soma o custo de estoque de TODAS as saídas do evento. Exige o financeiro destravado (custo de
 // insumo mora lá); sem ele o custo volta 0 e `unknownCount` conta os itens que ficaram sem preço.
 function computeEventoResultado(grupo) {
@@ -11456,12 +11729,16 @@ function computeEventoResultado(grupo) {
     const info = computeEventStockCost(m);
     stockCost += info.cost; unknownCount += info.unknownCount;
   });
-  const extraCost = getEventExtraCostsTotal(grupo.key);
-  const rev = getEventRevenues().find(r => r.movement_id === grupo.key);
+  // Custo extra também pelas duas chaves, pelo mesmo motivo do faturamento.
+  const ks = chavesDoEvento(grupo);
+  const extras = financeData.filter(r => r.type === 'event_extra_cost' && ks.has(r.movement_id));
+  const extraCost = extras.reduce((s,r) => s + (r.total_cost||0), 0);
+  const { valendo: rev, repetidos } = faturamentosDoEvento(grupo);
   const revenue = rev ? (rev.total_cost || 0) : null;
   const totalCost = stockCost + extraCost;
   return { ...grupo, stockCost, extraCost, totalCost, unknownCount,
     revenueId: rev ? rev.id : null, revenue,
+    revenueRepetidos: repetidos,
     profit: revenue == null ? null : revenue - totalCost,
     margem: revenue ? ((revenue - totalCost) / revenue) * 100 : null,
     movementId: grupo.key };   // nome antigo, mantido pra não quebrar quem já chamava assim
@@ -12167,14 +12444,31 @@ async function syncStockSnapshot() {
     stockSnapshotSyncAttempted = false;
   }
 }
-// Valor do estoque de um período: o snapshot dele, ou o valor atual quando o período é o corrente
-// (o snapshot do período em andamento pode estar defasado dentro da mesma sessão).
+// Data do movimento mais antigo. Antes dela a reconstrução não vale: o saldo de abertura da migração
+// não é um movimento na planilha, então andar para trás além desse ponto devolveria um saldo que
+// nunca existiu.
+function primeiraDataDeMovimento() {
+  return getMovements().reduce((min, m) => {
+    const d = String(m.movement_date || '');
+    return d && (!min || d < min) ? d : min;
+  }, '');
+}
+// Valor do estoque no FIM do período pedido, reconstruído do histórico. Para o período em andamento
+// o fim está no futuro, então nenhum movimento é desfeito e o resultado é o estoque de agora.
+//
+// O `stock_snapshot` continua sendo lido, mas só como último recurso para períodos anteriores ao
+// início do histórico. Ele não é mais a fonte porque não sobrevive a lançamento retroativo: gravava
+// "o estoque na última vez que abri o Financeiro", e uma venda digitada depois nunca o corrigia.
 function stockValueForPeriod(mode, anchorDate) {
-  const key = analysisPeriodKey(mode, anchorDate);
-  const currentKey = analysisPeriodKey(mode, new Date());
-  if (key === currentKey) return { value: computeInventoryValue().total, isLive:true };
-  const snap = getStockSnapshotFor(key);
-  return snap ? { value: snap.total_cost||0, isLive:false } : null;
+  const { end } = analysisPeriodRange(mode, anchorDate);
+  const fimISO = end.toISOString();
+  const primeira = primeiraDataDeMovimento();
+  if (primeira && fimISO >= primeira) {
+    const v = computeInventoryValueAt(fimISO);
+    return { value: v.total, isLive: fimISO >= new Date().toISOString(), incertos: v.incertos, reconstruido: true };
+  }
+  const snap = getStockSnapshotFor(analysisPeriodKey(mode, anchorDate));
+  return snap ? { value: snap.total_cost||0, isLive:false, incertos:0, reconstruido:false } : null;
 }
 
 // ---------- UI ----------
@@ -12382,6 +12676,12 @@ function renderAnalisePatrimonio(a) {
   if (!current) return '';
   const delta = previous ? current.value - previous.value : null;
   const deltaPct = previous && previous.value > 0 ? (delta/previous.value)*100 : null;
+  // Itens cujo saldo reconstruído deu negativo — o histórico deles registra mais saída do que o item
+  // chegou a ter (é o rastro dos saldos zerados automaticamente). Valem zero, e a tela diz quantos
+  // são em vez de fingir precisão que o dado não tem.
+  const nIncertos = Math.max(current.incertos||0, previous ? (previous.incertos||0) : 0);
+  const incertosTxt = nIncertos > 0
+    ? ` ${nIncertos} item(ns) sem histórico suficiente para reconstruir contam como zero.` : '';
   // Estoque subindo não é bom nem ruim por si só — depende de ser reposição planejada ou capital
   // encalhando. A tela mostra o número e deixa a leitura pro dono, sem pintar de verde/vermelho.
   return `
@@ -12389,7 +12689,7 @@ function renderAnalisePatrimonio(a) {
       <h3 class="font-semibold text-sm mb-3 text-stone-800 flex items-center gap-2"><i data-lucide="warehouse" class="w-4 h-4 text-emerald-600"></i>Patrimônio em estoque</h3>
       <div class="grid grid-cols-2 gap-3">
         <div>
-          <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-1">Valor atual</p>
+          <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-1">${current.isLive ? 'Valor atual' : `Fim ${analysisMode==='mensal'?'do mês':'da semana'}`}</p>
           <p class="text-xl font-bold text-stone-800">${fmtCurrency(current.value)}</p>
         </div>
         <div>
@@ -12399,7 +12699,42 @@ function renderAnalisePatrimonio(a) {
             : `<p class="text-xl font-bold text-stone-800">${delta>=0?'+':''}${fmtCurrency(delta)} ${deltaPct!=null?`<span class="text-xs font-normal text-stone-400">(${deltaPct>=0?'+':''}${deltaPct.toFixed(1)}%)</span>`:''}</p>`}
         </div>
       </div>
-      <p class="text-[11px] text-stone-400 mt-3 pt-3 border-t border-stone-100">O valor do estoque é registrado automaticamente cada vez que você abre a Central Financeira. A comparação usa o último valor registrado no período anterior — quanto mais frequente o acesso, mais preciso o histórico.</p>
+      ${renderAnaliseConsumoPorVariacao(a)}
+      <p class="text-[11px] text-stone-400 mt-3 pt-3 border-t border-stone-100">Os dois valores são reconstruídos do histórico de movimentações, pela DATA de cada uma — uma venda digitada hoje e datada da semana passada conta na semana passada. Tudo avaliado pelo custo unitário de hoje, para que a variação meça consumo e não oscilação de preço.${incertosTxt}</p>
+    </div>`;
+}
+// CMV bruto pela variação do estoque. A identidade é a clássica:
+//
+//     consumo = estoque no início + o que entrou − estoque no fim
+//
+// O valor disso está na ÚLTIMA linha. O consumo medido pelo estoque não depende de a receita estar
+// certa: ele enxerga a porção maior que o previsto, a perda que ninguém lançou e o erro de contagem.
+// O CMV por receita só enxerga o que a receita mandou descontar. A diferença entre os dois é o furo.
+function renderAnaliseConsumoPorVariacao(a) {
+  const v = computeConsumoPorVariacao(a);
+  if (!(v.inicio.total > 0 || v.fim.total > 0)) return '';
+  const linha = (rot, val, cor) => `
+    <div class="flex justify-between items-center py-1"><span class="text-stone-600">${rot}</span>
+    <span class="font-semibold ${cor||'text-stone-800'}">${fmtCurrency(val)}</span></div>`;
+  const difCor = Math.abs(v.diferenca) < 0.02 * Math.max(v.consumo, 1) ? 'text-stone-500' : 'text-amber-600';
+  return `
+    <div class="mt-4 pt-4 border-t border-stone-100">
+      <h4 class="font-semibold text-xs text-stone-700 uppercase tracking-wide mb-2">CMV bruto pela variação do estoque</h4>
+      <div class="text-sm">
+        ${linha('Estoque no início', v.inicio.total)}
+        ${linha('(+) Entradas do período', v.entradas, 'text-stone-800')}
+        ${linha('(–) Estoque no fim', v.fim.total, 'text-stone-800')}
+        <div class="flex justify-between items-center py-1.5 my-1 px-2 -mx-2 rounded-lg bg-stone-50">
+          <span class="font-bold text-stone-800">(=) Consumo por variação</span>
+          <span class="font-bold text-stone-800">${fmtCurrency(v.consumo)}</span>
+        </div>
+        ${linha('CMV por receita + saídas sem venda', v.explicado, 'text-stone-500')}
+        <div class="flex justify-between items-center py-1.5 border-t border-stone-100 mt-1">
+          <span class="font-semibold text-stone-700">Diferença não explicada</span>
+          <span class="font-bold ${difCor}">${v.diferenca>=0?'+':''}${fmtCurrency(v.diferenca)}</span>
+        </div>
+      </div>
+      <p class="text-[11px] text-stone-400 mt-2">Sobra positiva = estoque sumiu sem o sistema saber por quê (perda não lançada, porção maior que a receita, erro de contagem). Negativa = o sistema descontou mais do que o estoque perdeu.</p>
     </div>`;
 }
 function renderAnaliseEvolucao() {
