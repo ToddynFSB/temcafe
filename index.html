@@ -663,15 +663,9 @@
 <div id="financeiro-area" class="hidden">
   <nav id="finance-nav" class="max-w-7xl mx-auto px-4 pt-3 pb-1 hidden">
     <div class="nav-grid">
-      <button class="finance-tab-btn finance-tab-active px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="analises"><i data-lucide="line-chart" class="w-5 h-5"></i>Análises</button>
-      <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="dre"><i data-lucide="scale" class="w-5 h-5"></i>DRE</button>
-      <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="estoque-custos"><i data-lucide="banknote" class="w-5 h-5"></i>Estoque &amp; Custos</button>
-      <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="vendas"><i data-lucide="credit-card" class="w-5 h-5"></i>Vendas</button>
-      <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="faturamento"><i data-lucide="trending-up" class="w-5 h-5"></i>Faturamento</button>
-      <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="rentabilidade"><i data-lucide="target" class="w-5 h-5"></i>Rentabilidade</button>
-      <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="despesas"><i data-lucide="arrow-left-right" class="w-5 h-5"></i>Movimentações</button>
-      <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="config-gastos"><i data-lucide="settings" class="w-5 h-5"></i>Configurações</button>
-      <button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="funcionarios"><i data-lucide="users" class="w-5 h-5"></i>Funcionários</button>
+      <!-- Os botões são GERADOS a partir de FINANCE_TABS (ver renderFinanceNav). Escrever a lista
+           aqui e o dispatch lá embaixo era ter a mesma verdade em dois lugares — e elas já tinham
+           divergido uma vez. Acrescentar aba agora é uma linha no mapa, e só. -->
     </div>
   </nav>
 
@@ -689,17 +683,14 @@
     <!-- Grupo "Estoque & Custos": consolida Custos Pendentes, Preço Médio, CMV e Dinheiro em
          Estoque atrás de uma única entrada de navegação, com sub-abas internas — as 4 telas
          continuam existindo exatamente como antes, só deixam de ocupar 4 espaços na nav principal. -->
-    <div id="estoque-custos-header" class="hidden flex items-center justify-between mb-4">
-      <h2 class="text-lg font-bold text-stone-800 flex items-center gap-2"><i data-lucide="banknote" class="w-5 h-5 text-emerald-600"></i>Estoque &amp; Custos</h2>
+    <!-- Cabeçalho e sub-navegação de QUALQUER grupo de abas (Resultado, Estoque & Custos,
+         Configurações). Antes isso existia só pro grupo "Estoque & Custos", com ids próprios; agora
+         é um par só, preenchido por renderFinanceNav a partir do mapa. -->
+    <div id="grupo-header" class="hidden flex items-center justify-between mb-4">
+      <h2 id="grupo-titulo" class="text-lg font-bold text-stone-800 flex items-center gap-2"></h2>
       <button onclick="lockFinanceiro()" class="text-xs text-stone-400 hover:text-stone-600 flex items-center gap-1"><i data-lucide="lock" class="w-3.5 h-3.5"></i>Bloquear</button>
     </div>
-    <div id="custos-subnav" class="hidden flex gap-2 mb-4 overflow-x-auto pb-1">
-      <button class="custos-sub-tab-btn px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap" data-sub="custos">Custos Pendentes</button>
-      <button class="custos-sub-tab-btn px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap" data-sub="precos">Preço Médio</button>
-      <button class="custos-sub-tab-btn px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap" data-sub="cmv">CMV</button>
-      <button class="custos-sub-tab-btn px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap" data-sub="estoque-valor">Dinheiro em Estoque</button>
-      <button class="custos-sub-tab-btn px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap" data-sub="saidas-sem-venda">Saídas sem Venda</button>
-    </div>
+    <div id="grupo-subnav" class="hidden flex gap-2 mb-4 overflow-x-auto pb-1"></div>
     <!-- Sub-aba: Custos de Estoque -->
     <section id="fpanel-custos" class="hidden fade-in">
       <h3 class="font-semibold text-stone-800 text-base mb-1 flex items-center gap-2"><i data-lucide="banknote" class="w-4 h-4 text-emerald-600"></i>Custos Pendentes</h3>
@@ -707,25 +698,16 @@
       <div id="finance-pending-list" class="space-y-4"></div>
       <div id="finance-pending-empty" class="hidden text-stone-400 text-center py-10 text-sm">🎉 Nenhuma entrada pendente de custo</div>
 
-      <!-- Custo avulso: gasto ligado ao estoque mas sem receita/venda pra vincular (taxa de entrega,
-           insumo fora do cardápio, perda não rastreada) — desconta na hora no DRE, igual Despesas,
-           só que numa linha separada pra não misturar com contas fixas (aluguel, água, luz). -->
+      <!-- CUSTO AVULSO — formulário APOSENTADO em 04/08/2026.
+           Ele existia pra custo ligado ao estoque sem receita nem venda pra vincular (taxa de entrega,
+           insumo fora do cardápio, quebra não rastreada). Virou um Gasto normal num grupo do DRE
+           marcado como "entra no CMV" (Configurações > Grupos do DRE), que cai no MESMO lugar do
+           relatório — por isso nenhum indicador mudou ao aposentar a tela.
+           A LISTA CONTINUA AQUI, e é de propósito: os lançamentos antigos seguem valendo e contando
+           no CMV. Some o jeito de criar, não o histórico. -->
       <div class="mt-8 pt-6 border-t border-stone-200">
-        <h3 class="font-semibold text-stone-800 text-sm mb-1 flex items-center gap-2"><i data-lucide="package-minus" class="w-4 h-4 text-emerald-600"></i>Lançar custo avulso</h3>
-        <p class="text-xs text-stone-400 mb-4">Pra custos ligados ao estoque que não valem uma receita ou não têm venda pra vincular — taxa de entrega, insumo fora do cardápio, perda não rastreada. Entra direto no DRE, sem esperar uma venda.</p>
-        <div class="bg-white rounded-xl p-5 shadow-sm border border-stone-100 mb-5">
-          <form onsubmit="handleAddStockCost(event)">
-            <div class="grid sm:grid-cols-2 gap-3 mb-3">
-              <input id="new-stockcost-desc" type="text" placeholder="Descrição *" required class="input-field text-sm">
-              <select id="new-stockcost-category" required class="input-field text-sm"><option value="">Motivo *</option></select>
-            </div>
-            <div class="grid sm:grid-cols-2 gap-3 mb-4">
-              <div class="relative"><span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-stone-400">R$</span><input id="new-stockcost-amount" type="number" placeholder="Valor" min="0.01" step="any" required class="input-field text-sm w-full pl-9"></div>
-              <input id="new-stockcost-date" type="date" required class="input-field text-sm">
-            </div>
-            <div class="flex gap-2"><button type="submit" class="btn-primary px-5 py-2.5 rounded-lg text-sm font-medium">Salvar Custo Avulso</button></div>
-          </form>
-        </div>
+        <h3 class="font-semibold text-stone-800 text-sm mb-1 flex items-center gap-2"><i data-lucide="package-minus" class="w-4 h-4 text-stone-400"></i>Custos avulsos lançados</h3>
+        <p class="text-xs text-stone-400 mb-4">Histórico dos custos avulsos que você já lançou — eles continuam contando no CMV normalmente. <strong>Para lançar um novo</strong>, use <em>+ Lançar &gt; Gasto Simples</em> num grupo marcado como "entra no CMV" em Configurações. Assim o custo cai no mesmo lugar, e o gasto passa a somar nos relatórios por categoria.</p>
         <div class="flex gap-2 mb-2 overflow-x-auto pb-1">
           <button class="stockcost-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-filter="today">Hoje</button>
           <button class="stockcost-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-filter="30days">30 dias</button>
@@ -1042,6 +1024,18 @@
       <div id="rent-sem-custo"></div>
     </section>
 
+    <!-- Sub-aba: EXTRATO — a porta de entrada da Central Financeira.
+         Ela abre mostrando DINHEIRO, não campos em branco: por isso os formulários de lançamento
+         não moram aqui, moram no modal do botão "+ Lançar". Antes esta visão era o rodapé da aba
+         Gastos, abaixo de três formulários empilhados — existia, mas ninguém chegava nela. -->
+    <section id="fpanel-extrato" class="hidden fade-in">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-bold text-stone-800 flex items-center gap-2"><i data-lucide="receipt-text" class="w-5 h-5 text-emerald-600"></i>Extrato</h2>
+        <button onclick="lockFinanceiro()" class="text-xs text-stone-400 hover:text-stone-600 flex items-center gap-1"><i data-lucide="lock" class="w-3.5 h-3.5"></i>Bloquear</button>
+      </div>
+      <div id="extrato-painel"></div>
+    </section>
+
     <!-- Sub-aba: DRE -->
     <!-- Análises — visão gerencial por semana (segunda a domingo) e por mês. Constrói sobre o mesmo
          motor do DRE, mas separa CMO / Despesas Fixas / Operacionais e rateia a despesa fixa mensal
@@ -1192,73 +1186,11 @@
     <!-- Sub-aba: Gastos -->
     <section id="fpanel-despesas" class="hidden fade-in">
       <div class="flex items-center justify-between mb-4">
-        <h2 class="text-lg font-bold text-stone-800 flex items-center gap-2"><i data-lucide="arrow-left-right" class="w-5 h-5 text-emerald-600"></i>Movimentações Financeiras</h2>
+        <h2 class="text-lg font-bold text-stone-800 flex items-center gap-2"><i data-lucide="arrow-left-right" class="w-5 h-5 text-emerald-600"></i>Gastos</h2>
         <button onclick="lockFinanceiro()" class="text-xs text-stone-400 hover:text-stone-600 flex items-center gap-1"><i data-lucide="lock" class="w-3.5 h-3.5"></i>Bloquear</button>
       </div>
-      <p class="text-xs text-stone-400 mb-3">Todo dinheiro que entra e sai da empresa. Grupo, categoria e item são cadastrados em <strong>Configurações</strong>.</p>
-      <div class="flex gap-2 mb-4 flex-wrap">
-        <button id="expense-mode-simple-btn" class="expense-mode-btn px-4 py-2 rounded-lg text-sm font-medium bg-emerald-700 text-white" data-mode="simple">− Gasto Simples</button>
-        <button id="expense-mode-batch-btn" class="expense-mode-btn px-4 py-2 rounded-lg text-sm font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-mode="batch">− Gasto em Lote</button>
-        <button id="expense-mode-entrada-btn" class="expense-mode-btn px-4 py-2 rounded-lg text-sm font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-mode="entrada">+ Entrada</button>
-      </div>
-
-      <!-- Entrada avulsa. Venda de balcão e faturamento de evento NÃO se lançam aqui: eles nascem
-           das telas de Vendas e Eventos, e digitar de novo criaria a duplicata que esta tela existe
-           pra evitar. Aqui é só o dinheiro que não tem outra porta de entrada. -->
-      <div class="bg-white rounded-xl p-5 shadow-sm border border-stone-100 mb-5 hidden" id="expense-entrada-section">
-        <h3 class="font-semibold mb-1 text-stone-800 text-sm">Registrar Entrada</h3>
-        <p class="text-xs text-stone-400 mb-4">Dinheiro entrando que não é venda do balcão nem faturamento de evento — esses dois já entram sozinhos pelas telas de Vendas e Eventos.</p>
-        <form onsubmit="handleAddEntrada(event)">
-          <div class="grid sm:grid-cols-2 gap-3 mb-3">
-            <select id="nova-entrada-natureza" required class="input-field text-sm" onchange="onEntradaNaturezaChange(this)"><option value="">Natureza *</option></select>
-            <select id="nova-entrada-origem" class="input-field text-sm"></select>
-          </div>
-          <p id="nova-entrada-aviso" class="hidden"></p>
-          <input id="nova-entrada-desc" type="text" placeholder="Descrição * (ex: Reembolso do fornecedor)" required class="input-field text-sm w-full mb-3">
-          <div class="grid sm:grid-cols-2 gap-3 mb-4">
-            <div class="relative"><span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-stone-400">R$</span><input id="nova-entrada-valor" type="number" placeholder="Valor" min="0.01" step="any" required class="input-field text-sm w-full pl-9"></div>
-            <input id="nova-entrada-data" type="date" required class="input-field text-sm">
-          </div>
-          <div class="flex gap-2"><button type="submit" class="btn-primary px-5 py-2.5 rounded-lg text-sm font-medium">Salvar Entrada</button></div>
-        </form>
-      </div>
-
-      <!-- Gasto Simples -->
-      <div class="bg-white rounded-xl p-5 shadow-sm border border-stone-100 mb-5" id="expense-simple-section">
-        <h3 class="font-semibold mb-4 text-stone-800 text-sm">Registrar Gasto</h3>
-        <form onsubmit="handleAddExpense(event)">
-          <div class="grid sm:grid-cols-2 gap-3 mb-3">
-            <select id="new-expense-group" required class="input-field text-sm" onchange="onExpenseGroupChange(this)"><option value="">Grupo DRE *</option></select>
-            <select id="new-expense-category-select" class="input-field text-sm" onchange="onExpenseCategoryChange(this)"><option value="">Categoria (opcional)</option></select>
-          </div>
-          <!-- A descrição sugere o que você já lançou antes (datalist alimentado pelos próprios
-               gastos) em vez de exigir um cadastro de "Item" previamente preenchido à mão. -->
-          <input id="new-expense-desc" type="text" list="expense-desc-suggestions" autocomplete="off" placeholder="Descrição * (ex: Detergente)" required class="input-field text-sm w-full mb-3">
-          <datalist id="expense-desc-suggestions"></datalist>
-          <div class="grid sm:grid-cols-2 gap-3 mb-4">
-            <div class="relative"><span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-stone-400">R$</span><input id="new-expense-amount" type="number" placeholder="Valor" min="0.01" step="any" required class="input-field text-sm w-full pl-9"></div>
-            <input id="new-expense-date" type="date" required class="input-field text-sm">
-          </div>
-          <div class="flex gap-2"><button type="submit" class="btn-primary px-5 py-2.5 rounded-lg text-sm font-medium">Salvar Gasto</button></div>
-        </form>
-      </div>
-
-      <!-- Gasto em Lote -->
-      <div class="bg-white rounded-xl p-5 shadow-sm border border-stone-100 mb-5 hidden" id="expense-batch-section">
-        <h3 class="font-semibold mb-1 text-stone-800 text-sm">Registrar Gasto em Lote</h3>
-        <p class="text-xs text-stone-400 mb-4">Uma nota, vários itens — cada linha vira um lançamento próprio (pra você conseguir ver "quanto gastei com X" depois), mas todos ficam marcados como vindos da mesma nota.</p>
-        <div class="mb-4">
-          <label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Data da compra</label>
-          <input id="expense-batch-date" type="date" class="input-field text-sm">
-        </div>
-        <div id="expense-batch-rows" class="space-y-2 mb-3"></div>
-        <button type="button" onclick="addExpenseBatchRow()" class="text-sm font-medium flex items-center gap-1 mb-4 btn-ghost px-3 py-1.5 rounded-lg"><i data-lucide="plus" class="w-4 h-4"></i>Adicionar item</button>
-        <div class="mb-4 p-3 bg-emerald-50 border border-emerald-100 rounded-lg flex justify-between items-center">
-          <span class="text-sm font-medium text-emerald-800">Total da nota</span>
-          <span class="text-lg font-bold text-emerald-800" id="expense-batch-total-value">R$ 0,00</span>
-        </div>
-        <button onclick="confirmExpenseBatch()" class="px-4 py-2.5 rounded-lg text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 transition-colors flex items-center gap-1.5"><i data-lucide="check" class="w-4 h-4"></i>Confirmar Gastos</button>
-      </div>
+      <p class="text-xs text-stone-400 mb-3">Detalhe só dos GASTOS, por grupo e por categoria. Para ver tudo que entra e sai, use o <strong>Extrato</strong>. Grupo e categoria são cadastrados em <strong>Configurações</strong>.</p>
+      <button onclick="abrirLancamento('simple')" class="btn-primary px-4 py-2.5 rounded-lg text-sm font-medium flex items-center gap-1.5 mb-4"><i data-lucide="plus" class="w-4 h-4"></i>Lançar</button>
 
       <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 mb-4">
         <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-2">Filtrar</p>
@@ -1269,11 +1201,6 @@
         </div>
         <select id="expense-category-filter" class="input-field text-sm w-full"><option value="">Todas categorias</option></select>
       </div>
-      <!-- Extrato de tudo: entradas e saídas, de qualquer origem, no mesmo lugar. Os painéis de
-           grupo/categoria abaixo continuam sendo só dos GASTOS — eles somam por grupo do DRE, que é
-           uma taxonomia de despesa e não faria sentido para uma entrada. -->
-      <div id="movimentacoes-extrato" class="mb-4"></div>
-
       <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 mb-4">
         <h3 class="font-semibold text-sm mb-3 text-stone-800 flex items-center gap-2"><i data-lucide="layers" class="w-4 h-4 text-emerald-600"></i>Total por grupo do DRE</h3>
         <div id="expense-group-totals" class="space-y-2.5"></div>
@@ -1382,6 +1309,28 @@
         <div id="expense-category-config-list"></div>
       </div>
 
+      <!-- Saldo inicial: o ponto de partida do Extrato. Sem ele o saldo é só entradas − saídas do
+           período, que é resultado e não saldo de conta. Fica aqui, e não numa tela nova, porque é
+           configuração — e porque toda configuração financeira mora no mesmo JSON. -->
+      <div class="bg-white rounded-xl p-5 shadow-sm border border-stone-100 mb-5">
+        <h3 class="font-semibold mb-1 text-stone-800 text-sm flex items-center gap-2"><i data-lucide="wallet" class="w-4 h-4 text-emerald-600"></i>Saldo Inicial da Conta</h3>
+        <p class="text-xs text-stone-400 mb-4">Quanto havia na conta quando o sistema começou a registrar. O Extrato soma tudo que entrou e saiu <strong>a partir dessa data</strong> em cima desse valor — é o que faz o saldo do sistema bater com o do banco.</p>
+        <form onsubmit="handleSaveSaldoInicial(event)">
+          <div class="grid sm:grid-cols-2 gap-3 mb-3">
+            <div>
+              <label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Saldo</label>
+              <div class="relative"><span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-stone-400">R$</span><input id="finance-settings-saldo" type="number" step="any" class="input-field text-sm w-full pl-9"></div>
+            </div>
+            <div>
+              <label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Nessa data</label>
+              <input id="finance-settings-saldo-data" type="date" class="input-field text-sm w-full">
+            </div>
+          </div>
+          <p id="finance-settings-saldo-aviso" class="text-[11px] text-stone-400 mb-4"></p>
+          <button type="submit" class="btn-primary px-5 py-2.5 rounded-lg text-sm font-medium">Salvar Saldo Inicial</button>
+        </form>
+      </div>
+
     </section>
 
     <!-- Sub-aba: Funcionários -->
@@ -1431,6 +1380,120 @@
     </section>
   </main>
 </div>
+
+  <!-- MODAL: Lançar (Gasto Simples / Gasto em Lote / Entrada)
+       Os três formulários viviam empilhados no TOPO da aba Movimentações, antes de qualquer número —
+       a tela abria pedindo digitação em vez de mostrar dinheiro. Aqui eles continuam idênticos (mesmos
+       ids, mesmos handlers); só deixaram de ser a primeira coisa que se vê.
+       ATENÇÃO: como os campos agora nascem dentro de um modal que começa oculto, quem popula os
+       selects é abrirLancamento(), NÃO o render de uma aba. Foi exatamente esse o erro da Parte 1 dos
+       Eventos: campo dentro de div oculta que nenhum render alcançava. -->
+  <div id="lancamento-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-start justify-center p-4 overflow-y-auto">
+    <div class="bg-white rounded-2xl p-5 w-full max-w-lg shadow-2xl my-8">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="font-bold text-stone-800 text-lg flex items-center gap-2"><i data-lucide="plus-circle" class="w-5 h-5 text-emerald-600"></i>Lançar</h3>
+        <button onclick="fecharLancamento()" class="text-stone-400 hover:text-stone-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <div class="flex gap-2 mb-4 flex-wrap">
+        <button id="expense-mode-simple-btn" class="expense-mode-btn px-4 py-2 rounded-lg text-sm font-medium bg-emerald-700 text-white" data-mode="simple">− Gasto Simples</button>
+        <button id="expense-mode-batch-btn" class="expense-mode-btn px-4 py-2 rounded-lg text-sm font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-mode="batch">− Gasto em Lote</button>
+        <button id="expense-mode-entrada-btn" class="expense-mode-btn px-4 py-2 rounded-lg text-sm font-medium bg-stone-100 text-stone-600 hover:bg-stone-200" data-mode="entrada">+ Entrada</button>
+      </div>
+
+      <!-- Entrada avulsa. Venda de balcão e faturamento de evento NÃO se lançam aqui: eles nascem
+           das telas de Vendas e Eventos, e digitar de novo criaria a duplicata que esta tela existe
+           pra evitar. Aqui é só o dinheiro que não tem outra porta de entrada. -->
+      <div class="hidden" id="expense-entrada-section">
+        <p class="text-xs text-stone-400 mb-4">Dinheiro entrando que não é venda do balcão nem faturamento de evento — esses dois já entram sozinhos pelas telas de Vendas e Eventos.</p>
+        <form onsubmit="handleAddEntrada(event)">
+          <div class="grid sm:grid-cols-2 gap-3 mb-3">
+            <select id="nova-entrada-natureza" required class="input-field text-sm" onchange="onEntradaNaturezaChange(this)"><option value="">Natureza *</option></select>
+            <select id="nova-entrada-origem" class="input-field text-sm"></select>
+          </div>
+          <p id="nova-entrada-aviso" class="hidden"></p>
+          <input id="nova-entrada-desc" type="text" placeholder="Descrição * (ex: Reembolso do fornecedor)" required class="input-field text-sm w-full mb-3">
+          <div class="grid sm:grid-cols-2 gap-3 mb-4">
+            <div class="relative"><span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-stone-400">R$</span><input id="nova-entrada-valor" type="number" placeholder="Valor" min="0.01" step="any" required class="input-field text-sm w-full pl-9"></div>
+            <input id="nova-entrada-data" type="date" required class="input-field text-sm">
+          </div>
+          <div class="flex gap-2"><button type="submit" class="btn-primary px-5 py-2.5 rounded-lg text-sm font-medium">Salvar Entrada</button></div>
+        </form>
+      </div>
+
+      <!-- Gasto Simples -->
+      <div id="expense-simple-section">
+        <form onsubmit="handleAddExpense(event)">
+          <div class="grid sm:grid-cols-2 gap-3 mb-3">
+            <select id="new-expense-group" required class="input-field text-sm" onchange="onExpenseGroupChange(this)"><option value="">Grupo DRE *</option></select>
+            <select id="new-expense-category-select" class="input-field text-sm" onchange="onExpenseCategoryChange(this)"><option value="">Categoria (opcional)</option></select>
+          </div>
+          <!-- A descrição sugere o que você já lançou antes (datalist alimentado pelos próprios
+               gastos) em vez de exigir um cadastro de "Item" previamente preenchido à mão. -->
+          <input id="new-expense-desc" type="text" list="expense-desc-suggestions" autocomplete="off" placeholder="Descrição * (ex: Detergente)" required class="input-field text-sm w-full mb-3">
+          <datalist id="expense-desc-suggestions"></datalist>
+          <div class="grid sm:grid-cols-2 gap-3 mb-3">
+            <div class="relative"><span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-stone-400">R$</span><input id="new-expense-amount" type="number" placeholder="Valor" min="0.01" step="any" required class="input-field text-sm w-full pl-9"></div>
+            <input id="new-expense-date" type="date" required class="input-field text-sm">
+          </div>
+          <!-- A prazo fica ESCONDIDO atrás de um checkbox porque quase todo gasto é à vista. Deixar
+               o campo de vencimento sempre visível põe uma pergunta na frente de quem não tem a
+               resposta — e o formulário já é a parte que trava o lançamento do dia a dia. -->
+          <label class="flex items-center gap-2 mb-3 cursor-pointer">
+            <input id="new-expense-aprazo" type="checkbox" class="w-4 h-4 rounded border-stone-300 text-emerald-600" onchange="onExpenseAPrazoChange(this)">
+            <span class="text-xs text-stone-600">É boleto ou compra a prazo (ainda não paguei)</span>
+          </label>
+          <div id="new-expense-aprazo-box" class="hidden mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+            <label class="text-[10px] font-semibold text-amber-800 uppercase tracking-wide block mb-1.5">Vence em</label>
+            <input id="new-expense-due" type="date" class="input-field text-sm w-full">
+            <p class="text-[11px] text-amber-700 mt-2">Vai contar no lucro na data do gasto, mas <strong>não sai do saldo</strong> até você marcar como pago. Aparece em "A pagar" no Extrato.</p>
+          </div>
+          <div class="flex gap-2"><button type="submit" class="btn-primary px-5 py-2.5 rounded-lg text-sm font-medium">Salvar Gasto</button></div>
+        </form>
+      </div>
+
+      <!-- Gasto em Lote -->
+      <div class="hidden" id="expense-batch-section">
+        <p class="text-xs text-stone-400 mb-4">Uma nota, vários itens — cada linha vira um lançamento próprio (pra você conseguir ver "quanto gastei com X" depois), mas todos ficam marcados como vindos da mesma nota.</p>
+        <div class="mb-4">
+          <label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Data da compra</label>
+          <input id="expense-batch-date" type="date" class="input-field text-sm">
+        </div>
+        <div id="expense-batch-rows" class="space-y-2 mb-3"></div>
+        <button type="button" onclick="addExpenseBatchRow()" class="text-sm font-medium flex items-center gap-1 mb-4 btn-ghost px-3 py-1.5 rounded-lg"><i data-lucide="plus" class="w-4 h-4"></i>Adicionar item</button>
+        <div class="mb-4 p-3 bg-emerald-50 border border-emerald-100 rounded-lg flex justify-between items-center">
+          <span class="text-sm font-medium text-emerald-800">Total da nota</span>
+          <span class="text-lg font-bold text-emerald-800" id="expense-batch-total-value">R$ 0,00</span>
+        </div>
+        <button onclick="confirmExpenseBatch()" class="px-4 py-2.5 rounded-lg text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 transition-colors flex items-center gap-1.5"><i data-lucide="check" class="w-4 h-4"></i>Confirmar Gastos</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Acertar Saldo
+       Uma ação, não um fluxo de conferência. Você digita o que o banco mostra, o sistema calcula a
+       diferença e grava UMA linha de acerto. Não existe tela de "revisar divergências" nem de
+       aprovar: o sistema corrige e avisa o quanto foi.
+       A linha entra no caixa e NÃO entra no resultado — erro de digitação corrigido não é prejuízo. -->
+  <div id="acerto-saldo-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+      <div class="flex items-center justify-between mb-1">
+        <h3 class="font-bold text-stone-800 text-lg flex items-center gap-2"><i data-lucide="scale" class="w-5 h-5 text-emerald-600"></i>Acertar saldo</h3>
+        <button onclick="fecharAcertoDeSaldo()" class="text-stone-400 hover:text-stone-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <p class="text-xs text-stone-400 mb-4">Digite o saldo que o banco mostra hoje. O sistema registra a diferença como um acerto — nada é apagado nem reescrito.</p>
+      <div class="bg-stone-50 rounded-lg p-3 mb-3 flex justify-between items-center">
+        <span class="text-xs text-stone-500">Saldo pelo sistema</span>
+        <span class="text-sm font-bold text-stone-800" id="acerto-saldo-calculado">R$ 0,00</span>
+      </div>
+      <label class="text-xs font-semibold text-stone-600 uppercase tracking-wide block mb-1.5">Saldo real hoje</label>
+      <div class="relative mb-3"><span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-stone-400">R$</span><input id="acerto-saldo-real" type="number" step="any" placeholder="0,00" class="input-field text-sm w-full pl-9" oninput="atualizarPreviaDoAcerto()"></div>
+      <p id="acerto-saldo-previa" class="text-xs rounded-lg px-3 py-2 mb-4 bg-stone-50 border border-stone-200 text-stone-500">Digite o saldo real para ver a diferença.</p>
+      <div class="flex gap-2">
+        <button onclick="confirmarAcertoDeSaldo()" class="flex-1 btn-primary px-4 py-2.5 rounded-lg text-sm font-medium">Registrar acerto</button>
+        <button onclick="fecharAcertoDeSaldo()" class="flex-1 btn-ghost px-4 py-2.5 rounded-lg text-sm font-medium">Cancelar</button>
+      </div>
+    </div>
+  </div>
 
   <!-- MODAL: Cancelar Produção (devolve insumos ao estoque) -->
   <div id="cancel-production-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -2307,6 +2370,7 @@ async function sbCarregarFinanceiro() {
     cost_unit: e.expense_category_id || e.dre_group_id,
     system_name: sbTexto(e.proration),
     spreadsheet_name: sbTexto(e.origin_ref),
+    due_date: sbData(e.due_date) || '', paid_at: sbData(e.paid_at) || '',
     linked_employee_id: e.employee_id || '', updated_at: e.created_at }));
 
   fixas.forEach(f => records.push({ id: f.id, type: 'fixed_expense', product_name: f.name,
@@ -2327,6 +2391,7 @@ async function sbCarregarFinanceiro() {
 
   custeadas.forEach(c => records.push({ id: c.movement_id, type: 'costed_entry',
     movement_id: c.movement_id, total_cost: sbN(c.total_cost), skipped: c.skipped,
+    due_date: sbData(c.due_date) || '', paid_at: sbData(c.paid_at) || '',
     costed_at: c.costed_at, updated_at: c.costed_at }));
 
   itensVenda.forEach(i => {
@@ -2380,9 +2445,13 @@ async function sbCarregarFinanceiro() {
       records.push({ id: 'analysis', type: 'analysis_settings', product_name: 'config',
         employee_notes: JSON.stringify(s.value || {}), updated_at: s.updated_at });
     } else if (s.key === 'finance') {
+      // A configuração inteira volta no JSON; os dois percentuais TAMBÉM voltam nas colunas de
+      // sempre. Ver o bloco de CONFIGURAÇÕES FINANCEIRAS: o JSON manda, a coluna é o caminho de
+      // volta. Devolver só um dos dois quebraria um dos dois lados da leitura.
       const v = s.value || {};
-      records.push({ id: 'finance', type: 'finance_settings', cost_price: sbN(v.taxPct),
-        unit_cost: sbN(v.cardFeePct), updated_at: s.updated_at });
+      records.push({ id: 'finance', type: 'finance_settings',
+        employee_notes: JSON.stringify(v),
+        cost_price: sbN(v.taxPct), unit_cost: sbN(v.cardFeePct), updated_at: s.updated_at });
     }
   });
 
@@ -2471,6 +2540,8 @@ const SB_LINHA = {
       proration: ['mensal','pontual'].includes(d.system_name) ? d.system_name : null,
       origin: origem, origin_ref: origem ? marca : null,
       origin_unit: d.origin_unit || null,
+      // Contas a pagar: vazio vira null, não string vazia — a coluna é `date` e o Postgres recusa ''.
+      due_date: sbData(d.due_date) || null, paid_at: sbData(d.paid_at) || null,
       employee_id: sbMapId(d.linked_employee_id) }; },
   // Entrada avulsa. `counts_as_revenue` é resolvido AQUI, na travessia, e não no banco: a regra de
   // qual natureza vira faturamento mora em ENTRADAS_AVULSAS, e duplicá-la em SQL criaria duas
@@ -2485,7 +2556,8 @@ const SB_LINHA = {
     unit: d.cost_unit || 'unidade', effective_at: sbTs(d.cost_updated_at) || new Date().toISOString(),
     source: 'manual' }),
   costed_entry: d => ({ movement_id: sbMapId(d.movement_id), total_cost: sbN(d.total_cost),
-    skipped: sbBool(d.skipped) || d.skipped === true, costed_at: sbTs(d.costed_at) || new Date().toISOString() }),
+    skipped: sbBool(d.skipped) || d.skipped === true, costed_at: sbTs(d.costed_at) || new Date().toISOString(),
+    due_date: sbData(d.due_date) || null, paid_at: sbData(d.paid_at) || null }),
   sale_alias: d => ({ id: sbMapId(d.id), external_name: d.spreadsheet_name, system_name: d.system_name }),
   employee: d => ({ id: sbMapId(d.id), name: d.product_name, hourly_rate: sbN(d.employee_pay_value),
     active: d.employee_status !== 'inativo' }),
@@ -2508,7 +2580,10 @@ function sbLinhaConfig(d) {
   const key = SB_CHAVE_CONFIG[d.type];
   const value =
     d.type === 'analysis_settings'   ? sbJson(d.employee_notes, {}) :
-    d.type === 'finance_settings'    ? { taxPct: sbN(d.cost_price), cardFeePct: sbN(d.unit_cost) } :
+    // O JSON leva TUDO (saldo inicial e o que vier depois). Os dois percentuais são reafirmados por
+    // cima a partir das colunas escalares, que o app sempre mantém em dia — assim um JSON antigo,
+    // gravado antes de um parâmetro existir, nunca sobrescreve o percentual atual com o valor velho.
+    d.type === 'finance_settings'    ? { ...sbJson(d.employee_notes, {}), taxPct: sbN(d.cost_price), cardFeePct: sbN(d.unit_cost) } :
     d.type === 'consumption_reset'   ? { at: d.movement_date } :
     /* stock_alerts */                 { at: d.movement_date, avisos: sbJson(d.batch_items, []) };
   return { key, value, updated_at: new Date().toISOString() };
@@ -5610,13 +5685,14 @@ document.addEventListener('click', (e) => {
 });
 document.addEventListener('click', (e) => {
   const btn = e.target.closest('.expense-mode-btn'); if (!btn) return;
-  currentExpenseMode = btn.dataset.mode;
-  document.querySelectorAll('.expense-mode-btn').forEach(b => { b.className = `expense-mode-btn px-4 py-2 rounded-lg text-sm font-medium ${b.dataset.mode===currentExpenseMode?'bg-emerald-700 text-white':'bg-stone-100 text-stone-600 hover:bg-stone-200'}`; });
-  document.getElementById('expense-simple-section').classList.toggle('hidden', currentExpenseMode !== 'simple');
-  document.getElementById('expense-batch-section').classList.toggle('hidden', currentExpenseMode !== 'batch');
-  document.getElementById('expense-entrada-section').classList.toggle('hidden', currentExpenseMode !== 'entrada');
+  aplicarModoLancamento(btn.dataset.mode);
   if (currentExpenseMode === 'batch' && document.querySelectorAll('.expense-batch-row').length === 0) resetExpenseBatchForm();
   if (currentExpenseMode === 'entrada') prepararFormEntrada();
+});
+// Fechar o modal de lançamento clicando fora dele. Só no fundo, nunca num clique dentro do cartão —
+// senão errar a mira dentro do formulário jogaria fora o que já foi digitado.
+document.addEventListener('click', (e) => {
+  if (e.target && e.target.id === 'lancamento-modal') fecharLancamento();
 });
 function renderSalesSelect() {
   const finished = getFinishedProducts();
@@ -5797,9 +5873,7 @@ async function confirmSales() {
     resetSalesForm();
     renderSalesSelect();
     renderSalesToday();
-    if (activeFinanceTab === 'faturamento') renderFaturamento();
-  if (activeFinanceTab === 'rentabilidade') renderRentabilidade();
-    if (activeFinanceTab === 'dre') renderDRE();
+    renderAbaFinanceiraAtiva();
 
     if (financeSaveFailed) {
       showResultModal('⚠️ Venda registrada, mas o faturamento falhou', [
@@ -6011,7 +6085,7 @@ async function handleAddEventExtraCost(movementId, idx) {
     showToast('Custo extra adicionado!');
     renderEventos();
     renderEventosBadge();
-    if (activeFinanceTab === 'dre') renderDRE();
+    renderAbaFinanceiraAtiva();
   } catch (err) {
     hideLoadingProgress();
     console.error('Erro ao adicionar custo extra:', err);
@@ -6053,7 +6127,7 @@ async function handleAddEventRevenue(movementId, idx) {
     showToast('Faturamento do evento lançado!');
     renderEventos();
     renderEventosBadge();
-    if (activeFinanceTab === 'dre') renderDRE();
+    renderAbaFinanceiraAtiva();
   } catch (err) {
     hideLoadingProgress();
     console.error('Erro ao lançar faturamento do evento:', err);
@@ -7759,14 +7833,14 @@ async function confirmDelete() {
     const x = financeData.find(r => r.id === deleteId);
     if (x) {
       const result = await financeApiCall('delete', { id: x.id });
-      if (result.ok) { financeData = financeData.filter(r => r.id !== x.id); renderEventos(); renderEventosBadge(); if (activeFinanceTab==='dre') renderDRE(); showToast('Custo extra excluído!'); }
+      if (result.ok) { financeData = financeData.filter(r => r.id !== x.id); renderEventos(); renderEventosBadge(); renderAbaFinanceiraAtiva(); showToast('Custo extra excluído!'); }
       else showToast('Erro ao excluir', true);
     }
   } else if (deleteType === 'dre_group') {
     const g = financeData.find(r => r.id === deleteId);
     if (g) {
       const result = await financeApiCall('delete', { id: g.id });
-      if (result.ok) { financeData = financeData.filter(r => r.id !== g.id); renderExpenseConfig(); renderExpenses(); if (activeFinanceTab==='dre') renderDRE(); showToast('Grupo excluído!'); }
+      if (result.ok) { financeData = financeData.filter(r => r.id !== g.id); renderExpenseConfig(); renderExpenses(); renderAbaFinanceiraAtiva(); showToast('Grupo excluído!'); }
       else showToast('Erro ao excluir', true);
     }
   } else if (deleteType === 'expense_category') {
@@ -7807,7 +7881,7 @@ async function confirmDelete() {
         }
         renderWeeklyTimesheets();
         renderExpenses();
-        if (activeFinanceTab === 'dre') renderDRE();
+        renderAbaFinanceiraAtiva();
         showToast('Registro semanal excluído!');
       } else showToast('Erro ao excluir', true);
     }
@@ -7846,10 +7920,10 @@ function financeCached(key, build) {
   if (!(key in _financeCache)) _financeCache[key] = build();
   return _financeCache[key];
 }
-// Análises é a tela de entrada da Central Financeira — é ela que responde "quanto sobrou?", que é
-// a pergunta que se faz ao abrir o financeiro. O DRE continua a um clique, pro detalhe contábil.
-let activeFinanceTab = 'analises';
-let custosSubTab = 'custos'; // sub-aba ativa dentro do grupo "Estoque & Custos"
+// O EXTRATO é a tela de entrada da Central Financeira. Antes era Análises, que responde "quanto
+// sobrou?" — boa pergunta, mas de fechamento. A que se faz ao ABRIR o financeiro é "o que entrou e
+// saiu", e essa só o extrato responde. Análises e DRE continuam a um clique.
+let activeFinanceTab = 'extrato';
 let currentArea = 'estoque'; // 'estoque' | 'financeiro'
 let financePrecosSearch = '';
 let financePrecosFilter = 'todos';
@@ -7892,58 +7966,139 @@ function gotoEstoque() {
   document.getElementById('header-subtitle').textContent = 'Gestão Operacional';
   lucide.createIcons();
 }
-// Sub-navegação do grupo "Estoque & Custos" — telas que antes ocupavam um espaço cada na nav
-// principal, agora atrás de uma só. Painéis e renders vêm de um mapa único pra que acrescentar uma
-// sub-aba seja UMA linha, e não uma linha aqui + uma no toggle + uma no dispatch.
-const CUSTOS_SUBTABS = {
-  'custos':           { panel:'fpanel-custos',            render:null },
-  'precos':           { panel:'fpanel-precos',            render:()=>renderFinancePrecos() },
-  'cmv':              { panel:'fpanel-cmv',               render:()=>renderFinanceCMV() },
-  'estoque-valor':    { panel:'fpanel-estoque-valor',     render:()=>renderInventoryPanel() },
-  'saidas-sem-venda': { panel:'fpanel-saidas-sem-venda',  render:()=>renderSaidasSemVenda() },
+// (A antiga CUSTOS_SUBTABS virou o grupo 'estoque-custos' dentro de FINANCE_TABS, logo abaixo.)
+// AS ABAS DO FINANCEIRO, NUM MAPA SÓ — e a nav é gerada dele.
+//
+// Eram 10 abas na barra. Viraram 5, agrupadas POR VERBO e não por assunto:
+//
+//   Extrato            consultar     o que entrou e saiu, e a quem devo
+//   Resultado          entender      quanto sobrou, e por quê (Análises, DRE, Gastos, ...)
+//   Vendas             lançar        venda do balcão
+//   Estoque & Custos   entender      onde o dinheiro do estoque está
+//   Configurações      cadastrar     regras, grupos, funcionários
+//
+// "Quanto gastei" estava espalhado por Movimentações, DRE, Análises e Faturamento porque as quatro
+// foram organizadas por assunto. Agrupar por verbo junta o que se olha na mesma sessão.
+//
+// A lista já esteve escrita em TRÊS lugares (o HTML da nav, o listener de clique e renderFinanceiro),
+// e as três já tinham divergido: 'rentabilidade' aparecia num toggle e não no outro. Agora é uma só,
+// e até os botões saem daqui. Acrescentar aba é uma linha.
+const FINANCE_TABS = {
+  'extrato': { label:'Extrato', icone:'receipt-text', panel:'fpanel-extrato', render:()=>renderExtrato() },
+  'resultado': { label:'Resultado', icone:'line-chart', subs: {
+    'analises':      { label:'Análises',      panel:'fpanel-analises',      render:()=>renderAnalises() },
+    'dre':           { label:'DRE',           panel:'fpanel-dre',           render:()=>renderDRE() },
+    'gastos':        { label:'Gastos',        panel:'fpanel-despesas',      render:()=>renderExpenses() },
+    'faturamento':   { label:'Faturamento',   panel:'fpanel-faturamento',   render:()=>renderFaturamento() },
+    'rentabilidade': { label:'Rentabilidade', panel:'fpanel-rentabilidade', render:()=>renderRentabilidade() },
+  }},
+  'vendas': { label:'Vendas', icone:'credit-card', panel:'fpanel-vendas',
+    render:()=>{ renderSalesSelect(); renderSalesToday(); if (currentSalesMode==='bulk') initBulkSalesDate(); } },
+  'estoque-custos': { label:'Estoque & Custos', icone:'banknote', subs: {
+    'custos':           { label:'Custos Pendentes',    panel:'fpanel-custos',           render:()=>renderStockCosts() },
+    'precos':           { label:'Preço Médio',         panel:'fpanel-precos',           render:()=>renderFinancePrecos() },
+    'cmv':              { label:'CMV',                 panel:'fpanel-cmv',              render:()=>renderFinanceCMV() },
+    'estoque-valor':    { label:'Dinheiro em Estoque', panel:'fpanel-estoque-valor',    render:()=>renderInventoryPanel() },
+    'saidas-sem-venda': { label:'Saídas sem Venda',    panel:'fpanel-saidas-sem-venda', render:()=>renderSaidasSemVenda() },
+  }},
+  'configuracoes': { label:'Configurações', icone:'settings', subs: {
+    'regras':       { label:'Regras e Grupos', panel:'fpanel-config-gastos', render:()=>renderConfigTab() },
+    'funcionarios': { label:'Funcionários',    panel:'fpanel-funcionarios',  render:()=>renderEmployees() },
+  }},
 };
-function renderCustosSubnav() {
-  document.querySelectorAll('.custos-sub-tab-btn').forEach(b => {
-    b.className = `custos-sub-tab-btn px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap ${b.dataset.sub===custosSubTab?'bg-stone-800 text-white':'bg-stone-100 text-stone-600 hover:bg-stone-200'}`;
+// Sub-aba ativa de cada grupo, lembrada por grupo: voltar pra "Resultado" te devolve na sub-aba em
+// que você estava, não sempre na primeira.
+const subAbaAtiva = {};
+function subAbasDe(key) { const t = FINANCE_TABS[key]; return t && t.subs ? t.subs : null; }
+function subAbaDe(key) {
+  const subs = subAbasDe(key); if (!subs) return null;
+  if (!subAbaAtiva[key] || !subs[subAbaAtiva[key]]) subAbaAtiva[key] = Object.keys(subs)[0];
+  return subAbaAtiva[key];
+}
+// Todo painel que o mapa conhece, de aba simples ou de sub-aba. É a lista que garante que nada fica
+// visível por baixo da aba ativa nem escapa do "esconder tudo" ao trancar o financeiro.
+function todosOsPaineisFinanceiros() {
+  const out = [];
+  Object.values(FINANCE_TABS).forEach(t => {
+    if (t.panel) out.push(t.panel);
+    if (t.subs) Object.values(t.subs).forEach(s => out.push(s.panel));
   });
-  Object.entries(CUSTOS_SUBTABS).forEach(([key, cfg]) => {
-    const el = document.getElementById(cfg.panel);
-    if (el) el.classList.toggle('hidden', custosSubTab !== key);
+  return out;
+}
+// Redesenha SÓ a tela que está aberta, seja ela aba simples ou sub-aba.
+//
+// Substituiu ~28 linhas espalhadas do tipo `renderAbaFinanceiraAtiva();`. Elas
+// funcionavam enquanto cada tela era uma aba de primeiro nível; ao agrupar, 'dre' e 'despesas'
+// deixaram de ser valores possíveis de activeFinanceTab e TODAS teriam virado condição sempre falsa
+// — a tela pararia de atualizar depois de um lançamento, sem erro nenhum, que é o jeito mais chato
+// de descobrir. Uma função só não tem como ficar desatualizada quando o mapa muda.
+function renderAbaFinanceiraAtiva() {
+  if (!financeUnlocked) return;
+  const grupo = FINANCE_TABS[activeFinanceTab]; if (!grupo) return;
+  const subs = subAbasDe(activeFinanceTab);
+  const alvo = subs ? subs[subAbaDe(activeFinanceTab)] : grupo;
+  if (alvo && alvo.render) alvo.render();
+}
+// Monta os botões UMA VEZ e depois só troca a classe do ativo. Regerar o innerHTML a cada clique
+// destrói e recria os botões — o que funciona, mas joga fora o elemento que acabou de ser clicado
+// (perde foco, e qualquer código que tenha guardado a referência passa a segurar um órfão fora do
+// DOM). A nav muda de conteúdo zero vez na vida do app; só o destaque muda.
+function renderFinanceNav() {
+  const nav = document.querySelector('#finance-nav .nav-grid'); if (!nav) return;
+  if (!nav.children.length) {
+    nav.innerHTML = Object.entries(FINANCE_TABS).map(([key, t]) =>
+      `<button class="finance-tab-btn px-2 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 text-center leading-tight" data-ftab="${key}"><i data-lucide="${t.icone}" class="w-5 h-5"></i>${t.label}</button>`
+    ).join('');
+  }
+  nav.querySelectorAll('.finance-tab-btn').forEach(b =>
+    b.classList.toggle('finance-tab-active', b.dataset.ftab === activeFinanceTab));
+}
+// Mostra a aba ativa e esconde as outras. `visivel=false` (financeiro trancado) esconde todas sem
+// renderizar nada — é o que impede número de dinheiro sobrar na tela depois de bloquear.
+function aplicarAbaFinanceira(visivel) {
+  renderFinanceNav();
+  const grupo = FINANCE_TABS[activeFinanceTab];
+  const subs = visivel ? subAbasDe(activeFinanceTab) : null;
+  const subAtiva = subs ? subAbaDe(activeFinanceTab) : null;
+
+  // Cabeçalho e sub-navegação do grupo
+  const header = document.getElementById('grupo-header');
+  const subnav = document.getElementById('grupo-subnav');
+  header.classList.toggle('hidden', !subs);
+  subnav.classList.toggle('hidden', !subs);
+  if (subs) {
+    document.getElementById('grupo-titulo').innerHTML =
+      `<i data-lucide="${grupo.icone}" class="w-5 h-5 text-emerald-600"></i>${grupo.label}`;
+    subnav.innerHTML = Object.entries(subs).map(([sk, s]) =>
+      `<button class="grupo-sub-tab-btn px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap ${sk===subAtiva?'bg-stone-800 text-white':'bg-stone-100 text-stone-600 hover:bg-stone-200'}" data-sub="${sk}">${s.label}</button>`
+    ).join('');
+  } else {
+    // Esvaziar, não só esconder: botão oculto continua no DOM, clicável por código e achável por
+    // querySelector. Numa aba sem sub-abas não pode existir sub-aba nenhuma pendurada.
+    subnav.innerHTML = '';
+  }
+
+  // Um painel visível por vez, e nenhum quando trancado.
+  const visivelAgora = !visivel ? null : (subs ? subs[subAtiva].panel : (grupo && grupo.panel));
+  todosOsPaineisFinanceiros().forEach(p => {
+    const el = document.getElementById(p);
+    if (el) el.classList.toggle('hidden', p !== visivelAgora);
   });
-  const ativa = CUSTOS_SUBTABS[custosSubTab];
-  if (ativa && ativa.render) ativa.render();
+
+  if (!visivel) return;
+  const alvo = subs ? subs[subAtiva] : grupo;
+  if (alvo && alvo.render) alvo.render();
   lucide.createIcons();
 }
 document.addEventListener('click', (e) => {
   const btn = e.target.closest('.finance-tab-btn'); if (!btn) return;
   activeFinanceTab = btn.dataset.ftab;
-  document.querySelectorAll('.finance-tab-btn').forEach(b => b.classList.toggle('finance-tab-active', b.dataset.ftab===activeFinanceTab));
-  document.getElementById('estoque-custos-header').classList.toggle('hidden', activeFinanceTab!=='estoque-custos');
-  document.getElementById('custos-subnav').classList.toggle('hidden', activeFinanceTab!=='estoque-custos');
-  if (activeFinanceTab === 'estoque-custos') renderCustosSubnav();
-  else Object.values(CUSTOS_SUBTABS).forEach(cfg => { const el = document.getElementById(cfg.panel); if (el) el.classList.add('hidden'); });
-  document.getElementById('fpanel-analises').classList.toggle('hidden', activeFinanceTab!=='analises');
-  document.getElementById('fpanel-vendas').classList.toggle('hidden', activeFinanceTab!=='vendas');
-  document.getElementById('fpanel-faturamento').classList.toggle('hidden', activeFinanceTab!=='faturamento');
-  document.getElementById('fpanel-rentabilidade').classList.toggle('hidden', activeFinanceTab!=='rentabilidade');
-  document.getElementById('fpanel-dre').classList.toggle('hidden', activeFinanceTab!=='dre');
-  document.getElementById('fpanel-despesas').classList.toggle('hidden', activeFinanceTab!=='despesas');
-  document.getElementById('fpanel-config-gastos').classList.toggle('hidden', activeFinanceTab!=='config-gastos');
-  document.getElementById('fpanel-funcionarios').classList.toggle('hidden', activeFinanceTab!=='funcionarios');
-  if (activeFinanceTab === 'analises') renderAnalises();
-  if (activeFinanceTab === 'vendas') { renderSalesSelect(); renderSalesToday(); if (currentSalesMode==='bulk') { initBulkSalesDate(); } }
-  if (activeFinanceTab === 'faturamento') renderFaturamento();
-  if (activeFinanceTab === 'rentabilidade') renderRentabilidade();
-  if (activeFinanceTab === 'dre') renderDRE();
-  if (activeFinanceTab === 'despesas') renderExpenses();
-  if (activeFinanceTab === 'config-gastos') { renderConfigTab(); }
-  if (activeFinanceTab === 'funcionarios') renderEmployees();
-  lucide.createIcons();
+  aplicarAbaFinanceira(true);
 });
 document.addEventListener('click', (e) => {
-  const btn = e.target.closest('.custos-sub-tab-btn'); if (!btn) return;
-  custosSubTab = btn.dataset.sub;
-  renderCustosSubnav();
+  const btn = e.target.closest('.grupo-sub-tab-btn'); if (!btn) return;
+  subAbaAtiva[activeFinanceTab] = btn.dataset.sub;
+  aplicarAbaFinanceira(true);
 });
 document.addEventListener('click', (e) => {
   const btn = e.target.closest('.dre-filter'); if (!btn) return;
@@ -9057,9 +9212,7 @@ async function confirmChangeSaleDate() {
     renderAll();
     hideLoadingProgress();
     renderSalesToday();
-    if (activeFinanceTab === 'faturamento') renderFaturamento();
-  if (activeFinanceTab === 'rentabilidade') renderRentabilidade();
-    if (activeFinanceTab === 'dre') renderDRE();
+    renderAbaFinanceiraAtiva();
     showToast(matched.length > 0 ? `Data alterada — ${matched.length} lançamento(s) de faturamento movido(s) junto!` : 'Data da venda alterada!');
   } catch (err) {
     hideLoadingProgress();
@@ -9333,29 +9486,11 @@ function renderFinanceiro() {
   const nav = document.getElementById('finance-nav');
   lockScreen.classList.toggle('hidden', financeUnlocked);
   nav.classList.toggle('hidden', !financeUnlocked);
-  document.getElementById('estoque-custos-header').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='estoque-custos');
-  document.getElementById('custos-subnav').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='estoque-custos');
-  if (financeUnlocked && activeFinanceTab === 'estoque-custos') renderCustosSubnav();
-  else Object.values(CUSTOS_SUBTABS).forEach(cfg => { const el = document.getElementById(cfg.panel); if (el) el.classList.add('hidden'); });
-  document.getElementById('fpanel-analises').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='analises');
-  document.getElementById('fpanel-vendas').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='vendas');
-  document.getElementById('fpanel-faturamento').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='faturamento');
-  document.getElementById('fpanel-dre').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='dre');
-  document.getElementById('fpanel-despesas').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='despesas');
-  document.getElementById('fpanel-config-gastos').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='config-gastos');
-  document.getElementById('fpanel-funcionarios').classList.toggle('hidden', !financeUnlocked || activeFinanceTab!=='funcionarios');
-  if (financeUnlocked) {
-    renderFinancePending(); renderStockCosts(); renderFinancePrecos(); renderFinanceCMV();
-    if (activeFinanceTab === 'analises') renderAnalises();
-    if (activeFinanceTab === 'vendas') { renderSalesSelect(); renderSalesToday(); if (currentSalesMode==='bulk') { initBulkSalesDate(); } }
-    if (activeFinanceTab === 'faturamento') renderFaturamento();
-  if (activeFinanceTab === 'rentabilidade') renderRentabilidade();
-    if (activeFinanceTab === 'dre') renderDRE();
-    if (activeFinanceTab === 'despesas') renderExpenses();
-    if (activeFinanceTab === 'config-gastos') { renderConfigTab(); }
-    if (activeFinanceTab === 'funcionarios') renderEmployees();
-    lucide.createIcons();
-  }
+  // Trancar o financeiro fecha o modal de lançamento junto: um formulário de gasto aberto por cima
+  // da tela de senha continuaria gravando com a sessão que acabou de ser encerrada.
+  if (!financeUnlocked) fecharLancamento();
+  if (financeUnlocked) { renderFinancePending(); renderStockCosts(); renderFinancePrecos(); renderFinanceCMV(); }
+  aplicarAbaFinanceira(financeUnlocked);
 }
 async function unlockFinanceiro() {
   const pwd = document.getElementById('finance-password-input').value;
@@ -9381,7 +9516,7 @@ async function unlockFinanceiro() {
     await syncStockSnapshot();
     hideLoadingProgress();
     document.getElementById('finance-password-input').value = '';
-    activeFinanceTab = 'analises';
+    activeFinanceTab = 'extrato';
     // A aba Eventos vive fora do Financeiro e muda de cara quando ele destrava.
     renderEventos();
     renderEventosBadge();
@@ -9471,6 +9606,15 @@ function renderFinancePending() {
           </div>`;
         }).join('')}
       </div>
+      <label class="flex items-center gap-2 mt-4 cursor-pointer">
+        <input type="checkbox" class="pending-aprazo w-4 h-4 rounded border-stone-300 text-emerald-600" data-movement="${m.id}" onchange="onPendingAPrazoChange(this)">
+        <span class="text-xs text-stone-600">Comprei a prazo / no boleto</span>
+      </label>
+      <div class="pending-aprazo-box hidden mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg" data-movement="${m.id}">
+        <label class="text-[10px] font-semibold text-amber-800 uppercase tracking-wide block mb-1.5">Vence em</label>
+        <input type="date" class="pending-due input-field text-sm w-full" data-movement="${m.id}">
+        <p class="text-[11px] text-amber-700 mt-2">O estoque entra agora e o custo médio já sobe. O <strong>dinheiro</strong> só sai do saldo quando você marcar como pago.</p>
+      </div>
       <div class="flex gap-2 mt-4">
         <button onclick="saveFinanceCosts('${m.id}')" class="flex-1 px-4 py-2.5 rounded-lg text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors flex items-center justify-center gap-1.5"><i data-lucide="check" class="w-3.5 h-3.5"></i>Salvar Custos</button>
         <button onclick="skipFinanceEntry('${m.id}')" class="px-4 py-2.5 rounded-lg text-xs font-medium text-stone-500 bg-stone-100 hover:bg-stone-200 transition-colors">🚫 Não sei o preço, pular</button>
@@ -9478,6 +9622,16 @@ function renderFinancePending() {
     </div>`;
   }).join('');
   lucide.createIcons();
+}
+function onPendingAPrazoChange(chk) {
+  const mov = chk.dataset.movement;
+  const box = document.querySelector(`.pending-aprazo-box[data-movement="${mov}"]`);
+  if (box) box.classList.toggle('hidden', !chk.checked);
+  const due = document.querySelector(`.pending-due[data-movement="${mov}"]`);
+  if (chk.checked && due && !due.value) {
+    const d = new Date(); d.setDate(d.getDate() + 30);
+    due.value = localDateStr(d);
+  }
 }
 // Marca a entrada como "pulada" — some da lista sem exigir preço. Fica registrada como pulada
 // (não é um cancelamento silencioso); assim que você lançar um preço novo desse insumo em
@@ -9560,8 +9714,14 @@ async function saveFinanceCosts(movementId) {
       done++;
     }
     updateLoadingProgress('Marcando entrada como custeada...');
-    const rEntry = await financeApiCall('create', { data: { type:'costed_entry', movement_id: movementId, total_cost: grandTotal, costed_at: new Date().toISOString() } });
-    financeData.push({ id: rEntry.id, type:'costed_entry', movement_id: movementId, total_cost: grandTotal, costed_at: new Date().toISOString() });
+    // A compra a prazo é a MESMA linha de sempre, com um vencimento. O custo médio e o estoque já
+    // subiram acima, independentes disso — quem espera é só o dinheiro.
+    const chkPrazo = document.querySelector(`.pending-aprazo[data-movement="${movementId}"]`);
+    const dueEl = document.querySelector(`.pending-due[data-movement="${movementId}"]`);
+    const dueDate = (chkPrazo && chkPrazo.checked && dueEl && dueEl.value) ? dueEl.value : '';
+    const entryPayload = { type:'costed_entry', movement_id: movementId, total_cost: grandTotal, costed_at: new Date().toISOString(), ...(dueDate ? { due_date: dueDate } : {}) };
+    const rEntry = await financeApiCall('create', { data: entryPayload });
+    financeData.push({ id: rEntry.id, ...entryPayload });
     for (const cand of opExpenseCandidates) {
       updateLoadingProgress(`Lançando despesa: ${cand.name}`);
       // spreadsheet_name = 'buy_<id da entrada>' segue o padrão de marca de origem já usado pelas
@@ -9583,8 +9743,7 @@ async function saveFinanceCosts(movementId) {
       : 'Custos salvos!');
     renderFinancePending();
     renderFinanceCMV();
-    if (activeFinanceTab === 'despesas') renderExpenses();
-    if (activeFinanceTab === 'dre') renderDRE();
+    renderAbaFinanceiraAtiva();
   } catch (err) {
     hideLoadingProgress();
     console.error('Erro ao salvar custos:', err);
@@ -9988,6 +10147,34 @@ function getExpenseCategoryIndex() { return financeCached('expenseCategoryIndex'
 function getDreGroupById(id) { return (id && getDreGroupIndex()[id]) || null; }
 function getExpenseCategoryById(id) { return (id && getExpenseCategoryIndex()[id]) || null; }
 function isDreGroupProtected(g) { return g && (g.skipped === true || g.skipped === 'true'); }
+// GRUPO QUE ENTRA NO CMV, em vez de virar linha de despesa.
+//
+// Existe pra cobrir o custo que é de ESTOQUE mas não passa por receita nenhuma: taxa de entrega do
+// fornecedor, insumo fora do cardápio, quebra não rastreada. Antes isso só tinha um caminho, a tela
+// de "Custo Avulso" (type='stock_cost'), que era um cadastro de motivos que não somava em relatório
+// nenhum e um formulário a mais pra manter.
+//
+// Com a flag, esse custo vira gasto normal, num grupo que você cadastra — e cai no mesmo lugar do
+// DRE de antes. Foi isso que permitiu a tela do Custo Avulso morrer SEM mexer em nenhum indicador:
+// se os lançamentos simplesmente virassem despesa comum, sairiam do CMV e entrariam em despesa, e a
+// margem bruta subiria sem nada ter melhorado.
+//
+// ONDE MORA: a lista de ids fica no JSON de `finance_settings`, não numa coluna de `dre_groups`.
+// A tabela `dre_groups` no Supabase tem só id, name, is_protected e created_at (supabase-schema.sql:32)
+// — não há campo livre. Gravar em `system_name` funcionaria HOJE, porque em modo espelho a verdade é
+// a planilha e lá a coluna existe; e sumiria no dia em que o Supabase virasse a fonte, em silêncio.
+// O JSON de finance_settings já está na lista branca do app_settings e é JSONB: cabe sem SQL nenhum,
+// e é exatamente pra isso que a Parte 2 o abriu.
+function idsDeGruposNoCmv() {
+  return financeCached('gruposNoCmv', () => new Set(getFinanceSettings().gruposNoCmv || []));
+}
+function grupoEntraNoCmv(g) { return !!g && idsDeGruposNoCmv().has(g.id); }
+// Um gasto é custo de estoque quando o grupo dele foi marcado assim. Vale pro DRE, pras Análises e
+// pra categoria do Extrato — todos leem daqui, pra nunca divergirem.
+function gastoEhCustoDeEstoque(ex) {
+  const gid = resolveExpenseDreGroupId(ex);
+  return !!gid && idsDeGruposNoCmv().has(gid);
+}
 // O grupo do CMO é o grupo PROTEGIDO (skipped=true) — não o grupo que se chama "CMO". A diferença
 // importa porque a tela deixa renomear esse grupo de propósito ("não pode ser excluído, mas pode ser
 // renomeado"); procurando pelo nome literal, renomear ele fazia a folha de pagamento cair num grupo
@@ -10247,6 +10434,28 @@ function renderProductCategoryConfig() {
 let editingConfigId = null;
 function toggleEditConfigRow(id) { editingConfigId = editingConfigId === id ? null : id; renderExpenseConfig(); }
 
+// Liga/desliga o "entra no CMV" de um grupo. Muda o lugar do gasto no DRE (custo de estoque em vez
+// de linha de despesa), então a margem BRUTA se mexe — e é justamente pra isso que serve. O toast
+// diz o que mudou em vez de deixar você descobrir olhando o relatório.
+async function toggleGrupoNoCmv(id) {
+  const g = financeData.find(r => r.id === id && r.type === 'dre_group');
+  if (!g) return;
+  if (isDreGroupProtected(g)) { showToast('O grupo do CMO é folha de pagamento, não custo de estoque', true); return; }
+  const atuais = getFinanceSettings().gruposNoCmv;
+  const ligando = !atuais.includes(id);
+  const proximos = ligando ? [...atuais, id] : atuais.filter(x => x !== id);
+  try {
+    await salvarFinanceSettings({ gruposNoCmv: proximos });
+    showToast(ligando
+      ? `"${g.product_name}" agora soma no CMV — sai das despesas e entra no custo de estoque`
+      : `"${g.product_name}" voltou a ser despesa comum no DRE`);
+    renderExpenseConfig();
+    renderAbaFinanceiraAtiva();
+  } catch (err) {
+    console.error('Erro ao alterar o grupo:', err);
+    showToast('Erro ao alterar: ' + err.message, true);
+  }
+}
 async function handleAddDreGroup(e) {
   e.preventDefault();
   const name = document.getElementById('new-dre-group-name').value.trim();
@@ -10277,7 +10486,7 @@ async function renameDreGroup(id, newName) {
     showToast('Grupo renomeado!');
     renderExpenseConfig();
     renderExpenses();
-    if (activeFinanceTab === 'dre') renderDRE();
+    renderAbaFinanceiraAtiva();
   } catch (err) {
     console.error('Erro ao renomear grupo:', err);
     showToast('Erro ao renomear: ' + err.message, true);
@@ -10337,7 +10546,7 @@ async function toggleExpenseCategoryMonthly(id) {
       ? `"${c.product_name}" agora é mensal — o valor será rateado entre as semanas do mês`
       : `"${c.product_name}" agora é pontual — cai inteira na semana do lançamento`);
     renderExpenseConfig();
-    if (activeFinanceTab === 'analises') renderAnalises();
+    renderAbaFinanceiraAtiva();
   } catch (err) {
     console.error('Erro ao alterar tipo da categoria:', err);
     showToast('Erro ao alterar: ' + err.message, true);
@@ -10385,10 +10594,12 @@ function renderExpenseConfig() {
           <button onclick="toggleEditConfigRow('${g.id}')" class="text-stone-400 hover:text-stone-600 flex-shrink-0"><i data-lucide="x" class="w-4 h-4"></i></button>
         </div>`;
       }
+      const noCmv = grupoEntraNoCmv(g);
       return `<div class="flex items-center justify-between gap-2 p-2 hover:bg-stone-50 rounded-lg mb-1">
-        <span class="text-sm text-stone-700 min-w-0 truncate">${g.product_name}${isDreGroupProtected(g)?' <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-stone-100 text-stone-500 font-semibold whitespace-nowrap">automático · CMO</span>':''}</span>
+        <span class="text-sm text-stone-700 min-w-0 truncate">${g.product_name}${isDreGroupProtected(g)?' <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-stone-100 text-stone-500 font-semibold whitespace-nowrap">automático · CMO</span>':''}${noCmv?' <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 font-semibold whitespace-nowrap">entra no CMV</span>':''}</span>
         <div class="flex items-center gap-1.5 flex-shrink-0">
           <span class="text-[11px] text-stone-400 whitespace-nowrap">${catCount} categoria(s)</span>
+          <button onclick="toggleGrupoNoCmv('${g.id}')" title="${noCmv?'Voltar a somar como despesa':'Somar no CMV em vez de virar linha de despesa'}" class="${noCmv?'text-amber-600 hover:text-amber-800':'text-stone-300 hover:text-stone-600'}"><i data-lucide="package" class="w-3.5 h-3.5"></i></button>
           <button onclick="toggleEditConfigRow('${g.id}')" class="text-stone-400 hover:text-stone-600"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
           <button onclick="requestDeleteDreGroup('${g.id}')" class="text-stone-300 hover:text-red-600"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
         </div>
@@ -10479,8 +10690,7 @@ async function handleAddFixedExpense(e) {
     renderFixedExpensesConfig();
     fixedExpensesSyncAttempted = false;
     await syncFixedExpenses();
-    if (activeFinanceTab === 'despesas') renderExpenses();
-    if (activeFinanceTab === 'dre') renderDRE();
+    renderAbaFinanceiraAtiva();
   } catch (err) {
     hideLoadingProgress();
     console.error('Erro ao salvar despesa fixa:', err);
@@ -10495,7 +10705,7 @@ async function toggleFixedExpenseActive(id) {
     fe.skipped = nextSkipped;
     showToast(nextSkipped ? 'Despesa fixa desativada — não gera mais lançamento automático' : 'Despesa fixa reativada!');
     renderFixedExpensesConfig();
-    if (!nextSkipped) { fixedExpensesSyncAttempted = false; await syncFixedExpenses(); if (activeFinanceTab === 'despesas') renderExpenses(); if (activeFinanceTab === 'dre') renderDRE(); }
+    if (!nextSkipped) { fixedExpensesSyncAttempted = false; await syncFixedExpenses(); renderAbaFinanceiraAtiva(); }
   } catch (err) {
     console.error('Erro ao alterar despesa fixa:', err);
     showToast('Erro ao alterar: ' + err.message, true);
@@ -10591,13 +10801,78 @@ async function syncFixedExpenses() {
 }
 
 // ============================================================
-// CONFIGURAÇÕES FINANCEIRAS — percentuais usados automaticamente no DRE (imposto, taxa de cartão,
-// e outros que possam surgir). type='finance_settings' -> {id, type, cost_price(=percentual de
-// imposto), unit_cost(=percentual de taxa de cartão), updated_at} — registro único (singleton).
+// CONFIGURAÇÕES FINANCEIRAS — tudo o que você regula sem mexer em código
 // ============================================================
+// type='finance_settings' -> {id, type, employee_notes(=JSON com A CONFIGURAÇÃO INTEIRA),
+// cost_price(=imposto %), unit_cost(=taxa de cartão %), updated_at} — registro único (singleton).
+//
+// A CONFIGURAÇÃO INTEIRA MORA NUM JSON, DE PROPÓSITO. Antes eram duas colunas escalares, uma por
+// percentual, e cada parâmetro novo pedia uma coluna nova. Agora parâmetro novo é uma chave no JSON:
+// nem coluna, nem migração, nem SQL.
+//
+// E não é SÓ conveniência: `app_settings` no Supabase tem LISTA BRANCA de chaves, então criar uma
+// chave de configuração nova exigiria SQL de RLS. `finance_settings` já está na lista. Enfiar tudo
+// dentro dela é o que mantém a promessa de "configurável pelo sistema" sem migração nenhuma.
+// É o mesmo desenho que `analysis_settings` já usava no campo `employee_notes`.
+//
+// `cost_price` e `unit_cost` CONTINUAM sendo gravados com os mesmos dois percentuais. Não é
+// duplicidade por descuido: é o caminho de volta. Uma versão antiga do app, ou uma leitura que não
+// conheça o JSON, continua achando imposto e taxa onde sempre esteve. O JSON manda quando existe.
+const FINANCE_SETTINGS_PADRAO = { taxPct: 6, cardFeePct: 2.5, saldoInicial: 0, saldoInicialData: '' };
+function parseFinanceSettingsJson(txt) {
+  if (!txt) return null;
+  if (typeof txt === 'object') return txt;
+  try { const o = JSON.parse(txt); return (o && typeof o === 'object') ? o : null; } catch (e) { return null; }
+}
+// A ORDEM DE LEITURA É A PARTE PERIGOSA. Se o JSON não existir (registro gravado antes desta mudança)
+// e a leitura não caísse nas colunas antigas, imposto e taxa de cartão voltariam ao padrão — e o DRE
+// mudaria de número sozinho, sem ninguém ter tocado em nada. Por isso: JSON, depois coluna, depois
+// padrão, campo a campo.
 function getFinanceSettings() {
   const rec = financeData.find(r => r.type === 'finance_settings');
-  return { taxPct: rec && rec.cost_price != null ? rec.cost_price : 6, cardFeePct: rec && rec.unit_cost != null ? rec.unit_cost : 2.5, _rec: rec };
+  const json = rec ? parseFinanceSettingsJson(rec.employee_notes) : null;
+  const num = (a, b, padrao) => {
+    if (a != null && a !== '' && !isNaN(Number(a))) return Number(a);
+    if (b != null && b !== '' && !isNaN(Number(b))) return Number(b);
+    return padrao;
+  };
+  return {
+    taxPct:      num(json && json.taxPct,      rec && rec.cost_price, FINANCE_SETTINGS_PADRAO.taxPct),
+    cardFeePct:  num(json && json.cardFeePct,  rec && rec.unit_cost,  FINANCE_SETTINGS_PADRAO.cardFeePct),
+    // Saldo inicial só existe no JSON — não tem coluna antiga pra herdar.
+    saldoInicial:     num(json && json.saldoInicial, null, FINANCE_SETTINGS_PADRAO.saldoInicial),
+    saldoInicialData: (json && json.saldoInicialData) || '',
+    // Ids dos grupos do DRE que somam no CMV em vez de virar linha de despesa. Ver grupoEntraNoCmv.
+    gruposNoCmv: Array.isArray(json && json.gruposNoCmv) ? json.gruposNoCmv : [],
+    _rec: rec,
+  };
+}
+// Grava um punhado de chaves por cima do que já existe, sem apagar as outras. Toda tela de
+// configuração passa por aqui — é o único ponto que sabe montar o registro.
+async function salvarFinanceSettings(mudancas) {
+  const atual = getFinanceSettings();
+  const existing = atual._rec;
+  const proximo = {
+    taxPct: atual.taxPct, cardFeePct: atual.cardFeePct,
+    saldoInicial: atual.saldoInicial, saldoInicialData: atual.saldoInicialData,
+    gruposNoCmv: atual.gruposNoCmv,
+    ...mudancas,
+  };
+  const payload = {
+    type:'finance_settings', product_name:'config',
+    employee_notes: JSON.stringify(proximo),
+    cost_price: proximo.taxPct, unit_cost: proximo.cardFeePct, // caminho de volta, ver bloco acima
+    updated_at: new Date().toISOString(),
+  };
+  if (existing) {
+    await financeApiCall('update', { data: { ...existing, ...payload } });
+    Object.assign(existing, payload);
+  } else {
+    const r = await financeApiCall('create', { data: payload });
+    financeData.push({ id:r.id, ...payload });
+  }
+  invalidateFinanceCache();
+  return proximo;
 }
 async function handleSaveFinanceSettings(e) {
   e.preventDefault();
@@ -10606,30 +10881,50 @@ async function handleSaveFinanceSettings(e) {
   if (isNaN(taxPct) || taxPct < 0 || isNaN(cardFeePct) || cardFeePct < 0) { showToast('Preencha os percentuais com valores válidos', true); return; }
   showLoadingProgress('Salvando configurações...');
   try {
-    const existing = getFinanceSettings()._rec;
-    const payload = { type:'finance_settings', product_name:'config', cost_price:taxPct, unit_cost:cardFeePct, updated_at:new Date().toISOString() };
-    if (existing) {
-      await financeApiCall('update', { data: { ...existing, ...payload } });
-      Object.assign(existing, payload);
-    } else {
-      const r = await financeApiCall('create', { data: payload });
-      financeData.push({ id:r.id, ...payload });
-    }
+    await salvarFinanceSettings({ taxPct, cardFeePct });
     hideLoadingProgress();
     showToast('Configurações financeiras salvas!');
-    if (activeFinanceTab === 'dre') renderDRE();
+    renderAbaFinanceiraAtiva();
   } catch (err) {
     hideLoadingProgress();
     console.error('Erro ao salvar configurações financeiras:', err);
     showToast('Erro ao salvar: ' + err.message, true);
   }
 }
+// Saldo inicial: o ponto de partida do extrato. Sem ele o "saldo" é só entradas − saídas do período,
+// que é resultado, não saldo de conta.
+async function handleSaveSaldoInicial(e) {
+  e.preventDefault();
+  const valor = parseFloat(document.getElementById('finance-settings-saldo').value);
+  const data = document.getElementById('finance-settings-saldo-data').value;
+  if (isNaN(valor)) { showToast('Preencha o saldo com um valor válido', true); return; }
+  if (!data) { showToast('Preencha a data do saldo inicial', true); return; }
+  showLoadingProgress('Salvando saldo inicial...');
+  try {
+    await salvarFinanceSettings({ saldoInicial: valor, saldoInicialData: data });
+    hideLoadingProgress();
+    showToast('Saldo inicial salvo!');
+    renderFinanceSettingsConfig();
+    renderExtrato();
+  } catch (err) {
+    hideLoadingProgress();
+    console.error('Erro ao salvar saldo inicial:', err);
+    showToast('Erro ao salvar: ' + err.message, true);
+  }
+}
 function renderFinanceSettingsConfig() {
   const settings = getFinanceSettings();
-  const taxEl = document.getElementById('finance-settings-tax');
-  const cardEl = document.getElementById('finance-settings-card-fee');
-  if (taxEl && document.activeElement !== taxEl) taxEl.value = settings.taxPct;
-  if (cardEl && document.activeElement !== cardEl) cardEl.value = settings.cardFeePct;
+  const preencher = (id, valor) => { const el = document.getElementById(id); if (el && document.activeElement !== el) el.value = valor; };
+  preencher('finance-settings-tax', settings.taxPct);
+  preencher('finance-settings-card-fee', settings.cardFeePct);
+  preencher('finance-settings-saldo', settings.saldoInicial);
+  preencher('finance-settings-saldo-data', settings.saldoInicialData);
+  const aviso = document.getElementById('finance-settings-saldo-aviso');
+  if (aviso) {
+    aviso.textContent = settings.saldoInicialData
+      ? `Movimentações anteriores a ${parseLocalDate(settings.saldoInicialData).toLocaleDateString('pt-BR')} não entram no saldo — elas já estão dentro desse valor.`
+      : 'Sem data definida, o saldo soma TODAS as movimentações já registradas.';
+  }
 }
 
 // ============================================================
@@ -10683,7 +10978,13 @@ const MOV_SPEC = {
   event_extra_cost: { direcao:'saida',   data:'expense_date',          valor:'total_cost',    caixa:true,  resultado:true,  origem:'eventos',   rotulo:'Custo de evento' },
   stock_cost:       { direcao:'saida',   data:'expense_date',          valor:'total_cost',    caixa:true,  resultado:true,  origem:'cafeteria', rotulo:'Custo de estoque' },
   // Compra de estoque: dinheiro sai agora, custo aparece depois pelo CMV. Ver bloco acima.
+  // `data:'costed_at'` é RESERVA, não a fonte — a data boa vem da entrada de estoque. Ver
+  // dataDoMovimento logo abaixo.
   costed_entry:     { direcao:'saida',   data:'costed_at',             valor:'total_cost',    caixa:true,  resultado:false, origem:'cafeteria', rotulo:'Compra de estoque' },
+  // Acerto de saldo: o que reconcilia o saldo calculado com o extrato do banco. `direcao:'auto'`
+  // porque ele pode ir pros dois lados — falta dinheiro ou sobra. `resultado:false` é o que impede
+  // um erro de digitação corrigido de virar prejuízo no DRE.
+  cash_adjustment:  { direcao:'auto',    data:'expense_date',          valor:'total_cost',    caixa:true,  resultado:false, origem:'cafeteria', rotulo:'Acerto de saldo' },
   // Entrada avulsa: dinheiro que entra sem ser venda de balcão nem evento. `resultado` aqui é
   // decidido linha a linha pela natureza escolhida — ver ENTRADAS_AVULSAS logo abaixo.
   other_revenue:    { direcao:'entrada', data:'expense_date',          valor:'total_cost',    caixa:true,  resultado:true,  origem:null,        rotulo:'Entrada' },
@@ -10711,18 +11012,52 @@ function entradaAvulsaEhFaturamento(r) {
 function movSpec(r) { return (r && MOV_SPEC[r.type]) || null; }
 function ehMovimentoFinanceiro(r) { return !!movSpec(r); }
 
+// A COMPRA DE ESTOQUE É DATADA PELA ENTRADA, NÃO PELO DIA EM QUE VOCÊ DIGITOU O PREÇO.
+//
+// `costed_at` é gravado com new Date() no momento em que a entrada sai de Custos Pendentes. Recebendo
+// a mercadoria dia 28 e lançando a nota dia 3, a compra caía em setembro tendo acontecido em agosto.
+// Isso estragava duas coisas: "quanto comprei de estoque este mês" respondia errado, e as três linhas
+// do CMV bruto (estoque inicial + compras − estoque final) não fechavam, porque o estoque entrava
+// pela `movement_date` e a compra pela `costed_at`.
+//
+// Não precisa de migração: o `costed_entry` sempre carregou o `movement_id` da entrada, e a entrada
+// sempre teve a data certa. É só ler de lá. `costed_at` fica como reserva pra linha órfã — compra
+// cuja entrada foi apagada do histórico continua contando, na única data que ainda existe dela.
+//
+// Mesmo defeito que o `stock_snapshot` tinha: gravava "o valor na última vez que abri o Financeiro"
+// e não sobrevivia a lançamento retroativo.
+function indiceDataDeEntrada() {
+  if (_dataCache.movimentoDataPorId) return _dataCache.movimentoDataPorId;
+  const idx = {};
+  getMovements().forEach(m => { if (m.id) idx[m.id] = String(m.movement_date || '').slice(0, 10); });
+  return (_dataCache.movimentoDataPorId = idx);
+}
 // Data no formato "yyyy-MM-dd", vinda da coluna certa do tipo. Devolve '' quando a linha não é
 // movimentação ou está sem data — quem filtra por período trata como fora de qualquer período,
 // nunca como "hoje" (chutar a data de hoje jogaria lançamento sem data dentro do período atual).
 function dataDoMovimento(r) {
   const spec = movSpec(r); if (!spec) return '';
+  if (r.type === 'costed_entry' && r.movement_id) {
+    const daEntrada = indiceDataDeEntrada()[r.movement_id];
+    if (daEntrada) return daEntrada;
+  }
   return String(r[spec.data] || '').slice(0, 10);
 }
+// `direcao:'auto'` decide pelo SINAL do valor gravado, e só o acerto de saldo usa isso — ele é o
+// único tipo que vai pros dois lados. Os outros têm direção fixa de propósito: uma venda negativa
+// não é dinheiro saindo, é erro de digitação, e deixar o sinal mandar esconderia isso.
+function direcaoDoMovimento(r) {
+  const s = movSpec(r); if (!s) return null;
+  if (s.direcao !== 'auto') return s.direcao;
+  return (Number(r[s.valor]) || 0) < 0 ? 'saida' : 'entrada';
+}
+// Sempre positivo: o sinal quem carrega é a direção. Sem o valor absoluto, um acerto negativo seria
+// contado duas vezes como saída (uma pelo sinal, outra pela direção) e o saldo andaria pro lado errado.
 function valorDoMovimento(r) {
   const spec = movSpec(r); if (!spec) return 0;
-  return Number(r[spec.valor]) || 0;
+  const v = Number(r[spec.valor]) || 0;
+  return spec.direcao === 'auto' ? Math.abs(v) : v;
 }
-function direcaoDoMovimento(r) { const s = movSpec(r); return s ? s.direcao : null; }
 // Valor com sinal: entrada positiva, saída negativa. É o que soma direto pra dar saldo.
 function valorComSinal(r) { return direcaoDoMovimento(r) === 'saida' ? -valorDoMovimento(r) : valorDoMovimento(r); }
 
@@ -10741,12 +11076,39 @@ function origemDoGasto(ex) {
   return (ex && ex.origin_unit) || ORIGEM_PADRAO;
 }
 
+// ------------------------------------------------------------
+// CONTAS A PAGAR — um ESTADO do lançamento, não um módulo
+// ------------------------------------------------------------
+// Uma conta a pagar é um lançamento que já pesou no RESULTADO mas ainda não saiu do CAIXA. O sistema
+// já sabia separar essas duas coisas — é literalmente o que o par costed_entry / despesa 'buy_' faz.
+// Faltava só a data.
+//
+//   sem `due_date`            à vista. Exatamente como sempre foi; nada retroativo muda.
+//   `due_date` sem `paid_at`  a prazo, em aberto. Conta no resultado na data do lançamento,
+//                             NÃO conta no caixa, e aparece na lista de "A pagar".
+//   `paid_at` preenchido      pago. Volta ao caixa, e na DATA DO PAGAMENTO, não na da compra.
+//
+// É por isso que não existe tabela `payables`: ela duplicaria a linha (uma no `payables`, outra em
+// `expenses` quando pago) e as duas divergiriam. Mesmo erro que a tabela de "compras do evento" ia
+// causar. Ver ARQUITETURA-FINANCEIRO.md §4.
+function contaAPagarEmAberto(r) {
+  return !!(r && r.due_date && !r.paid_at);
+}
+// A data em que o dinheiro ANDOU. Difere da data do lançamento só quando a conta foi paga depois:
+// um boleto de 30 dias sai do caixa no mês do pagamento, porque foi quando ele de fato saiu.
+function dataDeCaixaDoMovimento(r) {
+  if (r && r.paid_at) return String(r.paid_at).slice(0, 10);
+  return dataDoMovimento(r);
+}
+
 // Marca de origem do lançamento automático -> se aquela linha representa dinheiro saindo AGORA.
 // A despesa de consumo gerada por uma compra ('buy_') não é uma segunda saída: é a mesma compra
 // aparecendo no resultado. No caixa ela não conta, senão a compra sai duas vezes.
 function movimentoMexeNoCaixa(r) {
   const spec = movSpec(r); if (!spec) return false;
   if (r.type === 'expense' && String(r.spreadsheet_name || '').startsWith('buy_')) return false;
+  // Conta em aberto ainda não é dinheiro. Ela volta pro caixa no dia em que for marcada como paga.
+  if (contaAPagarEmAberto(r)) return false;
   return spec.caixa;
 }
 function movimentoMexeNoResultado(r) {
@@ -10769,25 +11131,136 @@ function getOutrasReceitasInRange(start, end) {
   });
 }
 
+// CATEGORIA DO MOVIMENTO — a resposta de "quanto gastei com X", em uma taxonomia só.
+//
+// O sistema tem TRÊS jeitos paralelos de classificar dinheiro que sai, e é por isso que o extrato
+// listava tudo mas não somava nada útil:
+//
+//   grupo do DRE (expense)      cadastrado por você — é o bom, e é o único que cresce sem código
+//   motivo (stock_cost)         lista fixa de 4, que de propósito NÃO agrega em relatório nenhum
+//   tipo (costed_entry, ...)    implícito, nunca aparecia como categoria
+//
+// Esta função é a ponte: DERIVA a categoria do que já está gravado, sem coluna nova e sem migração.
+// A consequência que importa: "Infraestrutura" não é código. É um grupo do DRE que você cadastra em
+// Configurações e que passa a existir aqui no mesmo instante — igual a qualquer categoria futura.
+//
+// `id` é a chave de agrupamento e `nome` é o rótulo. Os dois são separados porque grupo do DRE pode
+// ser RENOMEADO: agrupar pelo nome faria a barra do "CMO" se partir em duas no dia que ele virasse
+// "Mão de obra". É o mesmo motivo pelo qual getCmoGroup() procura pela flag e não pelo nome.
+const CATEGORIA_SEM_GRUPO = '__sem_grupo__';
+function categoriaDoMovimento(r) {
+  const spec = movSpec(r); if (!spec) return null;
+  switch (r.type) {
+    case 'costed_entry':     return { id: 'compra_estoque', nome: 'Compra de estoque' };
+    case 'stock_cost':       return { id: 'custo_estoque',  nome: 'Custo de estoque' };
+    case 'event_extra_cost': return { id: 'custo_evento',   nome: 'Custos de evento' };
+    case 'sale_revenue':     return { id: 'vendas',         nome: 'Vendas' };
+    case 'event_revenue':    return { id: 'fat_evento',     nome: 'Faturamento de evento' };
+    // Entrada avulsa se classifica pela NATUREZA, que é o que decide se ela é faturamento — a mesma
+    // informação que já separa reembolso de receita no DRE.
+    case 'other_revenue': {
+      const nat = entradaAvulsaPorId(r.category);
+      return nat ? { id: 'entrada_' + nat.id, nome: nat.nome } : { id: 'entrada_outra', nome: 'Outra entrada' };
+    }
+    case 'expense': {
+      const gid = resolveExpenseDreGroupId(r);
+      const g = gid ? getDreGroupById(gid) : null;
+      // Grupo marcado como "entra no CMV" aparece junto do Custo de estoque também aqui — o DRE já
+      // soma os dois no mesmo lugar, e o extrato mostrar separado faria as duas telas divergirem.
+      if (grupoEntraNoCmv(g)) return { id: 'custo_estoque', nome: 'Custo de estoque' };
+      // Gasto irresolúvel vira "Sem grupo" VISÍVEL, nunca some da soma nem é chutado pra outro grupo.
+      // Mesma decisão de resolveExpenseDreGroupId: reclassificar por adivinhação muda o total sem aviso.
+      return g ? { id: g.id, nome: g.product_name } : { id: CATEGORIA_SEM_GRUPO, nome: 'Sem grupo' };
+    }
+    default: return { id: 'outros', nome: spec.rotulo };
+  }
+}
+
 // Todo o livro-caixa, em uma lista só, já com os eixos resolvidos. É a base das telas novas —
 // nenhuma delas precisa saber que a data da venda mora numa coluna diferente da data do gasto.
 function getMovimentos() {
-  return financeCached('movimentos', () => financeData.filter(ehMovimentoFinanceiro).map(r => ({
+  return financeCached('movimentos', () => financeData.filter(ehMovimentoFinanceiro).map(r => {
+    const cat = categoriaDoMovimento(r);
+    return {
     ref: r,
     id: r.id,
     tipo: r.type,
     rotulo: MOV_SPEC[r.type].rotulo,
     descricao: r.product_name || MOV_SPEC[r.type].rotulo,
     data: dataDoMovimento(r),
+    // Duas datas porque uma conta a prazo tem duas: a do lançamento (pesa no resultado) e a do
+    // pagamento (pesa no caixa). Iguais em todo lançamento à vista, que é a esmagadora maioria.
+    dataCaixa: dataDeCaixaDoMovimento(r),
     direcao: direcaoDoMovimento(r),
     valor: valorDoMovimento(r),
     valorSinal: valorComSinal(r),
     origem: r.type === 'expense' ? origemDoGasto(r) : origemDoMovimento(r),
     caixa: movimentoMexeNoCaixa(r),
     resultado: movimentoMexeNoResultado(r),
+    vencimento: (r.due_date && String(r.due_date).slice(0, 10)) || '',
+    pagoEm: (r.paid_at && String(r.paid_at).slice(0, 10)) || '',
+    emAberto: contaAPagarEmAberto(r),
+    categoriaId: cat ? cat.id : 'outros',
+    categoria: cat ? cat.nome : '—',
     marca: r.spreadsheet_name || '',
     automatico: !!expenseOriginBadge(r) || r.type !== 'expense',
-  })).sort((a, b) => String(b.data).localeCompare(String(a.data))));
+    };
+  }).sort((a, b) => String(b.data).localeCompare(String(a.data))));
+}
+// ------------------------------------------------------------
+// SALDO — a soma do histórico, nunca um número gravado
+// ------------------------------------------------------------
+// O SALDO NÃO É GUARDADO EM LUGAR NENHUM. Ele é reconstruído somando o livro-caixa a partir de um
+// ponto de partida, exatamente como o razão de estoque faz com a quantidade. Gravar saldo criaria
+// uma segunda verdade pra divergir da primeira, e a primeira (o histórico) é a que tem prova.
+//
+// O ponto de partida existe porque saldo de conta não começa do zero: quando o sistema entrou no ar
+// já havia dinheiro na conta. `saldoInicialData` é a data em que aquele valor valia, e movimentação
+// ANTERIOR a ela não pode ser somada de novo — ela já está dentro do saldo inicial. Sem esse corte, o
+// dinheiro de antes contaria duas vezes.
+//
+// Só o eixo CAIXA entra. É o eixo do dinheiro que de fato andou; o de resultado responde outra
+// pergunta (o que pesa no lucro) e somá-lo aqui daria um "saldo" que nenhum banco reconheceria.
+function saldoAcumuladoAte(dataLimite) {
+  const cfg = getFinanceSettings();
+  const desde = cfg.saldoInicialData || '';
+  const ate = dataLimite || localDateStr(new Date());
+  // Pela data do PAGAMENTO: o saldo é o dinheiro que está na conta, e conta a prazo em aberto nem
+  // chega aqui (movimentoMexeNoCaixa devolve false pra ela).
+  return getMovimentos().reduce((soma, m) => {
+    if (!m.caixa || !m.dataCaixa) return soma;
+    if (m.dataCaixa > ate) return soma;
+    if (desde && m.dataCaixa < desde) return soma; // já representado pelo saldo inicial
+    return soma + m.valorSinal;
+  }, Number(cfg.saldoInicial) || 0);
+}
+// Quanto falta (ou sobra) pro saldo calculado bater com o que o banco mostra. Positivo = entrou
+// dinheiro que o sistema não viu; negativo = saiu.
+function diferencaDeSaldo(saldoReal, dataLimite) {
+  return (Number(saldoReal) || 0) - saldoAcumuladoAte(dataLimite);
+}
+// Tudo que está a pagar, do vencimento mais próximo pro mais distante. Não filtra por período de
+// propósito: conta vencida em julho continua sendo dívida em setembro, e sumir do filtro é
+// exatamente como ela seria esquecida.
+function contasAPagar() {
+  const hoje = localDateStr(new Date());
+  return getMovimentos()
+    .filter(m => m.emAberto)
+    .map(m => ({ ...m, vencida: m.vencimento < hoje, venceHoje: m.vencimento === hoje }))
+    .sort((a, b) => String(a.vencimento).localeCompare(String(b.vencimento)));
+}
+function totalAPagar() { return contasAPagar().reduce((s, m) => s + m.valor, 0); }
+
+// Soma do período por categoria, já ordenada do maior pro menor. É o que responde, sem clicar em
+// nada: quanto comprei de estoque, quanto foi de CMO, quanto de infraestrutura.
+function totalizarPorCategoria(movs) {
+  const por = {};
+  movs.forEach(m => {
+    if (!por[m.categoriaId]) por[m.categoriaId] = { id: m.categoriaId, nome: m.categoria, valor: 0, n: 0, direcao: m.direcao };
+    por[m.categoriaId].valor += m.valor;
+    por[m.categoriaId].n++;
+  });
+  return Object.values(por).sort((a, b) => b.valor - a.valor);
 }
 
 // Leitor único. `filtros`: { origem, direcao, eixo:'caixa'|'resultado' }. Sem filtro devolve tudo do
@@ -10798,9 +11271,12 @@ function getMovimentosInRange(start, end, filtros = {}) {
   const inicio = start ? localDateStr(start) : null;
   const fim = end ? localDateStr(end) : null;
   return getMovimentos().filter(m => {
-    if (!m.data) return false;
-    if (inicio && m.data < inicio) return false;
-    if (fim && m.data > fim) return false;
+    // No eixo CAIXA o período é medido pela data do PAGAMENTO. Sem isso, um boleto de agosto pago em
+    // setembro sairia do caixa em agosto — o mês em que o dinheiro ainda estava na conta.
+    const data = filtros.eixo === 'caixa' ? m.dataCaixa : m.data;
+    if (!data) return false;
+    if (inicio && data < inicio) return false;
+    if (fim && data > fim) return false;
     if (filtros.origem && m.origem !== filtros.origem) return false;
     if (filtros.direcao && m.direcao !== filtros.direcao) return false;
     if (filtros.eixo === 'caixa' && !m.caixa) return false;
@@ -10894,6 +11370,50 @@ function requestDeleteExpense(id) {
 }
 
 // --- Entrada avulsa: dinheiro entrando que não é venda de balcão nem evento ---
+// ============================================================
+// MODAL DE LANÇAMENTO — Gasto Simples / Gasto em Lote / Entrada
+// ============================================================
+// Os campos vivem dentro de um modal que começa OCULTO, então nenhum render de aba os alcança. Quem
+// popula é esta função, na abertura. Se ela esquecer um select, ele abre vazio e o lançamento fica
+// impossível sem nenhuma mensagem de erro — foi exatamente esse o modo de falha da Parte 1 dos
+// Eventos (campo dentro de div oculta), e é o que `testes/extrato-porta-de-entrada.js` trava.
+function abrirLancamento(modo) {
+  const modal = document.getElementById('lancamento-modal'); if (!modal) return;
+  aplicarModoLancamento(modo || 'simple');
+  // Gasto Simples
+  const groupSel = document.getElementById('new-expense-group');
+  if (groupSel) { populateExpenseGroupSelect(groupSel); onExpenseGroupChange(groupSel); }
+  const dataSel = document.getElementById('new-expense-date');
+  if (dataSel && !dataSel.value) dataSel.value = localDateStr(new Date());
+  populateExpenseDescSuggestions();
+  // Gasto em Lote
+  if (document.querySelectorAll('.expense-batch-row').length === 0) resetExpenseBatchForm();
+  // Entrada avulsa
+  prepararFormEntrada();
+  modal.classList.remove('hidden');
+  lucide.createIcons();
+}
+function fecharLancamento() {
+  const modal = document.getElementById('lancamento-modal'); if (modal) modal.classList.add('hidden');
+}
+// Troca de modo dentro do modal. Extraída do listener porque abrirLancamento() precisa da MESMA
+// lógica: ter duas cópias é como o botão fica aceso num modo e o formulário aberto noutro.
+function aplicarModoLancamento(modo) {
+  currentExpenseMode = modo;
+  document.querySelectorAll('.expense-mode-btn').forEach(b => { b.className = `expense-mode-btn px-4 py-2 rounded-lg text-sm font-medium ${b.dataset.mode===currentExpenseMode?'bg-emerald-700 text-white':'bg-stone-100 text-stone-600 hover:bg-stone-200'}`; });
+  document.getElementById('expense-simple-section').classList.toggle('hidden', currentExpenseMode !== 'simple');
+  document.getElementById('expense-batch-section').classList.toggle('hidden', currentExpenseMode !== 'batch');
+  document.getElementById('expense-entrada-section').classList.toggle('hidden', currentExpenseMode !== 'entrada');
+}
+// Depois de gravar: fecha o modal e atualiza as telas que mostram dinheiro. O extrato é redesenhado
+// sempre, mesmo não sendo a aba ativa — ele é a porta de entrada, e voltar pra ele com o número
+// velho é o tipo de coisa que faz duvidar se o lançamento foi salvo.
+function aposLancamento() {
+  invalidateFinanceCache();
+  fecharLancamento();
+  renderExtrato();
+  renderAbaFinanceiraAtiva();
+}
 function prepararFormEntrada() {
   const nat = document.getElementById('nova-entrada-natureza');
   if (nat && nat.options.length <= 1) {
@@ -10941,8 +11461,7 @@ async function handleAddEntrada(e) {
     e.target.reset();
     document.getElementById('nova-entrada-data').value = localDateStr(new Date());
     onEntradaNaturezaChange(document.getElementById('nova-entrada-natureza'));
-    renderExpenses();
-    if (activeFinanceTab === 'dre') renderDRE();
+    aposLancamento();
   } catch (err) {
     hideLoadingProgress();
     console.error('Erro ao salvar entrada:', err);
@@ -10956,6 +11475,16 @@ function onExpenseGroupChange(sel) {
   populateExpenseCategorySelectForGroup(catSel, sel.value);
   catSel.value = '';
 }
+// Mostra o campo de vencimento e já sugere 30 dias, que é o prazo mais comum de boleto.
+function onExpenseAPrazoChange(chk) {
+  const box = document.getElementById('new-expense-aprazo-box');
+  if (box) box.classList.toggle('hidden', !chk.checked);
+  const due = document.getElementById('new-expense-due');
+  if (chk.checked && due && !due.value) {
+    const d = new Date(); d.setDate(d.getDate() + 30);
+    due.value = localDateStr(d);
+  }
+}
 async function handleAddExpense(e) {
   e.preventDefault();
   const desc = document.getElementById('new-expense-desc').value.trim();
@@ -10963,7 +11492,10 @@ async function handleAddExpense(e) {
   const categoryId = document.getElementById('new-expense-category-select').value;
   const amount = parseFloat(document.getElementById('new-expense-amount').value);
   const date = document.getElementById('new-expense-date').value;
+  const aPrazo = document.getElementById('new-expense-aprazo').checked;
+  const dueDate = aPrazo ? document.getElementById('new-expense-due').value : '';
   if (!desc || !groupId || !amount || amount <= 0 || !date) { showToast('Preencha grupo, descrição, valor e data', true); return; }
+  if (aPrazo && !dueDate) { showToast('Preencha a data de vencimento', true); return; }
   const category = categoryId ? getExpenseCategoryById(categoryId) : null;
   // Categoria só vale se ela realmente pertence ao grupo escolhido no formulário (evita ficar uma
   // categoria "presa" num select desatualizado depois de trocar o grupo).
@@ -10975,17 +11507,21 @@ async function handleAddExpense(e) {
       category: effectiveCategoryId ? category.product_name : '',
       cost_unit: effectiveCategoryId || groupId,
       total_cost:amount, expense_date:date, updated_at:new Date().toISOString(),
+      // Só grava quando existe: gasto à vista continua sem os campos, exatamente como sempre foi.
+      ...(dueDate ? { due_date: dueDate } : {}),
     };
     const r = await financeApiCall('create', { data: payload });
     financeData.push({ id:r.id, ...payload });
     hideLoadingProgress();
-    showToast('Gasto registrado!');
+    showToast(dueDate
+      ? `Gasto a prazo registrado — vence em ${parseLocalDate(dueDate).toLocaleDateString('pt-BR')} e está em "A pagar"`
+      : 'Gasto registrado!');
     e.target.reset();
     document.getElementById('new-expense-date').value = localDateStr(new Date());
+    document.getElementById('new-expense-aprazo-box').classList.add('hidden');
     populateExpenseGroupSelect(document.getElementById('new-expense-group'));
     onExpenseGroupChange(document.getElementById('new-expense-group'));
-    renderExpenses();
-    if (activeFinanceTab === 'dre') renderDRE();
+    aposLancamento();
   } catch (err) {
     hideLoadingProgress();
     console.error('Erro ao salvar gasto:', err);
@@ -11070,8 +11606,7 @@ async function confirmExpenseBatch() {
     hideLoadingProgress();
     showToast(`${items.length} gasto(s) registrado(s) da mesma nota!`);
     resetExpenseBatchForm();
-    renderExpenses();
-    if (activeFinanceTab === 'dre') renderDRE();
+    aposLancamento();
   } catch (err) {
     hideLoadingProgress();
     console.error('Erro ao salvar gastos em lote:', err);
@@ -11089,24 +11624,84 @@ function populateExpenseCategoryFilterSelect() {
   if (val) sel.value = val;
 }
 // ============================================================
-// EXTRATO — toda movimentação, entrada e saída, num lugar só
+// EXTRATO — a porta de entrada da Central Financeira
 // ============================================================
+// Antes era o rodapé da aba Gastos, herdando o período do filtro DELA e cortando a lista em 80 sem
+// dar como ver o resto. Agora é aba própria, com período próprio, e responde sem clicar em nada:
+// quanto comprei de estoque, quanto foi de CMO, quanto de infraestrutura.
+//
+// A tela NÃO lança nada. Lançar é o modal do "+ Lançar". Isso é de propósito: um extrato que abre
+// pedindo digitação não é um extrato, é um formulário com histórico embaixo.
 let extratoDirecao = 'tudo';    // tudo | entrada | saida
 let extratoOrigem = 'tudo';     // tudo | <id de unidade>
 let extratoEixo = 'caixa';      // caixa | resultado
-function setExtratoDirecao(v) { extratoDirecao = v; renderExtratoMovimentacoes(); }
-function setExtratoOrigem(v) { extratoOrigem = v; renderExtratoMovimentacoes(); }
-function setExtratoEixo(v) { extratoEixo = v; renderExtratoMovimentacoes(); }
-function renderExtratoMovimentacoes() {
-  const el = document.getElementById('movimentacoes-extrato'); if (!el) return;
-  const { start, end } = expenseRangeForFilter(expenseFilter);
-  const movs = getMovimentosInRange(start, end, {
+let extratoPeriodo = 'month';   // 30days | month | all | custom
+let extratoDe = '';             // "yyyy-MM-dd", só quando periodo === 'custom'
+let extratoAte = '';
+let extratoCategoria = null;    // id de categoria selecionada (drill-down), ou null pra tudo
+let extratoLimite = 50;         // quantas linhas a lista mostra; cresce no "ver mais"
+function setExtratoDirecao(v) { extratoDirecao = v; extratoLimite = 50; renderExtrato(); }
+function setExtratoOrigem(v) { extratoOrigem = v; extratoLimite = 50; renderExtrato(); }
+function setExtratoEixo(v) { extratoEixo = v; extratoLimite = 50; renderExtrato(); }
+function setExtratoPeriodo(v) { extratoPeriodo = v; extratoLimite = 50; renderExtrato(); }
+function setExtratoCategoria(id) { extratoCategoria = (extratoCategoria === id) ? null : id; extratoLimite = 50; renderExtrato(); }
+function verMaisExtrato() { extratoLimite += 50; renderExtrato(); }
+function aplicarPeriodoCustomExtrato() {
+  const de = document.getElementById('extrato-de').value;
+  const ate = document.getElementById('extrato-ate').value;
+  if (!de || !ate) { showToast('Preencha as duas datas', true); return; }
+  if (de > ate) { showToast('A data inicial precisa ser antes da data final', true); return; }
+  extratoDe = de; extratoAte = ate; extratoPeriodo = 'custom'; extratoLimite = 50;
+  renderExtrato();
+}
+// Período do extrato. Reaproveita expenseRangeForFilter pros atalhos (mesma convenção de fim de dia
+// em 23:59:59.999, que existe pra um lançamento da tarde não sumir do filtro de hoje) e só trata o
+// intervalo livre por conta própria.
+function extratoRangeAtual() {
+  if (extratoPeriodo === 'custom' && extratoDe && extratoAte) {
+    return { start: parseLocalDate(extratoDe), end: parseLocalDate(extratoAte) };
+  }
+  return expenseRangeForFilter(extratoPeriodo);
+}
+function extratoRotuloPeriodo() {
+  if (extratoPeriodo === 'custom' && extratoDe && extratoAte) {
+    return `${parseLocalDate(extratoDe).toLocaleDateString('pt-BR')} a ${parseLocalDate(extratoAte).toLocaleDateString('pt-BR')}`;
+  }
+  return { '30days':'Últimos 30 dias', 'month':'Este mês', 'all':'Todo o histórico' }[extratoPeriodo] || 'Este mês';
+}
+function renderExtrato() {
+  const el = document.getElementById('extrato-painel'); if (!el) return;
+  const { start, end } = extratoRangeAtual();
+  // `base` respeita período/direção/origem/eixo mas NÃO a categoria: é dela que saem os totais por
+  // categoria, e uma categoria selecionada não pode fazer as outras sumirem da própria lista.
+  const base = getMovimentosInRange(start, end, {
     direcao: extratoDirecao === 'tudo' ? null : extratoDirecao,
     origem: extratoOrigem === 'tudo' ? null : extratoOrigem,
     eixo: extratoEixo,
   });
-  const t = totalizarMovimentos(movs);
+  const t = totalizarMovimentos(base);
+  const cats = totalizarPorCategoria(base);
+  // Categoria que sumiu do período (filtro mudou) não pode deixar a lista vazia sem explicação.
+  if (extratoCategoria && !cats.some(c => c.id === extratoCategoria)) extratoCategoria = null;
+  const movs = extratoCategoria ? base.filter(m => m.categoriaId === extratoCategoria) : base;
+  const visiveis = movs.slice(0, extratoLimite);
+
   const chip = (ativo, onclick, rotulo) => `<button onclick="${onclick}" class="px-3 py-1.5 rounded-lg text-xs font-medium ${ativo?'bg-stone-800 text-white':'bg-stone-100 text-stone-600 hover:bg-stone-200'}">${rotulo}</button>`;
+  const totalCats = cats.reduce((s,c) => s + c.valor, 0);
+  const linhaCategoria = c => {
+    const pct = totalCats > 0 ? (c.valor/totalCats)*100 : 0;
+    const ativo = extratoCategoria === c.id;
+    const cor = c.direcao === 'entrada' ? 'bg-emerald-400' : 'bg-amber-400';
+    const valorCor = c.direcao === 'entrada' ? 'text-emerald-700' : 'text-stone-800';
+    const sinal = c.direcao === 'entrada' ? '+' : '−';
+    return `<button onclick="setExtratoCategoria('${c.id}')" class="w-full text-left ${ativo?'bg-stone-50 -mx-2 px-2 py-1.5 rounded-lg':''}">
+      <div class="flex justify-between items-center mb-1 gap-2">
+        <span class="text-sm ${ativo?'font-semibold text-stone-900':'text-stone-700'} truncate">${ativo?'▾':'▸'} ${c.nome} <span class="text-stone-400 font-normal text-xs">(${c.n})</span></span>
+        <span class="text-sm font-semibold ${valorCor} whitespace-nowrap">${sinal} ${fmtCurrency(c.valor)} <span class="text-stone-400 font-normal">${pct.toFixed(0)}%</span></span>
+      </div>
+      <div class="h-1.5 bg-stone-100 rounded-full overflow-hidden"><div class="h-full ${cor} rounded-full" style="width:${Math.max(2,pct)}%"></div></div>
+    </button>`;
+  };
   const linha = m => {
     const cor = m.direcao === 'entrada' ? 'text-emerald-700' : 'text-red-600';
     const sinal = m.direcao === 'entrada' ? '+' : '−';
@@ -11119,31 +11714,60 @@ function renderExtratoMovimentacoes() {
       <div class="flex justify-between items-center py-2 border-b border-stone-100 last:border-0">
         <div class="min-w-0">
           <p class="text-sm text-stone-700 truncate">${m.descricao}${selo}</p>
-          <p class="text-[11px] text-stone-400">${parseLocalDate(m.data).toLocaleDateString('pt-BR')} · ${m.rotulo} · ${nomeDaUnidade(m.origem)}</p>
+          <p class="text-[11px] text-stone-400">${parseLocalDate(m.data).toLocaleDateString('pt-BR')} · ${m.categoria} · ${nomeDaUnidade(m.origem)}</p>
         </div>
         <span class="font-semibold text-sm ${cor} whitespace-nowrap ml-3">${sinal} ${fmtCurrency(m.valor)}</span>
       </div>`;
   };
+
+  const cfg = getFinanceSettings();
+  const hoje = localDateStr(new Date());
+  const saldo = saldoAcumuladoAte(hoje);
+  // A pagar NÃO respeita o filtro de período: conta vencida em julho continua sendo dívida em
+  // setembro, e sumir junto com o filtro é exatamente como ela seria esquecida.
+  const aPagar = contasAPagar();
+  const temVencida = aPagar.some(c => c.vencida);
+  const linhaAPagar = c => {
+    const cor = c.vencida ? 'text-red-700' : (c.venceHoje ? 'text-amber-700' : 'text-stone-600');
+    const quando = c.vencida ? 'venceu' : (c.venceHoje ? 'vence hoje' : 'vence');
+    return `
+      <div class="flex justify-between items-center py-2 border-b border-stone-100 last:border-0 gap-2">
+        <div class="min-w-0">
+          <p class="text-sm text-stone-700 truncate">${c.descricao}</p>
+          <p class="text-[11px] ${cor}">${quando} ${c.venceHoje ? '' : parseLocalDate(c.vencimento).toLocaleDateString('pt-BR')} · ${c.categoria}</p>
+        </div>
+        <div class="flex items-center gap-2 flex-shrink-0">
+          <span class="font-semibold text-sm text-stone-800 whitespace-nowrap">${fmtCurrency(c.valor)}</span>
+          <button onclick="marcarComoPago('${c.id}')" class="px-2.5 py-1 rounded-lg text-[11px] font-medium bg-emerald-600 text-white hover:bg-emerald-700">pago</button>
+        </div>
+      </div>`;
+  };
+
   el.innerHTML = `
-    <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100">
-      <h3 class="font-semibold text-sm mb-1 text-stone-800 flex items-center gap-2"><i data-lucide="arrow-left-right" class="w-4 h-4 text-emerald-600"></i>Extrato</h3>
-      <p class="text-[11px] text-stone-400 mb-3">Usa o mesmo período dos filtros acima.</p>
-      <div class="flex flex-wrap gap-1.5 mb-2">
-        ${chip(extratoDirecao==='tudo', "setExtratoDirecao('tudo')", 'Tudo')}
-        ${chip(extratoDirecao==='entrada', "setExtratoDirecao('entrada')", '+ Entradas')}
-        ${chip(extratoDirecao==='saida', "setExtratoDirecao('saida')", '− Saídas')}
+    <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 mb-3">
+      <div class="flex items-start justify-between gap-2 mb-1">
+        <div>
+          <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide">Saldo hoje</p>
+          <p class="text-2xl font-extrabold leading-tight ${saldo>=0?'text-emerald-800':'text-red-700'}">${fmtCurrency(saldo)}</p>
+        </div>
+        <button onclick="abrirAcertoDeSaldo()" class="text-[11px] text-stone-400 hover:text-stone-600 flex items-center gap-1 mt-1"><i data-lucide="scale" class="w-3.5 h-3.5"></i>acertar</button>
       </div>
-      <div class="flex flex-wrap gap-1.5 mb-2">
-        ${chip(extratoOrigem==='tudo', "setExtratoOrigem('tudo')", 'Todas origens')}
-        ${UNIDADES_NEGOCIO.map(u => chip(extratoOrigem===u.id, `setExtratoOrigem('${u.id}')`, u.nome)).join('')}
+      <p class="text-[11px] text-stone-400">${cfg.saldoInicialData
+        ? `Saldo inicial de ${fmtCurrency(cfg.saldoInicial)} em ${parseLocalDate(cfg.saldoInicialData).toLocaleDateString('pt-BR')}, mais tudo que entrou e saiu desde então.`
+        : 'Somando todo o histórico. Defina o <strong>saldo inicial</strong> em Configurações para o saldo bater com o banco.'}</p>
+    </div>
+
+    ${aPagar.length ? `
+    <div class="bg-white rounded-xl p-4 shadow-sm border ${temVencida ? 'border-red-200' : 'border-amber-200'} mb-3">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="font-semibold text-sm text-stone-800 flex items-center gap-2"><i data-lucide="clock" class="w-4 h-4 ${temVencida?'text-red-600':'text-amber-600'}"></i>A pagar</h3>
+        <span class="text-sm font-bold ${temVencida?'text-red-700':'text-amber-700'}">${fmtCurrency(totalAPagar())} · ${aPagar.length} conta${aPagar.length===1?'':'s'}</span>
       </div>
-      <div class="flex flex-wrap gap-1.5 mb-3">
-        ${chip(extratoEixo==='caixa', "setExtratoEixo('caixa')", '💵 Caixa')}
-        ${chip(extratoEixo==='resultado', "setExtratoEixo('resultado')", '📊 Resultado')}
-      </div>
-      <p class="text-[11px] text-stone-400 mb-3">${extratoEixo === 'caixa'
-        ? 'Caixa: o dinheiro que de fato entrou e saiu. A compra de estoque aparece inteira aqui; a despesa de consumo gerada por ela, não — senão a mesma compra sairia duas vezes.'
-        : 'Resultado: o que pesa no lucro. A despesa de consumo aparece aqui; a compra crua, não — o custo do insumo só existe quando ele é consumido, e aí quem cobra é o CMV.'}</p>
+      <p class="text-[11px] text-stone-400 mb-3">Já contam no lucro, mas ainda não saíram do saldo. Marcar como pago tira do saldo na data de hoje.</p>
+      <div>${aPagar.map(linhaAPagar).join('')}</div>
+    </div>` : ''}
+
+    <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 mb-3">
       <div class="grid grid-cols-3 gap-2 mb-3">
         <div class="bg-emerald-50 rounded-lg p-2.5 text-center">
           <p class="text-[10px] font-bold text-emerald-700 uppercase tracking-wide">Entrou</p>
@@ -11154,26 +11778,159 @@ function renderExtratoMovimentacoes() {
           <p class="text-sm font-bold text-red-800">${fmtCurrency(t.saidas)}</p>
         </div>
         <div class="bg-stone-50 rounded-lg p-2.5 text-center">
-          <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide">Saldo</p>
+          <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide">Diferença</p>
           <p class="text-sm font-bold ${t.saldo>=0?'text-emerald-800':'text-red-800'}">${fmtCurrency(t.saldo)}</p>
         </div>
       </div>
-      ${movs.length ? `<div>${movs.slice(0, 80).map(linha).join('')}</div>` : '<p class="text-xs text-stone-400 py-3 text-center">Nenhuma movimentação neste filtro.</p>'}
-      ${movs.length > 80 ? `<p class="text-[11px] text-stone-400 mt-2 text-center">Mostrando as 80 mais recentes de ${movs.length}. Os totais acima somam todas.</p>` : ''}
+      <p class="text-[11px] text-stone-400 text-center">${extratoRotuloPeriodo()} · ${t.n} lançamento${t.n===1?'':'s'}</p>
+    </div>
+
+    <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 mb-3">
+      <div class="flex flex-wrap gap-1.5 mb-2">
+        ${chip(extratoPeriodo==='30days', "setExtratoPeriodo('30days')", '30 dias')}
+        ${chip(extratoPeriodo==='month', "setExtratoPeriodo('month')", 'Este mês')}
+        ${chip(extratoPeriodo==='all', "setExtratoPeriodo('all')", 'Tudo')}
+        ${chip(extratoPeriodo==='custom', "setExtratoPeriodo('custom')", 'Escolher datas')}
+        <button onclick="abrirLancamento('simple')" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-1 ml-auto"><i data-lucide="plus" class="w-3.5 h-3.5"></i>Lançar</button>
+      </div>
+      ${extratoPeriodo==='custom' ? `
+        <div class="flex flex-wrap items-end gap-2 mb-2 p-2.5 bg-stone-50 rounded-lg">
+          <div><label class="text-[10px] font-semibold text-stone-500 uppercase tracking-wide block mb-1">De</label><input id="extrato-de" type="date" value="${extratoDe}" class="input-field text-xs py-1.5"></div>
+          <div><label class="text-[10px] font-semibold text-stone-500 uppercase tracking-wide block mb-1">Até</label><input id="extrato-ate" type="date" value="${extratoAte}" class="input-field text-xs py-1.5"></div>
+          <button onclick="aplicarPeriodoCustomExtrato()" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-800 text-white">Aplicar</button>
+        </div>` : ''}
+      <div class="flex flex-wrap gap-1.5 mb-2">
+        ${chip(extratoDirecao==='tudo', "setExtratoDirecao('tudo')", 'Tudo')}
+        ${chip(extratoDirecao==='entrada', "setExtratoDirecao('entrada')", '+ Entradas')}
+        ${chip(extratoDirecao==='saida', "setExtratoDirecao('saida')", '− Saídas')}
+      </div>
+      <div class="flex flex-wrap gap-1.5 mb-2">
+        ${chip(extratoOrigem==='tudo', "setExtratoOrigem('tudo')", 'Todas origens')}
+        ${UNIDADES_NEGOCIO.map(u => chip(extratoOrigem===u.id, `setExtratoOrigem('${u.id}')`, u.nome)).join('')}
+      </div>
+      <div class="flex flex-wrap gap-1.5 mb-2">
+        ${chip(extratoEixo==='caixa', "setExtratoEixo('caixa')", '💵 Caixa')}
+        ${chip(extratoEixo==='resultado', "setExtratoEixo('resultado')", '📊 Resultado')}
+      </div>
+      <p class="text-[11px] text-stone-400">${extratoEixo === 'caixa'
+        ? 'Caixa: o dinheiro que de fato entrou e saiu. A compra de estoque aparece inteira aqui; a despesa de consumo gerada por ela, não — senão a mesma compra sairia duas vezes.'
+        : 'Resultado: o que pesa no lucro. A despesa de consumo aparece aqui; a compra crua, não — o custo do insumo só existe quando ele é consumido, e aí quem cobra é o CMV.'}</p>
+    </div>
+
+    <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 mb-3">
+      <h3 class="font-semibold text-sm mb-1 text-stone-800 flex items-center gap-2"><i data-lucide="layers" class="w-4 h-4 text-emerald-600"></i>Por categoria</h3>
+      <p class="text-[11px] text-stone-400 mb-3">Toque numa categoria para ver só os lançamentos dela. Categoria de gasto é o grupo do DRE — para criar uma nova (ex: Infraestrutura), vá em Configurações.</p>
+      ${cats.length ? `<div class="space-y-2.5">${cats.map(linhaCategoria).join('')}</div>` : '<p class="text-xs text-stone-400 py-3 text-center">Nenhuma movimentação neste filtro.</p>'}
+    </div>
+
+    <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="font-semibold text-sm text-stone-800 flex items-center gap-2"><i data-lucide="list" class="w-4 h-4 text-emerald-600"></i>Lançamentos</h3>
+        ${extratoCategoria ? `<button onclick="setExtratoCategoria('${extratoCategoria}')" class="text-[11px] text-emerald-700 hover:text-emerald-800 font-medium">limpar filtro</button>` : ''}
+      </div>
+      ${visiveis.length ? `<div>${visiveis.map(linha).join('')}</div>` : '<p class="text-xs text-stone-400 py-3 text-center">Nenhuma movimentação neste filtro.</p>'}
+      ${movs.length > visiveis.length ? `<button onclick="verMaisExtrato()" class="w-full mt-3 py-2 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200">Ver mais (${movs.length - visiveis.length} restantes)</button>` : ''}
     </div>`;
+  lucide.createIcons();
 }
+// ------------------------------------------------------------
+// MARCAR CONTA COMO PAGA
+// ------------------------------------------------------------
+// Um clique, sem tela de confirmação: grava `paid_at` de hoje na MESMA linha. Nenhum lançamento novo
+// é criado — criar um segundo lançamento é como a mesma despesa apareceria duas vezes no resultado,
+// uma na compra e outra no pagamento.
+async function marcarComoPago(id) {
+  const rec = financeData.find(r => r.id === id);
+  if (!rec) { showToast('Lançamento não encontrado', true); return; }
+  if (rec.paid_at) { showToast('Essa conta já está paga'); return; }
+  const hoje = localDateStr(new Date());
+  showLoadingProgress('Marcando como pago...');
+  try {
+    await financeApiCall('update', { data: { ...rec, paid_at: hoje, updated_at: new Date().toISOString() } });
+    rec.paid_at = hoje;
+    invalidateFinanceCache();
+    hideLoadingProgress();
+    showToast(`Pago — ${fmtCurrency(rec.total_cost)} saiu do saldo hoje`);
+    renderExtrato();
+    renderAbaFinanceiraAtiva();
+  } catch (err) {
+    hideLoadingProgress();
+    console.error('Erro ao marcar como pago:', err);
+    showToast('Erro ao marcar como pago: ' + err.message, true);
+  }
+}
+
+// ------------------------------------------------------------
+// ACERTO DE SALDO
+// ------------------------------------------------------------
+// O acerto é UMA LINHA NOVA no livro-caixa, nunca uma edição do saldo inicial nem de um lançamento
+// existente. Mexer no saldo inicial reescreveria o passado inteiro de uma vez; apagar movimento
+// apagaria a prova. A linha de acerto fica no histórico, com data, e pode ser lida depois.
+function abrirAcertoDeSaldo() {
+  const el = document.getElementById('acerto-saldo-modal'); if (!el) return;
+  document.getElementById('acerto-saldo-calculado').textContent = fmtCurrency(saldoAcumuladoAte(localDateStr(new Date())));
+  document.getElementById('acerto-saldo-real').value = '';
+  atualizarPreviaDoAcerto();
+  el.classList.remove('hidden');
+  lucide.createIcons();
+}
+function fecharAcertoDeSaldo() {
+  const el = document.getElementById('acerto-saldo-modal'); if (el) el.classList.add('hidden');
+}
+// A prévia existe pra você ver o tamanho do buraco ANTES de gravar. Diferença grande costuma ser
+// lançamento faltando, não erro de saldo — e nesse caso o acerto esconderia o problema em vez de
+// resolver, então a tela diz isso em vez de deixar você descobrir depois.
+function atualizarPreviaDoAcerto() {
+  const el = document.getElementById('acerto-saldo-previa'); if (!el) return;
+  const bruto = document.getElementById('acerto-saldo-real').value;
+  if (bruto === '' || isNaN(parseFloat(bruto))) {
+    el.className = 'text-xs rounded-lg px-3 py-2 mb-4 bg-stone-50 border border-stone-200 text-stone-500';
+    el.textContent = 'Digite o saldo real para ver a diferença.';
+    return;
+  }
+  const dif = diferencaDeSaldo(parseFloat(bruto), localDateStr(new Date()));
+  if (Math.abs(dif) < 0.005) {
+    el.className = 'text-xs rounded-lg px-3 py-2 mb-4 bg-emerald-50 border border-emerald-200 text-emerald-800';
+    el.textContent = 'Já bate. Não há nada para acertar.';
+    return;
+  }
+  el.className = 'text-xs rounded-lg px-3 py-2 mb-4 bg-amber-50 border border-amber-200 text-amber-800';
+  el.textContent = `Vai registrar ${dif > 0 ? 'uma entrada' : 'uma saída'} de ${fmtCurrency(Math.abs(dif))}.`
+    + (Math.abs(dif) >= 200 ? ' Diferença desse tamanho costuma ser lançamento faltando — vale conferir o extrato antes.' : '');
+}
+async function confirmarAcertoDeSaldo() {
+  const bruto = document.getElementById('acerto-saldo-real').value;
+  if (bruto === '' || isNaN(parseFloat(bruto))) { showToast('Digite o saldo real', true); return; }
+  const hoje = localDateStr(new Date());
+  const dif = diferencaDeSaldo(parseFloat(bruto), hoje);
+  if (Math.abs(dif) < 0.005) { showToast('O saldo já bate — nada a acertar'); fecharAcertoDeSaldo(); return; }
+  showLoadingProgress('Registrando acerto...');
+  try {
+    // `total_cost` guarda o valor COM SINAL: é o único tipo assim, e é o que permite o acerto ir pros
+    // dois lados sem precisar de uma coluna de direção. Ver MOV_SPEC.cash_adjustment.
+    const payload = { type:'cash_adjustment', product_name:'Acerto de saldo',
+      total_cost: Number(dif.toFixed(2)), expense_date: hoje, updated_at: new Date().toISOString() };
+    const r = await financeApiCall('create', { data: payload });
+    financeData.push({ id:r.id, ...payload });
+    invalidateFinanceCache();
+    hideLoadingProgress();
+    fecharAcertoDeSaldo();
+    showToast(`Acerto de ${fmtCurrency(Math.abs(dif))} registrado — o saldo agora bate com o banco`);
+    renderExtrato();
+  } catch (err) {
+    hideLoadingProgress();
+    console.error('Erro ao registrar acerto de saldo:', err);
+    showToast('Erro ao registrar acerto: ' + err.message, true);
+  }
+}
+document.addEventListener('click', (e) => {
+  if (e.target && e.target.id === 'acerto-saldo-modal') fecharAcertoDeSaldo();
+});
+
 function renderExpenses() {
   invalidateFinanceCache(); // números da tela toda saem da mesma foto dos dados
-  // Formulário de Gasto Simples: só popula do zero se ainda estiver vazio, pra não atrapalhar
-  // quem já está no meio de um preenchimento (ex: trocando de aba e voltando).
-  const groupSel = document.getElementById('new-expense-group');
-  if (groupSel && groupSel.options.length <= 1) { populateExpenseGroupSelect(groupSel); onExpenseGroupChange(groupSel); }
-  if (!document.getElementById('new-expense-date').value) document.getElementById('new-expense-date').value = localDateStr(new Date());
-  if (document.querySelectorAll('.expense-batch-row').length === 0) resetExpenseBatchForm();
-
-  prepararFormEntrada();
-  renderExtratoMovimentacoes();
-  populateExpenseDescSuggestions();
+  // Os formulários NÃO são preparados aqui — eles moram no modal de lançamento e quem os prepara é
+  // abrirLancamento(). Fazer isso no render de uma aba era o que amarrava os campos à aba Gastos.
   populateExpenseCategoryFilterSelect();
   document.querySelectorAll('.expense-filter').forEach(b => { b.className = `expense-filter px-3 py-1.5 rounded-lg text-xs font-medium ${b.dataset.filter===expenseFilter?'bg-stone-800 text-white':'bg-stone-100 text-stone-600 hover:bg-stone-200'}`; });
   const { start, end } = expenseRangeForFilter(expenseFilter);
@@ -11251,47 +12008,21 @@ function renderExpenses() {
 // contrário de 'cost' (que só vira número no DRE proporcional a uma venda), um 'stock_cost'
 // desconta o valor cheio na hora, no período em que a expense_date cai — igual 'expense' já faz.
 //
-// O `category` aqui é um MOTIVO de lista fixa e curta, não um cadastro. Antes dava pra criar motivo
-// novo na hora ("+ Nova categoria..."), o que fazia deste o TERCEIRO sistema de categorias do
-// financeiro (junto das categorias de despesa e das categorias de produto) — e nenhum relatório
-// agregava por ele, nem esta tela. Era cadastro que não produzia informação nenhuma. Como este
-// lançamento entra no CMV, e não nos grupos do DRE, o motivo serve pra você lembrar do porquê ao
-// reler a lista — pra isso, quatro opções fixas bastam.
-const STOCK_COST_REASONS = ['Taxa de entrega','Insumo fora do cardápio','Perda/quebra não rastreada','Outros'];
+// LANÇAMENTO APOSENTADO EM 04/08/2026 — ler continua, criar não.
+//
+// O formulário saiu da tela e `handleAddStockCost`/`populateStockCostCategorySelect` foram removidos
+// com ele. O que substituiu: um Gasto normal num grupo do DRE marcado como "entra no CMV" (ver
+// grupoEntraNoCmv), que soma no MESMO lugar do relatório — foi isso que permitiu aposentar a tela sem
+// mexer em nenhum indicador. Se os lançamentos virassem despesa comum, sairiam do CMV e entrariam em
+// despesa: a margem BRUTA subiria sem nada ter melhorado, e a operacional cairia na mesma medida.
+//
+// O que a troca ganha: o "motivo" era uma lista fixa de quatro opções que, por decisão explícita, não
+// agregava em relatório nenhum. Agora é categoria de despesa de verdade — cadastrável, e que soma no
+// Extrato e no painel por categoria.
+//
+// TUDO ABAIXO CONTINUA: os lançamentos antigos são válidos, contam no CMV e aparecem na lista. Não
+// migrar e não apagar é a regra da casa — histórico não se converte, se lê.
 function getStockCosts() { return financeCached('stockCosts', () => financeData.filter(r => r.type === 'stock_cost')); }
-function populateStockCostCategorySelect() {
-  const sel = document.getElementById('new-stockcost-category'); if (!sel) return;
-  const val = sel.value;
-  // Motivo já usado num lançamento antigo continua na lista, pra não sumir do histórico nem quebrar
-  // o select ao reabrir a tela.
-  const legacy = getStockCosts().map(sc => sc.category).filter(c => c && !STOCK_COST_REASONS.includes(c));
-  const options = [...STOCK_COST_REASONS, ...Array.from(new Set(legacy)).sort((a,b)=>a.localeCompare(b))];
-  sel.innerHTML = '<option value="">Motivo *</option>' + options.map(c=>`<option value="${c}">${c}</option>`).join('');
-  if (val) sel.value = val;
-}
-async function handleAddStockCost(e) {
-  e.preventDefault();
-  const desc = document.getElementById('new-stockcost-desc').value.trim();
-  const category = document.getElementById('new-stockcost-category').value;
-  const amount = parseFloat(document.getElementById('new-stockcost-amount').value);
-  const date = document.getElementById('new-stockcost-date').value;
-  if (!desc || !category || !amount || amount <= 0 || !date) { showToast('Preencha todos os campos obrigatórios', true); return; }
-  showLoadingProgress('Salvando custo avulso...');
-  try {
-    const payload = { type:'stock_cost', product_name:desc, category, total_cost:amount, expense_date:date, updated_at:new Date().toISOString() };
-    const r = await financeApiCall('create', { data: payload });
-    financeData.push({ id:r.id, ...payload });
-    hideLoadingProgress();
-    showToast('Custo avulso registrado!');
-    e.target.reset();
-    document.getElementById('new-stockcost-date').value = localDateStr(new Date());
-    renderStockCosts();
-  } catch (err) {
-    hideLoadingProgress();
-    console.error('Erro ao salvar custo avulso:', err);
-    showToast('Erro ao salvar custo avulso: ' + err.message, true);
-  }
-}
 // Mesmo filtro por string de data usado em getExpensesInRange — expense_date já é "yyyy-MM-dd".
 function getStockCostsInRange(start, end) {
   return getStockCosts().filter(sc => {
@@ -11313,8 +12044,6 @@ function requestDeleteStockCost(id) {
 let stockCostFilter = '30days';
 function renderStockCosts() {
   invalidateFinanceCache(); // números da tela toda saem da mesma foto dos dados
-  populateStockCostCategorySelect();
-  if (!document.getElementById('new-stockcost-date').value) document.getElementById('new-stockcost-date').value = localDateStr(new Date());
   document.querySelectorAll('.stockcost-filter').forEach(b => { b.className = `stockcost-filter px-3 py-1.5 rounded-lg text-xs font-medium ${b.dataset.filter===stockCostFilter?'bg-stone-800 text-white':'bg-stone-100 text-stone-600 hover:bg-stone-200'}`; });
   const { start, end } = expenseRangeForFilter(stockCostFilter);
   const entries = getStockCostsInRange(start, end).slice().sort((a,b) => (b.expense_date||'').localeCompare(a.expense_date||''));
@@ -11517,7 +12246,7 @@ async function handleSaveWeeklyTimesheet() {
     showToast('Registro semanal salvo e lançado como CMO no financeiro!');
     resetWeeklyTimesheetForm();
     renderWeeklyTimesheets();
-    if (activeFinanceTab === 'dre') renderDRE();
+    renderAbaFinanceiraAtiva();
   } catch (err) {
     hideLoadingProgress();
     console.error('Erro ao salvar registro semanal:', err);
@@ -12274,27 +13003,37 @@ function computeDRE(entries, expenses, stockCosts, losses, internalConsumption, 
   const knownCostRatio = knownRevenue > 0 ? (knownCost / knownRevenue) : null;
   const hasEstimate = knownCostRatio !== null && unknownRevenue > 0;
   const estimatedExtraCost = hasEstimate ? unknownRevenue * knownCostRatio : 0;
-  // totalCMVConfirmed = custo de receita confirmado + custo de estoque avulso (os dois são reais,
-  // não estimados). totalCMV soma ainda a extrapolação pros itens sem receita confirmada.
-  const totalStockCosts = (stockCosts||[]).reduce((s,sc)=>s+(sc.total_cost||0), 0);
-  const totalCMVConfirmed = knownCost + totalStockCosts;
-  const totalCMV = totalCMVConfirmed + estimatedExtraCost;
 
-  // Uma passada só pelos gastos produz as duas visões que o sistema precisa:
-  //   groupTotals        -> tudo que foi lançado no período, por grupo (é o que o DRE mostra)
-  //   groupTotalsPontual -> só o que NÃO é despesa mensal, por grupo
+  // Uma passada só pelos gastos produz as três visões que o sistema precisa:
+  //   groupTotals          -> tudo que foi lançado no período, por grupo (é o que o DRE mostra)
+  //   groupTotalsPontual   -> só o que NÃO é despesa mensal, por grupo
+  //   totalGastosDeEstoque -> o que vai pro CMV em vez de virar linha de despesa
   // A segunda existe pras Análises: lá a despesa mensal entra pela fatia rateada, não pelo valor
   // cheio do dia. Antes o computeAnalysis refazia essa separação percorrendo os gastos de novo —
   // duas varreduras com o mesmo resolveExpenseDreGroupId por gasto, para o mesmo período.
+  // Vem ANTES do CMV porque o CMV depende do terceiro número.
   const groupTotals = {};        // id do grupo -> valor
   const groupTotalsPontual = {}; // idem, sem as despesas mensais
+  // Gasto de grupo marcado como "entra no CMV" sai daqui e vai pro custo de estoque. Tem de ser um
+  // ou outro: contado nos dois, o mesmo real desceria do lucro duas vezes.
+  let totalGastosDeEstoque = 0;
   expenses.forEach(ex => {
-    const gid = resolveExpenseDreGroupId(ex) || '__sem_grupo__';
     const value = ex.total_cost || 0;
+    if (gastoEhCustoDeEstoque(ex)) { totalGastosDeEstoque += value; return; }
+    const gid = resolveExpenseDreGroupId(ex) || '__sem_grupo__';
     groupTotals[gid] = (groupTotals[gid]||0) + value;
     if (!isMonthlyExpense(ex)) groupTotalsPontual[gid] = (groupTotalsPontual[gid]||0) + value;
   });
   const totalAllExpenses = Object.values(groupTotals).reduce((s,v)=>s+v, 0);
+
+  // totalCMVConfirmed = custo de receita confirmado + custo de estoque (os dois são reais, não
+  // estimados). totalCMV soma ainda a extrapolação pros itens sem receita confirmada.
+  // Custo de estoque vem de DUAS origens que somam no mesmo lugar: os 'stock_cost' antigos (a tela
+  // de Custo Avulso, aposentada em 04/08/2026 — os lançamentos continuam válidos e contando) e os
+  // gastos lançados em grupo marcado como "entra no CMV", que é o caminho de hoje.
+  const totalStockCosts = (stockCosts||[]).reduce((s,sc)=>s+(sc.total_cost||0), 0) + totalGastosDeEstoque;
+  const totalCMVConfirmed = knownCost + totalStockCosts;
+  const totalCMV = totalCMVConfirmed + estimatedExtraCost;
 
   // Perda é custo real e confirmado do período inteiro (não amarrada a uma venda), igual custo de
   // estoque avulso — desconta nos dois cenários, confirmado e estimado.
@@ -13274,7 +14013,7 @@ function renderAnalysisSettingsConfig() {
 async function handleToggleAnalysisIndicator(key, checked) {
   try {
     await saveAnalysisSettings({ indicators: { [key]: checked } });
-    if (activeFinanceTab === 'analises') renderAnalises();
+    renderAbaFinanceiraAtiva();
   } catch (err) { console.error('Erro ao salvar indicador:', err); showToast('Erro ao salvar: ' + err.message, true); }
 }
 async function handleToggleAnalysisGroup(groupId, included) {
@@ -13282,7 +14021,7 @@ async function handleToggleAnalysisGroup(groupId, included) {
     const cfg = getAnalysisSettings();
     const next = included ? cfg.excludedGroupIds.filter(id => id !== groupId) : [...cfg.excludedGroupIds, groupId];
     await saveAnalysisSettings({ excludedGroupIds: next });
-    if (activeFinanceTab === 'analises') renderAnalises();
+    renderAbaFinanceiraAtiva();
   } catch (err) { console.error('Erro ao salvar grupo:', err); showToast('Erro ao salvar: ' + err.message, true); }
 }
 async function handleSaveAnalysisSettings(e) {
@@ -13295,7 +14034,7 @@ async function handleSaveAnalysisSettings(e) {
     await saveAnalysisSettings({ fixedProration, historyPeriods });
     hideLoadingProgress();
     showToast('Configurações das análises salvas!');
-    if (activeFinanceTab === 'analises') renderAnalises();
+    renderAbaFinanceiraAtiva();
   } catch (err) {
     hideLoadingProgress();
     console.error('Erro ao salvar configurações das análises:', err);
