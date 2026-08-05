@@ -1011,7 +1011,7 @@
           <input id="rent-search" type="text" placeholder="Buscar produto..." class="input-field text-sm w-full pl-9" oninput="onRentabilidadeControl()">
         </div>
         <select id="rent-category" class="input-field text-sm" onchange="onRentabilidadeControl()"></select>
-        <button onclick="toggleRentabilidadeColunas()" class="px-3 py-2 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200 flex items-center gap-1.5 whitespace-nowrap"><i data-lucide="columns-3" class="w-3.5 h-3.5"></i>Colunas</button>
+        <button onclick="toggleRentabilidadeColunas()" class="px-3 py-2 rounded-lg text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200 flex items-center gap-1.5 whitespace-nowrap"><i data-lucide="columns" class="w-3.5 h-3.5"></i>Colunas</button>
       </div>
       <div id="rent-colunas-painel" class="hidden bg-white rounded-xl p-3 shadow-sm border border-stone-100 mb-3">
         <p class="text-[11px] text-stone-400 mb-2">Escolha o que aparece na tabela. Sua escolha fica salva neste aparelho.</p>
@@ -1030,7 +1030,7 @@
          Gastos, abaixo de três formulários empilhados — existia, mas ninguém chegava nela. -->
     <section id="fpanel-extrato" class="hidden fade-in">
       <div class="flex items-center justify-between mb-4">
-        <h2 class="text-lg font-bold text-stone-800 flex items-center gap-2"><i data-lucide="receipt-text" class="w-5 h-5 text-emerald-600"></i>Extrato</h2>
+        <h2 class="text-lg font-bold text-stone-800 flex items-center gap-2"><i data-lucide="receipt" class="w-5 h-5 text-emerald-600"></i>Extrato</h2>
         <button onclick="lockFinanceiro()" class="text-xs text-stone-400 hover:text-stone-600 flex items-center gap-1"><i data-lucide="lock" class="w-3.5 h-3.5"></i>Bloquear</button>
       </div>
       <div id="extrato-painel"></div>
@@ -7984,7 +7984,7 @@ function gotoEstoque() {
 // e as três já tinham divergido: 'rentabilidade' aparecia num toggle e não no outro. Agora é uma só,
 // e até os botões saem daqui. Acrescentar aba é uma linha.
 const FINANCE_TABS = {
-  'extrato': { label:'Extrato', icone:'receipt-text', panel:'fpanel-extrato', render:()=>renderExtrato() },
+  'extrato': { label:'Extrato', icone:'receipt', panel:'fpanel-extrato', render:()=>renderExtrato() },
   'resultado': { label:'Resultado', icone:'line-chart', subs: {
     'analises':      { label:'Análises',      panel:'fpanel-analises',      render:()=>renderAnalises() },
     'dre':           { label:'DRE',           panel:'fpanel-dre',           render:()=>renderDRE() },
@@ -8001,10 +8001,20 @@ const FINANCE_TABS = {
     'estoque-valor':    { label:'Dinheiro em Estoque', panel:'fpanel-estoque-valor',    render:()=>renderInventoryPanel() },
     'saidas-sem-venda': { label:'Saídas sem Venda',    panel:'fpanel-saidas-sem-venda', render:()=>renderSaidasSemVenda() },
   }},
-  'configuracoes': { label:'Configurações', icone:'settings', subs: {
-    'regras':       { label:'Regras e Grupos', panel:'fpanel-config-gastos', render:()=>renderConfigTab() },
-    'funcionarios': { label:'Funcionários',    panel:'fpanel-funcionarios',  render:()=>renderEmployees() },
-  }},
+  // FUNCIONÁRIOS É MÓDULO, NÃO CADASTRO SOLTO. Estava como sub-aba de Configurações, junto de
+  // "Regras e Grupos" — o que fazia sentido enquanto era só uma lista de nomes. Vai ganhar custo,
+  // histórico e relatórios, e nada disso é configuração do sistema: é dado da operação, do mesmo
+  // tipo que o Extrato e as Vendas. Deixar em Configurações empurraria toda tela nova de pessoas
+  // para dentro de um lugar que ninguém abre no dia a dia.
+  //
+  // Continua ATRÁS DA SENHA DO FINANCEIRO de propósito: custo de mão de obra é dado sensível, e
+  // subir para a barra principal do app o exporia a quem só opera estoque.
+  //
+  // Fica sem `subs` enquanto tiver uma tela só — sub-navegação de um item é um clique que não
+  // decide nada. Quando vier a segunda tela, vira `subs:{...}` e a nav se redesenha sozinha.
+  'funcionarios': { label:'Funcionários', icone:'users', panel:'fpanel-funcionarios', render:()=>renderEmployees() },
+  // Sobrou uma tela só aqui depois que Funcionários saiu — então perdeu a sub-navegação também.
+  'configuracoes': { label:'Configurações', icone:'settings', panel:'fpanel-config-gastos', render:()=>renderConfigTab() },
 };
 // Sub-aba ativa de cada grupo, lembrada por grupo: voltar pra "Resultado" te devolve na sub-aba em
 // que você estava, não sempre na primeira.
@@ -11176,10 +11186,33 @@ function categoriaDoMovimento(r) {
   }
 }
 
+// DOIS REGISTROS PARA O MESMO EVENTO SÃO UM DINHEIRO SÓ.
+//
+// Um evento pode ter mais de um `event_revenue` pendurado nele — o motivo está em `chavesDoEvento`:
+// até 03/08/2026 a identidade do evento era o id da saída manual, e o faturamento lançado antes
+// disso ficou gravado naquela chave. Lançar de novo pela chave nova deixa os dois.
+//
+// `getEventRevenueEfetivas()` já resolve isso desde então, e a DRE, o Faturamento e a aba Eventos
+// passam por ela. O livro-caixa NÃO passava: `getMovimentos` foi construído direto sobre o
+// `financeData` cru e herdou os dois registros. O mesmo faturamento entrava duas vezes no Extrato,
+// no faturamento por origem e — o pior — no SALDO ACUMULADO, que é o número comparado com o banco.
+// Um saldo inflado convida a um acerto de saldo, e aí o erro vira uma linha gravada no histórico.
+//
+// A dedup é de LEITURA, não de dado: nada é apagado. O repetido continua no financeData e continua
+// visível na aba Eventos como repetição, que é onde ele pode ser resolvido na origem.
+function idsDeFaturamentoDeEventoValendo() {
+  return financeCached('idsFaturamentoEventoValendo',
+    () => new Set(getEventRevenueEfetivas().map(r => r.id)));
+}
+// O mesmo dinheiro contado uma vez só. Devolve false apenas para o `event_revenue` repetido —
+// qualquer outro tipo passa direto.
+function movimentoEhRepeticao(r) {
+  return r.type === 'event_revenue' && !idsDeFaturamentoDeEventoValendo().has(r.id);
+}
 // Todo o livro-caixa, em uma lista só, já com os eixos resolvidos. É a base das telas novas —
 // nenhuma delas precisa saber que a data da venda mora numa coluna diferente da data do gasto.
 function getMovimentos() {
-  return financeCached('movimentos', () => financeData.filter(ehMovimentoFinanceiro).map(r => {
+  return financeCached('movimentos', () => financeData.filter(r => ehMovimentoFinanceiro(r) && !movimentoEhRepeticao(r)).map(r => {
     const cat = categoriaDoMovimento(r);
     return {
     ref: r,
@@ -11640,6 +11673,30 @@ let extratoDe = '';             // "yyyy-MM-dd", só quando periodo === 'custom'
 let extratoAte = '';
 let extratoCategoria = null;    // id de categoria selecionada (drill-down), ou null pra tudo
 let extratoLimite = 50;         // quantas linhas a lista mostra; cresce no "ver mais"
+// OS CONTROLES RAROS FICAM GUARDADOS, E O DINHEIRO SOBE.
+//
+// Eram QUATRO fileiras de chips (~12 chips) mais um parágrafo de três linhas antes de qualquer
+// lançamento aparecer. Num celular de 375px isso empurrava a lista para fora da tela: a resposta
+// ficava abaixo das perguntas.
+//
+// A divisão é por frequência de uso, não por importância. Período e direção mudam toda hora e
+// continuam à vista. Origem e eixo quase nunca mudam — origem porque a maioria olha a empresa
+// inteira, eixo porque Caixa é a pergunta do dia a dia e Resultado é uma consulta ocasional. Esses
+// dois foram para trás de "Filtros".
+//
+// O que NÃO pode acontecer é filtro ligado e escondido: o total mudaria sem explicação visível, que
+// é a mesma classe de erro de reclassificar dinheiro por adivinhação. Por isso o botão mostra um
+// contador e, com o painel fechado, os filtros ativos aparecem escritos, com um X para limpar.
+let extratoFiltrosAbertos = false;
+function toggleExtratoFiltros() { extratoFiltrosAbertos = !extratoFiltrosAbertos; renderExtrato(); }
+// Quantos filtros SECUNDÁRIOS estão fora do padrão. Período e direção não contam: eles estão à
+// vista, e um contador que sobe por algo visível vira ruído em vez de aviso.
+function extratoFiltrosSecundariosAtivos() {
+  return (extratoOrigem !== 'tudo' ? 1 : 0) + (extratoEixo !== 'caixa' ? 1 : 0);
+}
+function limparFiltrosSecundariosExtrato() {
+  extratoOrigem = 'tudo'; extratoEixo = 'caixa'; extratoLimite = 50; renderExtrato();
+}
 function setExtratoDirecao(v) { extratoDirecao = v; extratoLimite = 50; renderExtrato(); }
 function setExtratoOrigem(v) { extratoOrigem = v; extratoLimite = 50; renderExtrato(); }
 function setExtratoEixo(v) { extratoEixo = v; extratoLimite = 50; renderExtrato(); }
@@ -11687,6 +11744,10 @@ function renderExtrato() {
   const visiveis = movs.slice(0, extratoLimite);
 
   const chip = (ativo, onclick, rotulo) => `<button onclick="${onclick}" class="px-3 py-1.5 rounded-lg text-xs font-medium ${ativo?'bg-stone-800 text-white':'bg-stone-100 text-stone-600 hover:bg-stone-200'}">${rotulo}</button>`;
+  // Segmentado: as três opções de direção são UMA escolha entre si, e o trilho cinza em volta diz
+  // isso de saída. Como chips soltos elas pareciam três liga/desliga independentes.
+  const seg = (ativo, onclick, rotulo) => `<button onclick="${onclick}" aria-pressed="${ativo}" class="px-2 py-1 rounded-md text-xs font-medium whitespace-nowrap transition-colors ${ativo?'bg-white text-stone-900 shadow-sm':'text-stone-500 hover:text-stone-800'}">${rotulo}</button>`;
+  const nSec = extratoFiltrosSecundariosAtivos();
   const totalCats = cats.reduce((s,c) => s + c.valor, 0);
   const linhaCategoria = c => {
     const pct = totalCats > 0 ? (c.valor/totalCats)*100 : 0;
@@ -11799,22 +11860,49 @@ function renderExtrato() {
           <div><label class="text-[10px] font-semibold text-stone-500 uppercase tracking-wide block mb-1">Até</label><input id="extrato-ate" type="date" value="${extratoAte}" class="input-field text-xs py-1.5"></div>
           <button onclick="aplicarPeriodoCustomExtrato()" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-stone-800 text-white">Aplicar</button>
         </div>` : ''}
-      <div class="flex flex-wrap gap-1.5 mb-2">
-        ${chip(extratoDirecao==='tudo', "setExtratoDirecao('tudo')", 'Tudo')}
-        ${chip(extratoDirecao==='entrada', "setExtratoDirecao('entrada')", '+ Entradas')}
-        ${chip(extratoDirecao==='saida', "setExtratoDirecao('saida')", '− Saídas')}
+      <div class="flex flex-wrap items-center gap-2">
+        <div class="flex bg-stone-100 rounded-lg p-0.5 gap-0.5">
+          ${seg(extratoDirecao==='tudo', "setExtratoDirecao('tudo')", 'Tudo')}
+          ${seg(extratoDirecao==='entrada', "setExtratoDirecao('entrada')", '+ Entradas')}
+          ${seg(extratoDirecao==='saida', "setExtratoDirecao('saida')", '− Saídas')}
+        </div>
+        <button onclick="toggleExtratoFiltros()" aria-expanded="${extratoFiltrosAbertos}"
+          class="ml-auto px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 whitespace-nowrap ${nSec||extratoFiltrosAbertos?'bg-stone-800 text-white':'bg-stone-100 text-stone-600 hover:bg-stone-200'}">
+          <i data-lucide="sliders-horizontal" class="w-3.5 h-3.5"></i>Filtros${nSec?` <span class="px-1.5 rounded-full bg-white/25 text-[10px] leading-4">${nSec}</span>`:''}
+        </button>
       </div>
-      <div class="flex flex-wrap gap-1.5 mb-2">
-        ${chip(extratoOrigem==='tudo', "setExtratoOrigem('tudo')", 'Todas origens')}
-        ${UNIDADES_NEGOCIO.map(u => chip(extratoOrigem===u.id, `setExtratoOrigem('${u.id}')`, u.nome)).join('')}
-      </div>
-      <div class="flex flex-wrap gap-1.5 mb-2">
-        ${chip(extratoEixo==='caixa', "setExtratoEixo('caixa')", '💵 Caixa')}
-        ${chip(extratoEixo==='resultado', "setExtratoEixo('resultado')", '📊 Resultado')}
-      </div>
-      <p class="text-[11px] text-stone-400">${extratoEixo === 'caixa'
-        ? 'Caixa: o dinheiro que de fato entrou e saiu. A compra de estoque aparece inteira aqui; a despesa de consumo gerada por ela, não — senão a mesma compra sairia duas vezes.'
-        : 'Resultado: o que pesa no lucro. A despesa de consumo aparece aqui; a compra crua, não — o custo do insumo só existe quando ele é consumido, e aí quem cobra é o CMV.'}</p>
+
+      ${!extratoFiltrosAbertos && nSec ? `
+        <div class="flex items-center gap-1.5 mt-2 text-[11px] text-stone-500">
+          <span>Filtrando por</span>
+          <strong class="text-stone-700">${[
+            extratoOrigem!=='tudo' ? nomeDaUnidade(extratoOrigem) : null,
+            extratoEixo!=='caixa' ? 'Resultado' : null,
+          ].filter(Boolean).join(' · ')}</strong>
+          <button onclick="limparFiltrosSecundariosExtrato()" title="Limpar filtros"
+            class="p-0.5 rounded hover:bg-stone-100 text-stone-400 hover:text-stone-700"><i data-lucide="x" class="w-3.5 h-3.5"></i></button>
+        </div>` : ''}
+
+      ${extratoFiltrosAbertos ? `
+        <div class="mt-3 pt-3 border-t border-stone-100 space-y-3">
+          <div>
+            <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-1.5">Origem</p>
+            <div class="flex flex-wrap gap-1.5">
+              ${chip(extratoOrigem==='tudo', "setExtratoOrigem('tudo')", 'Todas')}
+              ${UNIDADES_NEGOCIO.map(u => chip(extratoOrigem===u.id, `setExtratoOrigem('${u.id}')`, u.nome)).join('')}
+            </div>
+          </div>
+          <div>
+            <p class="text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-1.5">O que somar</p>
+            <div class="flex flex-wrap gap-1.5">
+              ${chip(extratoEixo==='caixa', "setExtratoEixo('caixa')", '<i data-lucide="wallet" class="w-3.5 h-3.5 inline-block align-[-2px] mr-1"></i>Caixa')}
+              ${chip(extratoEixo==='resultado', "setExtratoEixo('resultado')", '<i data-lucide="trending-up" class="w-3.5 h-3.5 inline-block align-[-2px] mr-1"></i>Resultado')}
+            </div>
+            <p class="text-[11px] text-stone-400 mt-1.5">${extratoEixo === 'caixa'
+              ? 'Caixa: o dinheiro que de fato entrou e saiu. A compra de estoque aparece inteira aqui; a despesa de consumo gerada por ela, não — senão a mesma compra sairia duas vezes.'
+              : 'Resultado: o que pesa no lucro. A despesa de consumo aparece aqui; a compra crua, não — o custo do insumo só existe quando ele é consumido, e aí quem cobra é o CMV.'}</p>
+          </div>
+        </div>` : ''}
     </div>
 
     <div class="bg-white rounded-xl p-4 shadow-sm border border-stone-100 mb-3">
